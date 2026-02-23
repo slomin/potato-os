@@ -20,7 +20,28 @@ Reference material and image artifacts are in `references/` and `raspberry_os_cl
 - `./bin/build_local_image.sh --variant lite`: build local Pi image bundle and generate Imager manifest.
   - Script prompts before deleting previous `output/images` artifacts (`ask|yes|no` via `--clean-artifacts`).
   - Each generated `local-test-*` folder includes `README.md` with Raspberry Pi Imager import steps.
-- `./tests/e2e/smoke_pi.sh`: run remote smoke checks (`pi/raspberry` by default).
+- `./tests/e2e/smoke_pi.sh`: run remote smoke checks (set `PI_HOST_PRIMARY`, `PI_USER`, `PI_PASSWORD` as needed).
+
+## Real Pi Runbook (Manual E2E)
+Use this flow before opening PRs that affect runtime/UI behavior on device:
+- Set environment first (do not hardcode host/user/password in docs or scripts):
+  - `export PI_HOST_PRIMARY=<pi-host-or-mdns>`
+  - `export PI_USER=<ssh-user>`
+  - `export PI_PASSWORD=<ssh-password>`
+- Fast deploy (avoids large artifact sync):
+  - `SSHPASS="$PI_PASSWORD" sshpass -e rsync -az --delete --exclude '.git' --exclude '.venv' --exclude '__pycache__' --exclude 'references/' --exclude 'output/' --exclude '.cache/' --exclude 'node_modules/' --exclude 'models/' --exclude 'raspberry_os_clean_image/' ./ "$PI_USER@$PI_HOST_PRIMARY:/tmp/potato-os/"`
+- Run installer as root on Pi (important):
+  - `SSHPASS="$PI_PASSWORD" sshpass -e ssh "$PI_USER@$PI_HOST_PRIMARY" "printf '%s\n' '$PI_PASSWORD' | sudo -S -p '' bash -lc 'cd /tmp/potato-os && POTATO_REQUIRE_LLAMA_BUNDLE=0 ./bin/install_dev.sh'"`
+  - Reason: `install_dev.sh` edits hostname/hosts and may fail when run non-root (`/etc/hosts` read permission).
+- Health checks:
+  - `curl -sS "http://$PI_HOST_PRIMARY/status" | jq '{state: .state, backend: .backend.active, llama_healthy: .llama_server.healthy}'`
+  - `curl -sS "http://<pi-mdns-hostname>.local/status" | jq '{state: .state, backend: .backend.active, llama_healthy: .llama_server.healthy}'`
+  - Immediately after restart, `state=BOOTING` and `llama_healthy=false` is expected while model loads.
+- Streaming API quick check:
+  - `curl -sN "http://$PI_HOST_PRIMARY/v1/chat/completions" -H 'Content-Type: application/json' -d '{"model":"qwen-local","messages":[{"role":"user","content":"Say hello."}],"stream":true}' | sed -n 's/^data: //p'`
+- Service diagnostics:
+  - `ssh "$PI_USER@$PI_HOST_PRIMARY" "sudo systemctl --no-pager --full status potato.service potato-firstboot.service"`
+  - `ssh "$PI_USER@$PI_HOST_PRIMARY" "sudo journalctl -u potato -n 200 --no-pager"`
 
 ## Coding Style & Naming Conventions
 Use Python 3.11+ style with 4-space indentation and type hints for new/changed code. Prefer small, testable functions and explicit error paths. Use `snake_case` for functions/files, `PascalCase` for classes, and clear env var names with `POTATO_` prefix (for example `POTATO_CHAT_BACKEND`).

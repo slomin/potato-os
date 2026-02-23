@@ -56,9 +56,11 @@ def test_fake_mode_is_rejected_when_fake_backend_disabled(client, runtime):
     assert body["state"] == "BOOTING"
 
 
-def test_fake_chat_non_stream_matches_openai_shape(client, runtime):
+def test_fake_chat_non_stream_matches_openai_shape(client, runtime, monkeypatch):
     runtime.chat_backend_mode = "fake"
     runtime.allow_fake_fallback = True
+    monkeypatch.setenv("POTATO_TEST_MODE", "1")
+    monkeypatch.setenv("POTATO_FAKE_STREAM_CHUNK_DELAY_MS", "1")
 
     response = client.post(
         "/v1/chat/completions",
@@ -74,13 +76,18 @@ def test_fake_chat_non_stream_matches_openai_shape(client, runtime):
 
     assert body["object"] == "chat.completion"
     assert body["choices"][0]["message"]["role"] == "assistant"
-    assert "[fake-llama.cpp]" in body["choices"][0]["message"]["content"]
+    content = body["choices"][0]["message"]["content"]
+    assert "[fake-llama.cpp]" in content
+    assert "Potato OS" in content
+    assert "Last user message" in content
     assert body["choices"][0]["finish_reason"] == "stop"
 
 
-def test_fake_chat_stream_matches_openai_chunk_shape(client, runtime):
+def test_fake_chat_stream_matches_openai_chunk_shape(client, runtime, monkeypatch):
     runtime.chat_backend_mode = "fake"
     runtime.allow_fake_fallback = True
+    monkeypatch.setenv("POTATO_TEST_MODE", "1")
+    monkeypatch.setenv("POTATO_FAKE_STREAM_CHUNK_DELAY_MS", "1")
 
     with client.stream(
         "POST",
@@ -96,6 +103,8 @@ def test_fake_chat_stream_matches_openai_chunk_shape(client, runtime):
     assert response.status_code == 200
     assert '"object":"chat.completion.chunk"' in chunks
     assert '"delta":{"role":"assistant"}' in chunks
+    assert "fake-llama.cpp" in chunks
+    assert "Potato" in chunks
     assert '"finish_reason":"stop"' in chunks
     assert "data: [DONE]" in chunks
 

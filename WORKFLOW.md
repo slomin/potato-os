@@ -8,6 +8,7 @@ This is the single source of truth for how we plan, execute, and close work.
 - Default status flow:
   - `Todo`
   - `In Progress`
+  - `QA`
   - `In Review`
   - `Done`
 
@@ -28,9 +29,10 @@ This is the single source of truth for how we plan, execute, and close work.
    - `fix/issue-<id>-<short-slug>` for bugs
 6. Move issue to `In Progress` once branch is created.
 7. Open PR linked to the issue.
-8. Move to `In Review` when PR is ready.
-9. Merge PR (squash preferred).
-10. Close issue and set project item to `Done`.
+8. Move to `QA` when implementation is complete and ready for Pi validation.
+9. Move to `In Review` after QA passes and PR is ready.
+10. Merge PR (squash preferred).
+11. Close issue and set project item to `Done`.
 
 ## Ticket Quality Standard (Required)
 
@@ -56,20 +58,20 @@ All feature tickets are implemented TDD-first:
 
 ## PR Readiness Checklist
 
-Before moving `In Progress` -> `In Review`, PR description must include:
+Before moving `QA` -> `In Review`, PR description must include:
 - `Closes #<issue-id>` (or equivalent linked issue statement)
 - status/risk notes and rollback guidance
 - exact commands run
 - summarized test output for unit/API/UI layers touched
 - any workflow/runbook changes made from lessons learned
 
-## Real Pi By-Hand QA (Required For Pi-Impacting Work)
+## Real Pi QA (Required For Pi-Impacting Work)
 
-If a ticket changes runtime behavior on device (API behavior, model orchestration, install scripts, nginx/systemd, or UI behavior tied to live backend), PRs must include by-hand QA on a real Pi.
+If a ticket changes runtime behavior on device (API behavior, model orchestration, install scripts, nginx/systemd, or UI behavior tied to live backend), PRs must include QA on a real Pi.
 
-- By-hand QA is the gate: do not move to `In Review` until by-hand QA is completed, unless explicitly labeled `blocked`.
+- QA is the gate: do not move to `In Review` until QA is completed, unless explicitly labeled `blocked`.
 - PR description must include:
-  - who performed by-hand QA,
+  - who performed QA,
   - device/host used (prefer `potato.local`; avoid personal IPs in docs/PR text),
   - short scenario list and pass/fail result.
 - Automated Pi scripts are supporting evidence only (optional but recommended), for example:
@@ -117,6 +119,9 @@ gh issue create -R slomin/potato-os --title "<title>" --body-file <file.md> --la
 # Add issue to project
 gh project item-add 8 --owner slomin --url https://github.com/slomin/potato-os/issues/<id>
 
-# Move item status (Todo option id currently: 0ae661da)
-gh project item-edit --id <item-id> --project-id PVT_kwHOABrb5c4BP912 --field-id PVTSSF_lAHOABrb5c4BP912zg-OMzk --single-select-option-id <option-id>
+# Show current status option IDs before editing item status
+gh project field-list 8 --owner slomin --format json | jq -r '.fields[] | select(.name=="Status") | .options[] | "\(.name): \(.id)"'
+
+# Move item status using the current option ID (Todo/In Progress/QA/In Review/Done)
+gh project item-edit --id <item-id> --project-id PVT_kwHOABrb5c4BP912 --field-id PVTSSF_lAHOABrb5c4BP912zg-OMzk --single-select-option-id <current-option-id>
 ```

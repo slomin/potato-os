@@ -305,11 +305,20 @@ def test_chat_ui_shows_llama_connection_indicator():
 def test_chat_ui_mobile_layout_prioritizes_chat_area_before_sidebar():
     assert "@media (max-width: 900px)" in CHAT_HTML
     assert ".app-shell {" in CHAT_HTML
-    assert "display: flex;" in CHAT_HTML
-    assert "flex-direction: column;" in CHAT_HTML
-    assert ".chat-shell { order: 1;" in CHAT_HTML
-    assert ".sidebar {" in CHAT_HTML
-    assert "order: 2;" in CHAT_HTML
+    assert 'id="sidebarPanel"' in CHAT_HTML
+    assert 'id="sidebarToggle"' in CHAT_HTML
+    assert 'id="sidebarCloseBtn"' in CHAT_HTML
+    assert 'id="sidebarBackdrop"' in CHAT_HTML
+    assert ".sidebar-backdrop {" in CHAT_HTML
+    assert "body.sidebar-open .sidebar {" in CHAT_HTML
+    assert "transform: translateX(-100%);" in CHAT_HTML
+    assert "body.sidebar-open {" in CHAT_HTML
+    assert "overflow: hidden;" in CHAT_HTML
+    assert "function setSidebarOpen(" in CHAT_HTML
+    assert "function bindMobileSidebar(" in CHAT_HTML
+    assert 'document.getElementById("sidebarToggle").addEventListener("click"' in CHAT_HTML
+    assert 'document.getElementById("sidebarCloseBtn").addEventListener("click"' in CHAT_HTML
+    assert 'document.getElementById("sidebarBackdrop").addEventListener("click"' in CHAT_HTML
     assert '<details class="settings" open>' not in CHAT_HTML
     assert '<details class="settings">' in CHAT_HTML
 

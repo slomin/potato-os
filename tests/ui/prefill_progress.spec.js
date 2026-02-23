@@ -222,13 +222,26 @@ test("fake backend ready state shows connected badge", async ({ page }) => {
   await expect(page.locator("#statusBadge")).toHaveClass(/online/);
 });
 
-test("mobile layout prioritizes chat area and keeps composer actions aligned", async ({ page }) => {
+test("mobile hamburger controls sidebar drawer and keeps composer actions aligned", async ({ page }) => {
   await page.setViewportSize({ width: 500, height: 844 });
   await waitUntilReady(page);
 
-  const chatTop = await page.locator(".chat-shell").evaluate((el) => el.getBoundingClientRect().top);
-  const sidebarTop = await page.locator(".sidebar").evaluate((el) => el.getBoundingClientRect().top);
-  expect(chatTop).toBeLessThanOrEqual(sidebarTop);
+  await expect(page.locator("#sidebarBackdrop")).toBeHidden();
+  await expect(page.locator("#sidebarToggle")).toBeVisible();
+
+  const sidebarClosed = await page.locator(".sidebar").evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    return rect.right <= 0 || rect.left < 0;
+  });
+  expect(sidebarClosed).toBeTruthy();
+
+  await page.locator("#sidebarToggle").click();
+  await expect(page.locator("#sidebarBackdrop")).toBeVisible();
+  await expect(page.locator("body")).toHaveClass(/sidebar-open/);
+
+  await page.locator("#sidebarBackdrop").click();
+  await expect(page.locator("#sidebarBackdrop")).toBeHidden();
+  await expect(page.locator("body")).not.toHaveClass(/sidebar-open/);
 
   const composer = page.locator(".composer");
   await expect(composer).toBeVisible();

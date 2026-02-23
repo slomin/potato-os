@@ -817,6 +817,25 @@ CHAT_HTML = """<!doctype html>
       grid-template-columns: 340px minmax(0, 1fr);
     }
 
+    .sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 12, 22, 0.52);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+      z-index: 32;
+    }
+
+    body.sidebar-open {
+      overflow: hidden;
+    }
+
+    body.sidebar-open .sidebar-backdrop {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
     .sidebar {
       border-right: 1px solid var(--border);
       padding: 20px 16px;
@@ -833,6 +852,21 @@ CHAT_HTML = """<!doctype html>
       font-weight: 780;
       letter-spacing: 0.4px;
       margin: 0;
+    }
+
+    .sidebar-mobile-actions {
+      display: none;
+    }
+
+    .sidebar-close {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      cursor: pointer;
     }
 
     .sidebar-note {
@@ -1040,6 +1074,35 @@ CHAT_HTML = """<!doctype html>
       font-size: 24px;
       font-weight: 760;
       letter-spacing: 0.2px;
+    }
+
+    .header-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .sidebar-toggle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 10px;
+      width: 38px;
+      height: 38px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      font-size: 18px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .sidebar-toggle .bars {
+      font-weight: 700;
+      transform: translateY(-1px);
     }
 
     .header-actions {
@@ -1560,19 +1623,37 @@ CHAT_HTML = """<!doctype html>
 
     @media (max-width: 900px) {
       .app-shell {
-        display: flex;
-        flex-direction: column;
+        display: block;
       }
-      .chat-shell { order: 1; }
       .sidebar {
-        order: 2;
-        border-right: none;
-        border-top: 1px solid var(--border);
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(84vw, 360px);
+        max-height: 100vh;
         padding: 12px;
+        transform: translateX(-100%);
+        transition: transform 220ms ease;
+        z-index: 36;
+        border-right: 1px solid var(--border);
+        border-top: none;
+        box-shadow: var(--shadow);
+      }
+      body.sidebar-open .sidebar {
+        transform: translateX(0);
       }
       .chat-shell {
         padding: 12px;
         gap: 10px;
+      }
+      .sidebar-mobile-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 10px;
+      }
+      .sidebar-toggle {
+        display: inline-flex;
       }
       .chat-header h1 {
         font-size: 22px;
@@ -1600,8 +1681,12 @@ CHAT_HTML = """<!doctype html>
   </style>
 </head>
 <body>
+  <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
   <div class="app-shell">
-    <aside class="sidebar">
+    <aside id="sidebarPanel" class="sidebar" aria-hidden="false">
+      <div class="sidebar-mobile-actions">
+        <button id="sidebarCloseBtn" class="sidebar-close" type="button" hidden>Close</button>
+      </div>
       <section class="sidebar-section">
         <h2 class="brand">Potato OS</h2>
         <p class="sidebar-note">Local-first chat frontend on your Pi.</p>
@@ -1672,7 +1757,12 @@ CHAT_HTML = """<!doctype html>
 
     <main class="chat-shell">
       <header class="chat-header">
-        <h1>Potato OS Chat</h1>
+        <div class="header-primary">
+          <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Open sidebar" aria-controls="sidebarPanel" aria-expanded="false" hidden>
+            <span class="bars" aria-hidden="true">≡</span>
+          </button>
+          <h1>Potato OS Chat</h1>
+        </div>
         <div class="header-actions">
           <span id="statusBadge" class="badge offline">
             <span id="statusDot" class="indicator-dot offline" aria-hidden="true"></span>
@@ -1755,6 +1845,7 @@ CHAT_HTML = """<!doctype html>
     let latestStatus = null;
     let downloadStartInFlight = false;
     let runtimeDetailsExpanded = false;
+    let mobileSidebarMql = null;
     const chatHistory = [];
     let pendingImage = null;
     let pendingImageReader = null;
@@ -2160,6 +2251,66 @@ CHAT_HTML = """<!doctype html>
       if (!input) return;
       input.value = "";
       input.click();
+    }
+
+    function isMobileSidebarViewport() {
+      if (!mobileSidebarMql) {
+        mobileSidebarMql = window.matchMedia("(max-width: 900px)");
+      }
+      return mobileSidebarMql.matches;
+    }
+
+    function setSidebarOpen(open) {
+      const sidebar = document.getElementById("sidebarPanel");
+      const backdrop = document.getElementById("sidebarBackdrop");
+      const toggle = document.getElementById("sidebarToggle");
+      const closeBtn = document.getElementById("sidebarCloseBtn");
+      const mobile = isMobileSidebarViewport();
+      const shouldOpen = Boolean(open) && mobile;
+
+      document.body.classList.toggle("sidebar-open", shouldOpen);
+
+      if (sidebar) {
+        sidebar.setAttribute("aria-hidden", mobile ? (shouldOpen ? "false" : "true") : "false");
+      }
+      if (backdrop) {
+        backdrop.hidden = !shouldOpen;
+      }
+      if (toggle) {
+        toggle.hidden = !mobile;
+        toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+      }
+      if (closeBtn) {
+        closeBtn.hidden = !shouldOpen;
+      }
+    }
+
+    function bindMobileSidebar() {
+      mobileSidebarMql = window.matchMedia("(max-width: 900px)");
+      const sync = () => {
+        if (!mobileSidebarMql.matches) {
+          setSidebarOpen(false);
+        } else {
+          setSidebarOpen(document.body.classList.contains("sidebar-open"));
+        }
+      };
+
+      const onViewportChange = () => {
+        sync();
+      };
+      if (typeof mobileSidebarMql.addEventListener === "function") {
+        mobileSidebarMql.addEventListener("change", onViewportChange);
+      } else if (typeof mobileSidebarMql.addListener === "function") {
+        mobileSidebarMql.addListener(onViewportChange);
+      }
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          setSidebarOpen(false);
+        }
+      });
+
+      sync();
     }
 
     function applyTheme(theme) {
@@ -3175,12 +3326,22 @@ CHAT_HTML = """<!doctype html>
     }
 
     bindSettings();
+    bindMobileSidebar();
     setRuntimeDetailsExpanded(false);
     appendMessage("assistant", "Potato OS is online. Ask anything to get started.");
     setInterval(pollStatus, 2000);
     pollStatus();
 
     document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+    document.getElementById("sidebarToggle").addEventListener("click", () => {
+      setSidebarOpen(!document.body.classList.contains("sidebar-open"));
+    });
+    document.getElementById("sidebarCloseBtn").addEventListener("click", () => {
+      setSidebarOpen(false);
+    });
+    document.getElementById("sidebarBackdrop").addEventListener("click", () => {
+      setSidebarOpen(false);
+    });
     document.getElementById("runtimeViewToggle").addEventListener("click", () => {
       setRuntimeDetailsExpanded(!runtimeDetailsExpanded);
     });

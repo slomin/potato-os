@@ -242,9 +242,10 @@ def test_chat_ui_supports_theme_system_prompt_setting_and_enter_to_send():
 
 def test_chat_ui_keeps_theme_toggle_clear_of_status_badge():
     assert ".chat-header {" in CHAT_HTML
-    assert "padding: 2px 14px 2px 6px;" in CHAT_HTML
+    assert "padding: 2px 6px;" in CHAT_HTML
+    assert ".header-actions {" in CHAT_HTML
     assert ".theme-toggle {" in CHAT_HTML
-    assert "z-index: 24;" in CHAT_HTML
+    assert "position: static;" in CHAT_HTML
 
 
 def test_chat_ui_copy_and_stats_footnote_contract():
@@ -257,6 +258,22 @@ def test_chat_ui_copy_and_stats_footnote_contract():
     assert "tok/sec" in CHAT_HTML
     assert "Stop reason:" in CHAT_HTML
     assert "EOS Token found" in CHAT_HTML
+
+
+def test_chat_ui_runtime_details_hide_compact_and_apply_metric_threshold_classes():
+    assert 'id="runtimeCompact"' in CHAT_HTML
+    assert "compact.hidden = runtimeDetailsExpanded;" in CHAT_HTML
+    assert 'toggle.textContent = runtimeDetailsExpanded ? "Show compact" : "Show details";' in CHAT_HTML
+    assert "function runtimeMetricSeverityClass(" in CHAT_HTML
+    assert "runtime-metric-normal" in CHAT_HTML
+    assert "runtime-metric-warn" in CHAT_HTML
+    assert "runtime-metric-high" in CHAT_HTML
+    assert "runtime-metric-critical" in CHAT_HTML
+    assert "CPU_CLOCK_MAX_HZ_PI5" in CHAT_HTML
+    assert "GPU_CLOCK_MAX_HZ_PI5" in CHAT_HTML
+    assert "applyRuntimeMetricSeverity(memoryDetail, systemPayload?.memory_percent);" in CHAT_HTML
+    assert "applyRuntimeMetricSeverity(swapDetail, systemPayload?.swap_percent);" in CHAT_HTML
+    assert "applyRuntimeMetricSeverity(tempDetail, tempValue);" in CHAT_HTML
     assert 'case "tool_calls"' in CHAT_HTML
     assert "content_filter" not in CHAT_HTML
     assert "function_call" not in CHAT_HTML
@@ -292,11 +309,48 @@ def test_chat_ui_shows_llama_connection_indicator():
     assert "indicator-dot" in CHAT_HTML
     assert "function updateLlamaIndicator(" in CHAT_HTML
     assert "statusPayload?.llama_server?.healthy" in CHAT_HTML
-    assert 'label.textContent = "CONNECTED"' in CHAT_HTML
-    assert 'label.textContent = "DISCONNECTED"' in CHAT_HTML
+    assert 'label.textContent = "CONNECTED:Local Model"' in CHAT_HTML
+    assert 'label.textContent = "DISCONNECTED:Local Model"' in CHAT_HTML
     assert 'dot.classList.add("online")' in CHAT_HTML
     assert 'dot.classList.add("offline")' in CHAT_HTML
+    assert "statusPayload?.backend?.active" in CHAT_HTML
+    assert "backendMode === \"fake\"" in CHAT_HTML
     assert "Llama server: connected" not in CHAT_HTML
+
+
+def test_chat_ui_mobile_layout_prioritizes_chat_area_before_sidebar():
+    assert "@media (max-width: 900px)" in CHAT_HTML
+    assert ".app-shell {" in CHAT_HTML
+    assert 'id="sidebarPanel"' in CHAT_HTML
+    assert 'id="sidebarToggle"' in CHAT_HTML
+    assert 'id="sidebarCloseBtn"' in CHAT_HTML
+    assert 'id="sidebarBackdrop"' in CHAT_HTML
+    assert ".sidebar-backdrop {" in CHAT_HTML
+    assert "body.sidebar-open .sidebar {" in CHAT_HTML
+    assert "transform: translateX(-100%);" in CHAT_HTML
+    assert "body.sidebar-open {" in CHAT_HTML
+    assert "overflow: hidden;" in CHAT_HTML
+    assert "function setSidebarOpen(" in CHAT_HTML
+    assert "function bindMobileSidebar(" in CHAT_HTML
+    assert 'document.getElementById("sidebarToggle").addEventListener("click"' in CHAT_HTML
+    assert 'document.getElementById("sidebarCloseBtn").addEventListener("click"' in CHAT_HTML
+    assert 'document.getElementById("sidebarBackdrop").addEventListener("click"' in CHAT_HTML
+    assert '<details class="settings" open>' not in CHAT_HTML
+    assert '<details class="settings">' in CHAT_HTML
+
+
+def test_chat_ui_mobile_composer_keeps_actions_together():
+    assert ".composer-bottom {" in CHAT_HTML
+    assert "display: grid;" in CHAT_HTML
+    assert "grid-template-columns: 1fr auto;" in CHAT_HTML
+    assert ".composer-right {" in CHAT_HTML
+    assert "justify-content: flex-end;" in CHAT_HTML
+    assert ".composer-left {" in CHAT_HTML
+    assert "@media (max-width: 900px)" in CHAT_HTML
+    assert ".composer-bottom { grid-template-columns: 1fr; }" in CHAT_HTML
+    assert ".composer-right {" in CHAT_HTML
+    assert "width: 100%;" in CHAT_HTML
+    assert "justify-content: flex-end;" in CHAT_HTML
 
 
 def test_chat_ui_uses_continuous_chat_history_in_openai_messages_format():

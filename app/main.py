@@ -776,6 +776,10 @@ CHAT_HTML = """<!doctype html>
       --shadow: 0 18px 45px rgba(19, 37, 74, 0.11);
       --shadow-soft: 0 8px 26px rgba(19, 37, 74, 0.08);
       --focus: #2f7cf6;
+      --metric-normal: #142033;
+      --metric-warn: #b57d00;
+      --metric-high: #d95e00;
+      --metric-critical: #c81e1e;
     }
 
     :root[data-theme="dark"] {
@@ -797,6 +801,10 @@ CHAT_HTML = """<!doctype html>
       --shadow: 0 20px 48px rgba(0, 0, 0, 0.38);
       --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.24);
       --focus: #69adff;
+      --metric-normal: #f8fbff;
+      --metric-warn: #ffd86b;
+      --metric-high: #ffb067;
+      --metric-critical: #ff7f7f;
     }
 
     * { box-sizing: border-box; }
@@ -817,6 +825,25 @@ CHAT_HTML = """<!doctype html>
       grid-template-columns: 340px minmax(0, 1fr);
     }
 
+    .sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 12, 22, 0.52);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+      z-index: 32;
+    }
+
+    body.sidebar-open {
+      overflow: hidden;
+    }
+
+    body.sidebar-open .sidebar-backdrop {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
     .sidebar {
       border-right: 1px solid var(--border);
       padding: 20px 16px;
@@ -833,6 +860,21 @@ CHAT_HTML = """<!doctype html>
       font-weight: 780;
       letter-spacing: 0.4px;
       margin: 0;
+    }
+
+    .sidebar-mobile-actions {
+      display: none;
+    }
+
+    .sidebar-close {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      cursor: pointer;
     }
 
     .sidebar-note {
@@ -921,6 +963,23 @@ CHAT_HTML = """<!doctype html>
       display: none;
     }
 
+    .runtime-metric-normal {
+      color: var(--metric-normal);
+    }
+
+    .runtime-metric-warn {
+      color: var(--metric-warn);
+    }
+
+    .runtime-metric-high {
+      color: var(--metric-high);
+    }
+
+    .runtime-metric-critical {
+      color: var(--metric-critical);
+      font-weight: 680;
+    }
+
     .download-prompt {
       margin-top: 10px;
       border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
@@ -972,9 +1031,7 @@ CHAT_HTML = """<!doctype html>
     }
 
     .theme-toggle {
-      position: fixed;
-      top: 14px;
-      right: 14px;
+      position: static;
       width: 44px;
       height: 44px;
       border-radius: 999px;
@@ -986,7 +1043,6 @@ CHAT_HTML = """<!doctype html>
       justify-content: center;
       cursor: pointer;
       box-shadow: var(--shadow);
-      z-index: 24;
       transition: transform 160ms ease, background-color 160ms ease;
     }
 
@@ -1035,7 +1091,7 @@ CHAT_HTML = """<!doctype html>
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      padding: 2px 14px 2px 6px;
+      padding: 2px 6px;
     }
 
     .chat-header h1 {
@@ -1043,6 +1099,42 @@ CHAT_HTML = """<!doctype html>
       font-size: 24px;
       font-weight: 760;
       letter-spacing: 0.2px;
+    }
+
+    .header-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .sidebar-toggle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 10px;
+      width: 38px;
+      height: 38px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      font-size: 18px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .sidebar-toggle .bars {
+      font-weight: 700;
+      transform: translateY(-1px);
+    }
+
+    .header-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
     }
 
     .badge {
@@ -1080,8 +1172,8 @@ CHAT_HTML = """<!doctype html>
       display: flex;
       flex-direction: column;
       gap: 12px;
-      min-height: 360px;
-      max-height: calc(100vh - 285px);
+      min-height: 320px;
+      max-height: min(62vh, 680px);
       box-shadow: var(--shadow-soft);
     }
 
@@ -1133,7 +1225,7 @@ CHAT_HTML = """<!doctype html>
 
     .message-meta {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 12.5px;
       line-height: 1.35;
       padding: 0 4px;
     }
@@ -1178,11 +1270,10 @@ CHAT_HTML = """<!doctype html>
 
     .composer-bottom {
       margin-top: 12px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
       gap: 12px;
-      flex-wrap: wrap;
     }
 
     .composer-left {
@@ -1191,25 +1282,18 @@ CHAT_HTML = """<!doctype html>
       gap: 8px;
       flex-wrap: wrap;
       min-width: 0;
+      overflow: hidden;
     }
 
     .composer-right {
-      margin-left: auto;
       display: inline-flex;
       align-items: center;
       gap: 10px;
+      justify-content: flex-end;
     }
 
     .visually-hidden-file {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      border: 0;
-      white-space: nowrap;
+      display: none;
     }
 
     .attach-btn,
@@ -1563,43 +1647,71 @@ CHAT_HTML = """<!doctype html>
     }
 
     @media (max-width: 900px) {
-      .app-shell { grid-template-columns: 1fr; }
-      .sidebar {
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        padding: 12px;
+      .app-shell {
+        display: block;
       }
-      .theme-toggle {
-        top: 10px;
-        right: 10px;
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(84vw, 360px);
+        max-height: 100vh;
+        padding: 12px;
+        transform: translateX(-100%);
+        transition: transform 220ms ease;
+        z-index: 36;
+        border-right: 1px solid var(--border);
+        border-top: none;
+        box-shadow: var(--shadow);
+      }
+      body.sidebar-open .sidebar {
+        transform: translateX(0);
       }
       .chat-shell {
         padding: 12px;
         gap: 10px;
       }
-      .messages { max-height: calc(100vh - 355px); }
+      .sidebar-mobile-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 10px;
+      }
+      .sidebar-toggle {
+        display: inline-flex;
+      }
+      .chat-header h1 {
+        font-size: 22px;
+      }
+      .header-actions {
+        gap: 8px;
+      }
+      .theme-toggle {
+        width: 40px;
+        height: 40px;
+      }
+      .messages {
+        min-height: 290px;
+        max-height: min(56vh, 520px);
+      }
+      .composer-bottom { grid-template-columns: 1fr; }
       .composer-right {
         width: 100%;
-        justify-content: space-between;
+        justify-content: flex-end;
       }
       .composer-status-chip {
-        max-width: calc(100% - 110px);
+        max-width: min(100%, 360px);
       }
     }
   </style>
 </head>
 <body>
-  <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme">
-    <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"></path>
-    </svg>
-    <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="4.5"></circle>
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2"></path>
-    </svg>
-  </button>
+  <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
   <div class="app-shell">
-    <aside class="sidebar">
+    <aside id="sidebarPanel" class="sidebar" aria-hidden="false">
+      <div class="sidebar-mobile-actions">
+        <button id="sidebarCloseBtn" class="sidebar-close" type="button" hidden>Close</button>
+      </div>
       <section class="sidebar-section">
         <h2 class="brand">Potato OS</h2>
         <p class="sidebar-note">Local-first chat frontend on your Pi.</p>
@@ -1631,7 +1743,7 @@ CHAT_HTML = """<!doctype html>
           </div>
         </div>
       </section>
-      <details class="settings" open>
+      <details class="settings">
         <summary>Settings</summary>
         <div class="settings-grid">
           <label class="full">System Prompt (optional)
@@ -1670,11 +1782,27 @@ CHAT_HTML = """<!doctype html>
 
     <main class="chat-shell">
       <header class="chat-header">
-        <h1>Potato OS Chat</h1>
-        <span id="statusBadge" class="badge offline">
-          <span id="statusDot" class="indicator-dot offline" aria-hidden="true"></span>
-          <span id="statusLabel">DISCONNECTED</span>
-        </span>
+        <div class="header-primary">
+          <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Open sidebar" aria-controls="sidebarPanel" aria-expanded="false" hidden>
+            <span class="bars" aria-hidden="true">≡</span>
+          </button>
+          <h1>Potato OS Chat</h1>
+        </div>
+        <div class="header-actions">
+          <span id="statusBadge" class="badge offline">
+            <span id="statusDot" class="indicator-dot offline" aria-hidden="true"></span>
+            <span id="statusLabel">DISCONNECTED:Local Model</span>
+          </span>
+          <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme">
+            <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"></path>
+            </svg>
+            <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.5"></circle>
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2"></path>
+            </svg>
+          </button>
+        </div>
       </header>
 
       <section id="messages" class="messages"></section>
@@ -1742,6 +1870,7 @@ CHAT_HTML = """<!doctype html>
     let latestStatus = null;
     let downloadStartInFlight = false;
     let runtimeDetailsExpanded = false;
+    let mobileSidebarMql = null;
     const chatHistory = [];
     let pendingImage = null;
     let pendingImageReader = null;
@@ -1749,6 +1878,14 @@ CHAT_HTML = """<!doctype html>
     const IMAGE_SAFE_MAX_BYTES = 140 * 1024;
     const IMAGE_MAX_DIMENSION = 896;
     const IMAGE_MAX_PIXEL_COUNT = IMAGE_MAX_DIMENSION * IMAGE_MAX_DIMENSION;
+    const CPU_CLOCK_MAX_HZ_PI5 = 2_400_000_000;
+    const GPU_CLOCK_MAX_HZ_PI5 = 1_000_000_000;
+    const RUNTIME_METRIC_SEVERITY_CLASSES = [
+      "runtime-metric-normal",
+      "runtime-metric-warn",
+      "runtime-metric-high",
+      "runtime-metric-critical",
+    ];
 
     function loadSettings() {
       const raw = localStorage.getItem(settingsKey);
@@ -1795,6 +1932,36 @@ CHAT_HTML = """<!doctype html>
       const hz = Number(rawHz);
       if (!Number.isFinite(hz) || hz <= 0) return "--";
       return `${Math.round(hz / 1_000_000)} MHz`;
+    }
+
+    function normalizePercent(rawValue) {
+      const value = Number(rawValue);
+      if (!Number.isFinite(value)) return Number.NaN;
+      return Math.min(100, Math.max(0, value));
+    }
+
+    function percentFromRatio(rawCurrent, rawMax) {
+      const current = Number(rawCurrent);
+      const max = Number(rawMax);
+      if (!Number.isFinite(current) || !Number.isFinite(max) || current < 0 || max <= 0) {
+        return Number.NaN;
+      }
+      return normalizePercent((current / max) * 100);
+    }
+
+    function runtimeMetricSeverityClass(rawPercent) {
+      const percent = normalizePercent(rawPercent);
+      if (!Number.isFinite(percent)) return "runtime-metric-normal";
+      if (percent >= 90) return "runtime-metric-critical";
+      if (percent >= 75) return "runtime-metric-high";
+      if (percent >= 60) return "runtime-metric-warn";
+      return "runtime-metric-normal";
+    }
+
+    function applyRuntimeMetricSeverity(element, rawPercent) {
+      if (!element) return;
+      element.classList.remove(...RUNTIME_METRIC_SEVERITY_CLASSES);
+      element.classList.add(runtimeMetricSeverityClass(rawPercent));
     }
 
     function formatCountdownSeconds(rawSeconds) {
@@ -1942,6 +2109,18 @@ CHAT_HTML = """<!doctype html>
       };
     }
 
+    function focusPromptInput(options = {}) {
+      const prompt = document.getElementById("userPrompt");
+      if (!prompt) return;
+      const preventScroll = options.preventScroll !== false;
+      prompt.focus({ preventScroll });
+      if (options.moveCaretToEnd === false) return;
+      const cursor = prompt.value.length;
+      if (typeof prompt.setSelectionRange === "function") {
+        prompt.setSelectionRange(cursor, cursor);
+      }
+    }
+
     function cancelPendingImageWork() {
       pendingImageToken += 1;
       if (pendingImageReader) {
@@ -1989,6 +2168,7 @@ CHAT_HTML = """<!doctype html>
         setComposerActivity("");
         hideComposerStatusChip();
         setCancelEnabled(false);
+        focusPromptInput();
         return;
       }
       if (!String(file.type || "").startsWith("image/")) {
@@ -1997,6 +2177,7 @@ CHAT_HTML = """<!doctype html>
         setComposerActivity("");
         hideComposerStatusChip();
         setCancelEnabled(false);
+        focusPromptInput();
         return;
       }
 
@@ -2030,6 +2211,7 @@ CHAT_HTML = """<!doctype html>
           setComposerActivity("");
           hideComposerStatusChip();
           setCancelEnabled(false);
+          focusPromptInput();
           return;
         }
 
@@ -2043,6 +2225,7 @@ CHAT_HTML = """<!doctype html>
           setComposerActivity("");
           hideComposerStatusChip();
           setCancelEnabled(false);
+          focusPromptInput();
           return;
         }
 
@@ -2089,6 +2272,7 @@ CHAT_HTML = """<!doctype html>
         setComposerActivity("");
         hideComposerStatusChip();
         setCancelEnabled(false);
+        focusPromptInput();
       };
       reader.onerror = () => {
         if (selectionToken !== pendingImageToken) {
@@ -2100,6 +2284,7 @@ CHAT_HTML = """<!doctype html>
         setComposerActivity("");
         hideComposerStatusChip();
         setCancelEnabled(false);
+        focusPromptInput();
       };
       reader.onabort = () => {
         if (selectionToken !== pendingImageToken) {
@@ -2110,6 +2295,7 @@ CHAT_HTML = """<!doctype html>
         setComposerActivity("Image load cancelled.");
         hideComposerStatusChip();
         setCancelEnabled(false);
+        focusPromptInput();
       };
       reader.readAsDataURL(file);
     }
@@ -2147,6 +2333,66 @@ CHAT_HTML = """<!doctype html>
       if (!input) return;
       input.value = "";
       input.click();
+    }
+
+    function isMobileSidebarViewport() {
+      if (!mobileSidebarMql) {
+        mobileSidebarMql = window.matchMedia("(max-width: 900px)");
+      }
+      return mobileSidebarMql.matches;
+    }
+
+    function setSidebarOpen(open) {
+      const sidebar = document.getElementById("sidebarPanel");
+      const backdrop = document.getElementById("sidebarBackdrop");
+      const toggle = document.getElementById("sidebarToggle");
+      const closeBtn = document.getElementById("sidebarCloseBtn");
+      const mobile = isMobileSidebarViewport();
+      const shouldOpen = Boolean(open) && mobile;
+
+      document.body.classList.toggle("sidebar-open", shouldOpen);
+
+      if (sidebar) {
+        sidebar.setAttribute("aria-hidden", mobile ? (shouldOpen ? "false" : "true") : "false");
+      }
+      if (backdrop) {
+        backdrop.hidden = !shouldOpen;
+      }
+      if (toggle) {
+        toggle.hidden = !mobile;
+        toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+      }
+      if (closeBtn) {
+        closeBtn.hidden = !shouldOpen;
+      }
+    }
+
+    function bindMobileSidebar() {
+      mobileSidebarMql = window.matchMedia("(max-width: 900px)");
+      const sync = () => {
+        if (!mobileSidebarMql.matches) {
+          setSidebarOpen(false);
+        } else {
+          setSidebarOpen(document.body.classList.contains("sidebar-open"));
+        }
+      };
+
+      const onViewportChange = () => {
+        sync();
+      };
+      if (typeof mobileSidebarMql.addEventListener === "function") {
+        mobileSidebarMql.addEventListener("change", onViewportChange);
+      } else if (typeof mobileSidebarMql.addListener === "function") {
+        mobileSidebarMql.addListener(onViewportChange);
+      }
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          setSidebarOpen(false);
+        }
+      });
+
+      sync();
     }
 
     function applyTheme(theme) {
@@ -2484,21 +2730,29 @@ CHAT_HTML = """<!doctype html>
       meta.textContent = text;
     }
 
-    function updateLlamaIndicator(isHealthy) {
+    function updateLlamaIndicator(statusPayload) {
       const badge = document.getElementById("statusBadge");
       const dot = document.getElementById("statusDot");
       const label = document.getElementById("statusLabel");
       if (!badge || !dot || !label) return;
+      const backendMode = String(
+        statusPayload?.backend?.active
+        || statusPayload?.backend?.mode
+        || ""
+      ).toLowerCase();
+      const isReady = String(statusPayload?.state || "").toUpperCase() === "READY";
+      const llamaHealthy = statusPayload?.llama_server?.healthy === true;
+      const isHealthy = llamaHealthy || (backendMode === "fake" && isReady);
       badge.classList.remove("online", "offline");
       dot.classList.remove("online", "offline");
       if (isHealthy) {
         badge.classList.add("online");
         dot.classList.add("online");
-        label.textContent = "CONNECTED";
+        label.textContent = "CONNECTED:Local Model";
       } else {
         badge.classList.add("offline");
         dot.classList.add("offline");
-        label.textContent = "DISCONNECTED";
+        label.textContent = "DISCONNECTED:Local Model";
       }
     }
 
@@ -2539,8 +2793,12 @@ CHAT_HTML = """<!doctype html>
       runtimeDetailsExpanded = Boolean(expanded);
       const details = document.getElementById("runtimeDetails");
       const toggle = document.getElementById("runtimeViewToggle");
+      const compact = document.getElementById("runtimeCompact");
       if (details) {
         details.hidden = !runtimeDetailsExpanded;
+      }
+      if (compact) {
+        compact.hidden = runtimeDetailsExpanded;
       }
       if (toggle) {
         toggle.textContent = runtimeDetailsExpanded ? "Show compact" : "Show details";
@@ -2576,6 +2834,11 @@ CHAT_HTML = """<!doctype html>
         if (throttleDetail) throttleDetail.textContent = "Throttling: --";
         if (throttleHistoryDetail) throttleHistoryDetail.textContent = "Throttling history: --";
         if (updatedDetail) updatedDetail.textContent = "Updated: --";
+        applyRuntimeMetricSeverity(cpuClockDetail, Number.NaN);
+        applyRuntimeMetricSeverity(memoryDetail, Number.NaN);
+        applyRuntimeMetricSeverity(swapDetail, Number.NaN);
+        applyRuntimeMetricSeverity(tempDetail, Number.NaN);
+        applyRuntimeMetricSeverity(gpuDetail, Number.NaN);
         return;
       }
 
@@ -2599,15 +2862,18 @@ CHAT_HTML = """<!doctype html>
       if (cpuDetail) cpuDetail.textContent = `CPU total: ${cpuTotal}`;
       if (coresDetail) coresDetail.textContent = `CPU cores: ${coresText}`;
       if (cpuClockDetail) cpuClockDetail.textContent = `CPU clock: ${cpuClock}`;
+      applyRuntimeMetricSeverity(cpuClockDetail, percentFromRatio(systemPayload?.cpu_clock_arm_hz, CPU_CLOCK_MAX_HZ_PI5));
 
       const memUsed = formatBytes(systemPayload?.memory_used_bytes);
       const memTotal = formatBytes(systemPayload?.memory_total_bytes);
       const memPercent = formatPercent(systemPayload?.memory_percent, 0);
       if (memoryDetail) memoryDetail.textContent = `Memory: ${memUsed} / ${memTotal} (${memPercent})`;
+      applyRuntimeMetricSeverity(memoryDetail, systemPayload?.memory_percent);
 
       const swapUsed = formatBytes(systemPayload?.swap_used_bytes);
       const swapTotal = formatBytes(systemPayload?.swap_total_bytes);
       if (swapDetail) swapDetail.textContent = `Swap: ${swapUsed} / ${swapTotal} (${swapPercent})`;
+      applyRuntimeMetricSeverity(swapDetail, systemPayload?.swap_percent);
 
       const tempRaw = systemPayload?.temperature_c;
       const tempValue = typeof tempRaw === "number" ? tempRaw : Number.NaN;
@@ -2616,8 +2882,14 @@ CHAT_HTML = """<!doctype html>
           ? `Temperature: ${tempValue.toFixed(1)}°C`
           : "Temperature: --";
       }
+      applyRuntimeMetricSeverity(tempDetail, tempValue);
 
       if (gpuDetail) gpuDetail.textContent = `GPU clock: core ${gpuCore}, v3d ${gpuV3d}`;
+      const gpuPeakHz = Math.max(
+        Number(systemPayload?.gpu_clock_core_hz) || 0,
+        Number(systemPayload?.gpu_clock_v3d_hz) || 0,
+      );
+      applyRuntimeMetricSeverity(gpuDetail, percentFromRatio(gpuPeakHz, GPU_CLOCK_MAX_HZ_PI5));
 
       const currentFlags = Array.isArray(systemPayload?.throttling?.current_flags)
         ? systemPayload.throttling.current_flags
@@ -2761,8 +3033,7 @@ CHAT_HTML = """<!doctype html>
         const modelName = statusPayload?.model?.filename || "Unknown model";
         modelNameField.value = statusPayload?.model_present ? modelName : `${modelName} (not loaded)`;
       }
-      const llamaHealthy = statusPayload?.llama_server?.healthy === true;
-      updateLlamaIndicator(llamaHealthy);
+      updateLlamaIndicator(statusPayload);
       renderDownloadPrompt(statusPayload);
       renderSystemRuntime(statusPayload?.system);
       setSendEnabled();
@@ -2807,7 +3078,7 @@ CHAT_HTML = """<!doctype html>
         if (modelNameField) {
           modelNameField.value = "Unknown model (status unavailable)";
         }
-        updateLlamaIndicator(false);
+        updateLlamaIndicator(latestStatus);
         renderDownloadPrompt(latestStatus);
         renderSystemRuntime(latestStatus.system);
         setSendEnabled();
@@ -2853,6 +3124,7 @@ CHAT_HTML = """<!doctype html>
       });
       userPrompt.value = "";
       clearPendingImage();
+      focusPromptInput();
       requestInFlight = true;
       setSendEnabled();
       setCancelEnabled(true);
@@ -3019,6 +3291,7 @@ CHAT_HTML = """<!doctype html>
         stopPrefillProgress();
         setComposerActivity("");
         setCancelEnabled(false);
+        focusPromptInput();
       }
     }
 
@@ -3155,12 +3428,22 @@ CHAT_HTML = """<!doctype html>
     }
 
     bindSettings();
+    bindMobileSidebar();
     setRuntimeDetailsExpanded(false);
     appendMessage("assistant", "Potato OS is online. Ask anything to get started.");
     setInterval(pollStatus, 2000);
     pollStatus();
 
     document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+    document.getElementById("sidebarToggle").addEventListener("click", () => {
+      setSidebarOpen(!document.body.classList.contains("sidebar-open"));
+    });
+    document.getElementById("sidebarCloseBtn").addEventListener("click", () => {
+      setSidebarOpen(false);
+    });
+    document.getElementById("sidebarBackdrop").addEventListener("click", () => {
+      setSidebarOpen(false);
+    });
     document.getElementById("runtimeViewToggle").addEventListener("click", () => {
       setRuntimeDetailsExpanded(!runtimeDetailsExpanded);
     });

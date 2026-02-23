@@ -242,9 +242,10 @@ def test_chat_ui_supports_theme_system_prompt_setting_and_enter_to_send():
 
 def test_chat_ui_keeps_theme_toggle_clear_of_status_badge():
     assert ".chat-header {" in CHAT_HTML
-    assert "padding: 2px 14px 2px 6px;" in CHAT_HTML
+    assert "padding: 2px 6px;" in CHAT_HTML
+    assert ".header-actions {" in CHAT_HTML
     assert ".theme-toggle {" in CHAT_HTML
-    assert "z-index: 24;" in CHAT_HTML
+    assert "position: static;" in CHAT_HTML
 
 
 def test_chat_ui_copy_and_stats_footnote_contract():
@@ -296,7 +297,35 @@ def test_chat_ui_shows_llama_connection_indicator():
     assert 'label.textContent = "DISCONNECTED"' in CHAT_HTML
     assert 'dot.classList.add("online")' in CHAT_HTML
     assert 'dot.classList.add("offline")' in CHAT_HTML
+    assert "statusPayload?.backend?.active" in CHAT_HTML
+    assert "backendMode === \"fake\"" in CHAT_HTML
     assert "Llama server: connected" not in CHAT_HTML
+
+
+def test_chat_ui_mobile_layout_prioritizes_chat_area_before_sidebar():
+    assert "@media (max-width: 900px)" in CHAT_HTML
+    assert ".app-shell {" in CHAT_HTML
+    assert "display: flex;" in CHAT_HTML
+    assert "flex-direction: column;" in CHAT_HTML
+    assert ".chat-shell { order: 1;" in CHAT_HTML
+    assert ".sidebar {" in CHAT_HTML
+    assert "order: 2;" in CHAT_HTML
+    assert '<details class="settings" open>' not in CHAT_HTML
+    assert '<details class="settings">' in CHAT_HTML
+
+
+def test_chat_ui_mobile_composer_keeps_actions_together():
+    assert ".composer-bottom {" in CHAT_HTML
+    assert "display: grid;" in CHAT_HTML
+    assert "grid-template-columns: 1fr auto;" in CHAT_HTML
+    assert ".composer-right {" in CHAT_HTML
+    assert "justify-content: flex-end;" in CHAT_HTML
+    assert ".composer-left {" in CHAT_HTML
+    assert "@media (max-width: 900px)" in CHAT_HTML
+    assert ".composer-bottom { grid-template-columns: 1fr; }" in CHAT_HTML
+    assert ".composer-right {" in CHAT_HTML
+    assert "width: 100%;" in CHAT_HTML
+    assert "justify-content: flex-end;" in CHAT_HTML
 
 
 def test_chat_ui_uses_continuous_chat_history_in_openai_messages_format():

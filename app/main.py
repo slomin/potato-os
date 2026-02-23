@@ -972,9 +972,7 @@ CHAT_HTML = """<!doctype html>
     }
 
     .theme-toggle {
-      position: fixed;
-      top: 14px;
-      right: 14px;
+      position: static;
       width: 44px;
       height: 44px;
       border-radius: 999px;
@@ -986,7 +984,6 @@ CHAT_HTML = """<!doctype html>
       justify-content: center;
       cursor: pointer;
       box-shadow: var(--shadow);
-      z-index: 24;
       transition: transform 160ms ease, background-color 160ms ease;
     }
 
@@ -1035,7 +1032,7 @@ CHAT_HTML = """<!doctype html>
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      padding: 2px 14px 2px 6px;
+      padding: 2px 6px;
     }
 
     .chat-header h1 {
@@ -1043,6 +1040,13 @@ CHAT_HTML = """<!doctype html>
       font-size: 24px;
       font-weight: 760;
       letter-spacing: 0.2px;
+    }
+
+    .header-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
     }
 
     .badge {
@@ -1080,8 +1084,8 @@ CHAT_HTML = """<!doctype html>
       display: flex;
       flex-direction: column;
       gap: 12px;
-      min-height: 360px;
-      max-height: calc(100vh - 285px);
+      min-height: 320px;
+      max-height: min(62vh, 680px);
       box-shadow: var(--shadow-soft);
     }
 
@@ -1133,7 +1137,7 @@ CHAT_HTML = """<!doctype html>
 
     .message-meta {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 12.5px;
       line-height: 1.35;
       padding: 0 4px;
     }
@@ -1178,11 +1182,10 @@ CHAT_HTML = """<!doctype html>
 
     .composer-bottom {
       margin-top: 12px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
       gap: 12px;
-      flex-wrap: wrap;
     }
 
     .composer-left {
@@ -1191,25 +1194,18 @@ CHAT_HTML = """<!doctype html>
       gap: 8px;
       flex-wrap: wrap;
       min-width: 0;
+      overflow: hidden;
     }
 
     .composer-right {
-      margin-left: auto;
       display: inline-flex;
       align-items: center;
       gap: 10px;
+      justify-content: flex-end;
     }
 
     .visually-hidden-file {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      border: 0;
-      white-space: nowrap;
+      display: none;
     }
 
     .attach-btn,
@@ -1563,41 +1559,47 @@ CHAT_HTML = """<!doctype html>
     }
 
     @media (max-width: 900px) {
-      .app-shell { grid-template-columns: 1fr; }
-      .sidebar {
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        padding: 12px;
+      .app-shell {
+        display: flex;
+        flex-direction: column;
       }
-      .theme-toggle {
-        top: 10px;
-        right: 10px;
+      .chat-shell { order: 1; }
+      .sidebar {
+        order: 2;
+        border-right: none;
+        border-top: 1px solid var(--border);
+        padding: 12px;
       }
       .chat-shell {
         padding: 12px;
         gap: 10px;
       }
-      .messages { max-height: calc(100vh - 355px); }
+      .chat-header h1 {
+        font-size: 22px;
+      }
+      .header-actions {
+        gap: 8px;
+      }
+      .theme-toggle {
+        width: 40px;
+        height: 40px;
+      }
+      .messages {
+        min-height: 290px;
+        max-height: min(56vh, 520px);
+      }
+      .composer-bottom { grid-template-columns: 1fr; }
       .composer-right {
         width: 100%;
-        justify-content: space-between;
+        justify-content: flex-end;
       }
       .composer-status-chip {
-        max-width: calc(100% - 110px);
+        max-width: min(100%, 360px);
       }
     }
   </style>
 </head>
 <body>
-  <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme">
-    <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"></path>
-    </svg>
-    <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="4.5"></circle>
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2"></path>
-    </svg>
-  </button>
   <div class="app-shell">
     <aside class="sidebar">
       <section class="sidebar-section">
@@ -1631,7 +1633,7 @@ CHAT_HTML = """<!doctype html>
           </div>
         </div>
       </section>
-      <details class="settings" open>
+      <details class="settings">
         <summary>Settings</summary>
         <div class="settings-grid">
           <label class="full">System Prompt (optional)
@@ -1671,10 +1673,21 @@ CHAT_HTML = """<!doctype html>
     <main class="chat-shell">
       <header class="chat-header">
         <h1>Potato OS Chat</h1>
-        <span id="statusBadge" class="badge offline">
-          <span id="statusDot" class="indicator-dot offline" aria-hidden="true"></span>
-          <span id="statusLabel">DISCONNECTED</span>
-        </span>
+        <div class="header-actions">
+          <span id="statusBadge" class="badge offline">
+            <span id="statusDot" class="indicator-dot offline" aria-hidden="true"></span>
+            <span id="statusLabel">DISCONNECTED</span>
+          </span>
+          <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme">
+            <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"></path>
+            </svg>
+            <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.5"></circle>
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2"></path>
+            </svg>
+          </button>
+        </div>
       </header>
 
       <section id="messages" class="messages"></section>
@@ -2484,11 +2497,19 @@ CHAT_HTML = """<!doctype html>
       meta.textContent = text;
     }
 
-    function updateLlamaIndicator(isHealthy) {
+    function updateLlamaIndicator(statusPayload) {
       const badge = document.getElementById("statusBadge");
       const dot = document.getElementById("statusDot");
       const label = document.getElementById("statusLabel");
       if (!badge || !dot || !label) return;
+      const backendMode = String(
+        statusPayload?.backend?.active
+        || statusPayload?.backend?.mode
+        || ""
+      ).toLowerCase();
+      const isReady = String(statusPayload?.state || "").toUpperCase() === "READY";
+      const llamaHealthy = statusPayload?.llama_server?.healthy === true;
+      const isHealthy = llamaHealthy || (backendMode === "fake" && isReady);
       badge.classList.remove("online", "offline");
       dot.classList.remove("online", "offline");
       if (isHealthy) {
@@ -2761,8 +2782,7 @@ CHAT_HTML = """<!doctype html>
         const modelName = statusPayload?.model?.filename || "Unknown model";
         modelNameField.value = statusPayload?.model_present ? modelName : `${modelName} (not loaded)`;
       }
-      const llamaHealthy = statusPayload?.llama_server?.healthy === true;
-      updateLlamaIndicator(llamaHealthy);
+      updateLlamaIndicator(statusPayload);
       renderDownloadPrompt(statusPayload);
       renderSystemRuntime(statusPayload?.system);
       setSendEnabled();
@@ -2807,7 +2827,7 @@ CHAT_HTML = """<!doctype html>
         if (modelNameField) {
           modelNameField.value = "Unknown model (status unavailable)";
         }
-        updateLlamaIndicator(false);
+        updateLlamaIndicator(latestStatus);
         renderDownloadPrompt(latestStatus);
         renderSystemRuntime(latestStatus.system);
         setSendEnabled();

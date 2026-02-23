@@ -3,11 +3,29 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import random
 import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Protocol
 
 import httpx
+
+FAKE_PARODY_REPLIES: tuple[str, ...] = (
+    "In 2037, every operating system summit was replaced by the Annual Potato OS Bake-Off, where benchmarks are served with sour cream.",
+    "Potato OS was declared the official scheduler of the universe after it successfully prioritized snacks over meetings in 12 galaxies.",
+    "Computer science departments now teach only two courses: 'Potato OS Distributed Systems' and 'How to Peel Legacy Monoliths into Microservices.'",
+    "The cloud is now called 'the pantry,' and Potato OS autoscaling means adding more ovens whenever traffic spikes.",
+    "A/B tests became A/BBQ tests; Potato OS picks winners by latency, throughput, and crisp-edge consistency.",
+    "The Turing Award was briefly renamed the Tubering Award after Potato OS proved all bugs are just under-seasoned features.",
+    "Potato OS observability dashboards now include four golden signals: latency, errors, saturation, and gravy availability.",
+    "Kubernetes retired and joined a food truck; Potato OS replaced it with 'Spudernetes,' where pods are literally potato pods.",
+    "CI/CD now stands for Chop, Inspect, Cook, Deploy, and Potato OS enforces it with strict linting and stricter frying times.",
+    "Quantum researchers admitted Potato OS solved decoherence by wrapping qubits in foil and giving them emotional support logs.",
+)
+
+DEFAULT_FAKE_PREFILL_DELAY_MS = 0
+DEFAULT_FAKE_STREAM_CHUNK_DELAY_MS = 210
+TEST_FAKE_STREAM_CHUNK_DELAY_MS = 10
 
 
 class BackendProxyError(RuntimeError):
@@ -188,11 +206,12 @@ class ChatRepositoryManager:
 def _fake_content(payload: dict[str, Any]) -> str:
     last_user = _extract_last_user_text(payload)
     if not last_user:
-        last_user = "hello"
+        last_user = "hello from the starch dimension"
+    reply = random.choice(FAKE_PARODY_REPLIES)
     return (
-        "[fake-llama.cpp] Stub backend is active. "
-        "Potato OS chat pipeline is working end-to-end. "
-        f"Last user message: {last_user}"
+        "[fake-llama.cpp] "
+        f"{reply} "
+        f"Last user message (dramatically reenacted): {last_user}"
     )
 
 
@@ -300,12 +319,16 @@ def _tokenize_for_stream(content: str) -> list[str]:
 
 
 def _read_fake_timing_config() -> tuple[float, float]:
-    # Test-only knobs so UI automation can reliably assert prefill behavior.
-    if os.getenv("POTATO_TEST_MODE", "0") != "1":
-        return 0.0, 0.01
-
-    prefill_delay_ms = _safe_delay_ms(os.getenv("POTATO_FAKE_PREFILL_DELAY_MS"), default=0)
-    stream_chunk_delay_ms = _safe_delay_ms(os.getenv("POTATO_FAKE_STREAM_CHUNK_DELAY_MS"), default=10)
+    # Keep UI/dev fake mode human-paced by default, while tests can stay fast.
+    test_mode = os.getenv("POTATO_TEST_MODE", "0") == "1"
+    prefill_delay_ms = _safe_delay_ms(
+        os.getenv("POTATO_FAKE_PREFILL_DELAY_MS"),
+        default=DEFAULT_FAKE_PREFILL_DELAY_MS,
+    )
+    stream_chunk_delay_ms = _safe_delay_ms(
+        os.getenv("POTATO_FAKE_STREAM_CHUNK_DELAY_MS"),
+        default=TEST_FAKE_STREAM_CHUNK_DELAY_MS if test_mode else DEFAULT_FAKE_STREAM_CHUNK_DELAY_MS,
+    )
     return prefill_delay_ms / 1000.0, stream_chunk_delay_ms / 1000.0
 
 

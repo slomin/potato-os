@@ -97,7 +97,7 @@ async def test_fake_stream_uses_test_mode_prefill_and_chunk_delay(monkeypatch: p
 
 
 @pytest.mark.asyncio
-async def test_fake_stream_ignores_prefill_delay_without_test_mode(monkeypatch: pytest.MonkeyPatch):
+async def test_fake_stream_honors_prefill_delay_override_without_test_mode(monkeypatch: pytest.MonkeyPatch):
     sleep_calls: list[float] = []
 
     async def _fake_sleep(delay: float) -> None:
@@ -118,4 +118,40 @@ async def test_fake_stream_ignores_prefill_delay_without_test_mode(monkeypatch: 
         if b"[DONE]" in chunk:
             break
 
-    assert 0.25 not in sleep_calls
+    assert 0.25 in sleep_calls
+
+
+def test_fake_content_has_fake_marker_and_last_user_message():
+    payload = {
+        "messages": [
+            {"role": "system", "content": "be precise"},
+            {"role": "user", "content": "what is next for CS?"},
+        ]
+    }
+
+    content = chat_repository._fake_content(payload)
+
+    assert "[fake-llama.cpp]" in content
+    assert "Potato OS" in content
+    assert "what is next for CS?" in content
+
+
+def test_fake_reply_pool_has_ten_entries():
+    assert len(chat_repository.FAKE_PARODY_REPLIES) == 10
+
+
+def test_fake_content_uses_random_choice_for_reply(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(chat_repository.random, "choice", lambda _items: "RANDOM_POTATO_REPLY")
+    payload = {"messages": [{"role": "user", "content": "same prompt every time"}]}
+    content = chat_repository._fake_content(payload)
+    assert "RANDOM_POTATO_REPLY" in content
+
+
+def test_fake_default_timing_targets_about_five_tokens_per_second(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("POTATO_TEST_MODE", raising=False)
+    monkeypatch.delenv("POTATO_FAKE_PREFILL_DELAY_MS", raising=False)
+    monkeypatch.delenv("POTATO_FAKE_STREAM_CHUNK_DELAY_MS", raising=False)
+
+    prefill_s, chunk_s = chat_repository._read_fake_timing_config()
+    assert prefill_s == 0.0
+    assert 0.19 <= chunk_s <= 0.23

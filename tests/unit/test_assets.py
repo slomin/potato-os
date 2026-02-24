@@ -44,8 +44,9 @@ def test_firstboot_service_avoids_repeating_setup():
 def test_uninstall_script_targets_pi_runtime_only():
     script = Path("bin/uninstall_dev.sh").read_text(encoding="utf-8")
 
-    assert "systemctl disable --now potato.service potato-firstboot.service" in script
-    assert "rm -f /etc/systemd/system/potato.service /etc/systemd/system/potato-firstboot.service" in script
+    assert "systemctl disable --now potato.service potato-firstboot.service potato-runtime-reset.service" in script
+    assert "rm -f /etc/systemd/system/potato.service /etc/systemd/system/potato-firstboot.service /etc/systemd/system/potato-runtime-reset.service" in script
+    assert "rm -f /etc/sudoers.d/potato-runtime-reset" in script
     assert "rm -rf \"${TARGET_ROOT}\" /tmp/potato-os" in script
     assert "userdel \"${POTATO_USER}\"" in script
     assert "groupdel \"${POTATO_GROUP}\"" in script
@@ -236,6 +237,9 @@ def test_manual_qa_scripts_exist_for_fake_and_real_flows():
     assert "ssh-keygen -R" in real_script
     assert 'PI_SSH_OPTIONS="${PI_SSH_OPTIONS:--o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o LogLevel=ERROR}"' in real_script
     assert 'PI_SSH_OPTIONS="${PI_SSH_OPTIONS}"' in real_script
+    assert 'QA_HOST="${PI_HOST_PRIMARY}"' in real_script
+    assert 'PI_HOST_PRIMARY="${QA_HOST}"' in real_script
+    assert 'TARGET_URL="${PI_SCHEME}://${QA_HOST}"' in real_script
     assert "open_url" in real_script
 
     assert "Fast real-Pi QA (no apt/install/model sync)" in lite_script

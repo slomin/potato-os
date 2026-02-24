@@ -66,8 +66,10 @@ run_memory_preflight() {
     return
   fi
 
-  local target_host
-  target_host="$(pick_host)"
+  local target_host="${QA_HOST:-}"
+  if [ -z "${target_host}" ]; then
+    target_host="$(pick_host)"
+  fi
   if [ -z "${target_host}" ]; then
     echo "Could not resolve reachable Pi host for memory preflight; skipping."
     return
@@ -103,7 +105,13 @@ run_memory_preflight() {
      '"
 }
 
-TARGET_URL="${PI_SCHEME}://${PI_HOST_PRIMARY}"
+QA_HOST="${PI_HOST_PRIMARY}"
+detected_host="$(pick_host)"
+if [ -n "${detected_host}" ]; then
+  QA_HOST="${detected_host}"
+fi
+
+TARGET_URL="${PI_SCHEME}://${QA_HOST}"
 if [ -n "${PI_PORT}" ]; then
   TARGET_URL="${TARGET_URL}:${PI_PORT}"
 fi
@@ -125,10 +133,11 @@ fi
 require_cmd sshpass
 run_memory_preflight
 
+echo "Using Pi host for deploy/open: ${QA_HOST}"
 echo "Deploying and validating on Pi via smoke flow..."
 (
   cd "${PROJECT_ROOT}"
-  PI_HOST_PRIMARY="${PI_HOST_PRIMARY}" \
+  PI_HOST_PRIMARY="${QA_HOST}" \
   PI_HOST_FALLBACK="${PI_HOST_FALLBACK}" \
   PI_SCHEME="${PI_SCHEME}" \
   PI_PORT="${PI_PORT}" \

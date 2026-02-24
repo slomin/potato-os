@@ -9,7 +9,7 @@ def test_start_llama_contains_required_flags():
     script = Path("bin/start_llama.sh").read_text(encoding="utf-8")
 
     assert "--ctx-size" in script
-    assert 'CTX_SIZE="${POTATO_CTX_SIZE:-4096}"' in script
+    assert 'CTX_SIZE="${POTATO_CTX_SIZE:-16384}"' in script
     assert 'CACHE_RAM_MIB="${POTATO_LLAMA_CACHE_RAM_MIB:-0}"' in script
     assert "--cache-ram" in script
     assert "--jinja" in script
@@ -116,6 +116,9 @@ def test_install_script_uses_reference_llama_bundle_sync():
     assert '"127.0.1.1 " hostname ".local " hostname' in script
     assert "avahi-daemon.conf" in script
     assert "host-name=${POTATO_HOSTNAME}" in script
+    assert "potato-runtime-reset.service" in script
+    assert "/etc/sudoers.d/potato-runtime-reset" in script
+    assert "systemctl start --no-block potato-runtime-reset.service" in script
 
 
 def test_prepare_imager_bundle_script_wires_first_boot_installer():
@@ -219,6 +222,7 @@ def test_manual_qa_scripts_exist_for_fake_and_real_flows():
 
     assert "tests/e2e/smoke_pi.sh" in real_script
     assert "potato.local" in real_script
+    assert 'REAL_QA_MODE="${POTATO_REAL_QA_MODE:-full}"' in real_script
     assert 'PI_USER="${PI_USER:-pi}"' in real_script
     assert 'PI_PASSWORD="${PI_PASSWORD:-raspberry}"' in real_script
     assert 'MEMORY_PREFLIGHT="${POTATO_QA_MEMORY_PREFLIGHT:-1}"' in real_script
@@ -263,6 +267,9 @@ def test_image_stage_assets_define_systemd_firstboot_image_flow():
     assert "systemctl enable potato-firstboot.service potato.service nginx avahi-daemon" in run_script
     assert "potato-firstboot.service" in run_script
     assert "potato.service" in run_script
+    assert "potato-runtime-reset.service" in run_script
+    assert "/etc/sudoers.d/potato-runtime-reset" in run_script
+    assert "systemctl start --no-block potato-runtime-reset.service" in run_script
     assert "potato.local" in run_script
     assert "usermod -a -G video potato" in run_script
     assert 'printf \'potato\\n\' > "${ROOTFS_DIR}/etc/hostname"' in run_script
@@ -476,6 +483,15 @@ def test_chat_ui_supports_manual_or_idle_model_download_prompt():
     assert 'fetch("/internal/start-model-download"' in CHAT_HTML
     assert "Auto-download starts in" in CHAT_HTML
     assert "statusPayload.download.auto_start_remaining_seconds" in CHAT_HTML
+
+
+def test_chat_ui_supports_heavy_runtime_reset_action_with_confirmation():
+    assert 'id="resetRuntimeBtn"' in CHAT_HTML
+    assert "Unload model + clean memory + restart" in CHAT_HTML
+    assert "function resetRuntimeHeavy(" in CHAT_HTML
+    assert "window.confirm(" in CHAT_HTML
+    assert 'fetch("/internal/reset-runtime"' in CHAT_HTML
+    assert 'document.getElementById("resetRuntimeBtn").addEventListener("click", resetRuntimeHeavy);' in CHAT_HTML
 
 
 def test_chat_ui_shows_pi_runtime_compact_with_details_toggle_above_settings():

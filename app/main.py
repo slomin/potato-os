@@ -82,6 +82,7 @@ class RuntimeConfig:
     allow_fake_fallback: bool = False
     ensure_model_script: Path | None = None
     start_llama_script: Path | None = None
+    runtime_reset_service: str = "potato-runtime-reset.service"
 
     def __post_init__(self) -> None:
         if self.ensure_model_script is None:
@@ -106,6 +107,7 @@ class RuntimeConfig:
         start_llama_script = Path(
             os.getenv("POTATO_START_LLAMA_SCRIPT", str(base_dir / "bin" / "start_llama.sh"))
         )
+        runtime_reset_service = os.getenv("POTATO_RUNTIME_RESET_SERVICE", "potato-runtime-reset.service").strip()
         enable_orchestrator = os.getenv("POTATO_ENABLE_ORCHESTRATOR", "1") == "1"
         auto_download_idle_seconds = max(0, _safe_int(os.getenv("POTATO_AUTO_DOWNLOAD_IDLE_SECONDS", "300"), 300))
         allow_fake_fallback = os.getenv("POTATO_ALLOW_FAKE_FALLBACK", "0") == "1"
@@ -120,6 +122,7 @@ class RuntimeConfig:
             llama_port=llama_port,
             ensure_model_script=ensure_model_script,
             start_llama_script=start_llama_script,
+            runtime_reset_service=runtime_reset_service,
             enable_orchestrator=enable_orchestrator,
             auto_download_idle_seconds=auto_download_idle_seconds,
             allow_fake_fallback=allow_fake_fallback,
@@ -639,6 +642,40 @@ async def start_model_download(app: FastAPI, runtime: RuntimeConfig, trigger: st
         task.add_done_callback(_clear_task)
         app.state.model_download_task = task
         return True, "started"
+
+
+async def start_runtime_reset(runtime: RuntimeConfig) -> tuple[bool, str]:
+    service_name = runtime.runtime_reset_service.strip()
+    if not service_name:
+        return False, "service_not_configured"
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "sudo",
+            "-n",
+            "systemctl",
+            "start",
+            "--no-block",
+            service_name,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+    except FileNotFoundError:
+        return False, "sudo_missing"
+    except OSError:
+        logger.exception("Failed to start runtime reset service")
+        return False, "spawn_failed"
+
+    if proc.returncode == 0:
+        return True, "scheduled"
+
+    details = ((stderr or b"") + b"\n" + (stdout or b"")).decode("utf-8", errors="replace").lower()
+    if "not found" in details and service_name.lower() in details:
+        return False, "service_missing"
+    if "password" in details or "sudoers" in details:
+        return False, "permission_denied"
+    return False, "start_failed"
 
 
 def get_status_download_context(app: FastAPI, runtime: RuntimeConfig) -> tuple[bool, int]:
@@ -1518,6 +1555,30 @@ CHAT_HTML = """<!doctype html>
       grid-column: 1 / -1;
     }
 
+    .settings-action-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .settings-action-row .ghost-btn {
+      width: 100%;
+      text-align: center;
+    }
+
+    .danger-btn {
+      border-color: color-mix(in srgb, #dc2626 48%, var(--border));
+      background: color-mix(in srgb, #dc2626 14%, var(--panel-muted));
+      color: color-mix(in srgb, var(--text) 88%, #dc2626 12%);
+      font-weight: 600;
+    }
+
+    .danger-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     /* User feedback pass: keep layout cleaner and less flashy. */
     :root {
       --bg: #f3f5f8;
@@ -1785,6 +1846,9 @@ CHAT_HTML = """<!doctype html>
           <label>Max Tokens
             <input id="max_tokens" type="number" step="1" min="1">
           </label>
+          <div class="settings-action-row full">
+            <button id="resetRuntimeBtn" class="ghost-btn danger-btn" type="button">Unload model + clean memory + restart</button>
+          </div>
         </div>
       </details>
     </aside>
@@ -1880,6 +1944,7 @@ CHAT_HTML = """<!doctype html>
     let statusChipHideTimer = null;
     let latestStatus = null;
     let downloadStartInFlight = false;
+    let runtimeResetInFlight = false;
     let runtimeDetailsExpanded = false;
     let mobileSidebarMql = null;
     const chatHistory = [];
@@ -3000,6 +3065,57 @@ CHAT_HTML = """<!doctype html>
       }
     }
 
+    function setRuntimeResetButtonState(inFlight) {
+      const btn = document.getElementById("resetRuntimeBtn");
+      if (!btn) return;
+      btn.disabled = Boolean(inFlight);
+      btn.textContent = inFlight
+        ? "Restarting runtime..."
+        : "Unload model + clean memory + restart";
+    }
+
+    async function resetRuntimeHeavy() {
+      if (runtimeResetInFlight) return;
+      const confirmed = window.confirm(
+        "Unload the model, reclaim memory/swap, and restart Potato runtime now? " +
+        "The chat will disconnect briefly."
+      );
+      if (!confirmed) return;
+
+      runtimeResetInFlight = true;
+      setRuntimeResetButtonState(true);
+      setComposerActivity("Scheduling runtime reset...");
+      try {
+        const res = await fetch("/internal/reset-runtime", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const reason = body?.reason ? ` (${body.reason})` : "";
+          appendMessage("assistant", `Could not start runtime reset${reason}.`);
+          return;
+        }
+        if (body?.started) {
+          appendMessage(
+            "assistant",
+            "Runtime reset started. The model is unloading and memory is being reclaimed. Reconnecting shortly."
+          );
+        } else {
+          appendMessage("assistant", `Runtime reset did not start (${body?.reason || "unknown"}).`);
+        }
+      } catch (err) {
+        appendMessage("assistant", `Could not start runtime reset: ${err}`);
+      } finally {
+        runtimeResetInFlight = false;
+        setRuntimeResetButtonState(false);
+        setComposerActivity("");
+        window.setTimeout(() => {
+          pollStatus();
+        }, 1500);
+      }
+    }
+
     function consumeSseDeltas(state, chunkText) {
       if (!chunkText) return { deltas: [], events: [] };
       state.buffer += chunkText.replace(/\\r\\n/g, "\\n");
@@ -3506,6 +3622,7 @@ CHAT_HTML = """<!doctype html>
       setRuntimeDetailsExpanded(!runtimeDetailsExpanded);
     });
     document.getElementById("startDownloadBtn").addEventListener("click", startModelDownload);
+    document.getElementById("resetRuntimeBtn").addEventListener("click", resetRuntimeHeavy);
     document.getElementById("attachImageBtn").addEventListener("click", openImagePicker);
     document.getElementById("cancelBtn").addEventListener("click", cancelCurrentWork);
     document.getElementById("clearImageBtn").addEventListener("click", (event) => {
@@ -3667,6 +3784,18 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
             )
 
         started, reason = await start_model_download(app, runtime_cfg, trigger="manual")
+        status_code = 202 if started else 200
+        return JSONResponse(status_code=status_code, content={"started": started, "reason": reason})
+
+    @app.post("/internal/reset-runtime")
+    async def reset_runtime_now(runtime_cfg: RuntimeConfig = Depends(get_runtime)) -> JSONResponse:
+        if not runtime_cfg.enable_orchestrator:
+            return JSONResponse(
+                status_code=409,
+                content={"started": False, "reason": "orchestrator_disabled"},
+            )
+
+        started, reason = await start_runtime_reset(runtime_cfg)
         status_code = 202 if started else 200
         return JSONResponse(status_code=status_code, content={"started": started, "reason": reason})
 

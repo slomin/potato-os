@@ -20,6 +20,7 @@ def test_shell_scripts_have_valid_bash_syntax():
         REPO_ROOT / "bin" / "prepare_imager_bundle.sh",
         REPO_ROOT / "bin" / "ensure_model.sh",
         REPO_ROOT / "bin" / "start_llama.sh",
+        REPO_ROOT / "bin" / "reset_runtime.sh",
         REPO_ROOT / "bin" / "firstboot.sh",
         REPO_ROOT / "bin" / "install_dev.sh",
         REPO_ROOT / "bin" / "uninstall_dev.sh",

@@ -47,6 +47,22 @@ def test_image_stage_nginx_symlink_points_to_runtime_path():
     assert 'ln -sf "${ROOTFS_DIR}/etc/nginx/sites-available/potato" "${ROOTFS_DIR}/etc/nginx/sites-enabled/potato"' not in stage_script
 
 
+def test_ensure_model_script_reports_insufficient_storage_errors():
+    script = (REPO_ROOT / "bin" / "ensure_model.sh").read_text(encoding="utf-8")
+    assert "insufficient_storage" in script
+    assert "No space left on device" in script
+
+
+def test_ensure_model_script_keeps_shell_functions_outside_python_heredoc():
+    script = (REPO_ROOT / "bin" / "ensure_model.sh").read_text(encoding="utf-8")
+    start = script.find("<<'PY'")
+    assert start != -1
+    end = script.find("\nPY\n", start)
+    assert end != -1
+    python_block = script[start:end]
+    assert "free_space_bytes()" not in python_block
+
+
 def test_uninstall_script_executes_pi_cleanup_without_package_removal(tmp_path: Path):
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir()

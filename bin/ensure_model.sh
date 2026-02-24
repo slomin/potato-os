@@ -18,6 +18,10 @@ filesize() {
   fi
 }
 
+free_space_bytes() {
+  df -B1 "$(dirname "${MODEL_PATH}")" | awk 'NR==2 {print $4+0}'
+}
+
 write_state() {
   local bytes_total="$1"
   local bytes_downloaded="$2"

@@ -1045,6 +1045,33 @@ def _default_model_record(_runtime: RuntimeConfig) -> dict[str, Any]:
     }
 
 
+def _is_discoverable_local_model_filename(filename: str) -> bool:
+    name = _sanitize_filename(filename)
+    if not name.lower().endswith(".gguf"):
+        return False
+    stem = Path(name).stem.lower()
+    if stem.startswith("mmproj") or "mmproj" in stem:
+        return False
+    return True
+
+
+def _discover_local_model_filenames(runtime: RuntimeConfig) -> list[str]:
+    model_dir = runtime.base_dir / "models"
+    try:
+        children = list(model_dir.iterdir())
+    except OSError:
+        return []
+    names: list[str] = []
+    for child in children:
+        if not child.is_file():
+            continue
+        filename = _sanitize_filename(child.name)
+        if not _is_discoverable_local_model_filename(filename):
+            continue
+        names.append(filename)
+    return sorted(set(names))
+
+
 def _normalize_models_state(runtime: RuntimeConfig, raw: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = raw or {}
     models_raw = payload.get("models")
@@ -1065,12 +1092,19 @@ def _normalize_models_state(runtime: RuntimeConfig, raw: dict[str, Any] | None =
             filename = _unique_filename(filename, seen_filenames)
             seen_ids.add(item_id)
             seen_filenames.add(filename)
+            source_type_raw = str(item.get("source_type") or "").strip().lower()
+            if source_url:
+                source_type = source_type_raw or "url"
+            elif source_type_raw in {"upload", "local_file"}:
+                source_type = source_type_raw
+            else:
+                source_type = "upload"
             models.append(
                 {
                     "id": item_id,
                     "filename": filename,
                     "source_url": source_url or None,
-                    "source_type": "upload" if not source_url else str(item.get("source_type") or "url"),
+                    "source_type": source_type,
                     "status": str(item.get("status") or "not_downloaded"),
                     "error": item.get("error"),
                 }
@@ -1088,6 +1122,23 @@ def _normalize_models_state(runtime: RuntimeConfig, raw: dict[str, Any] | None =
         models.insert(0, default_model)
         seen_ids.add(default_model["id"])
         seen_filenames.add(default_model["filename"])
+
+    for local_filename in _discover_local_model_filenames(runtime):
+        if local_filename in seen_filenames:
+            continue
+        local_id = _unique_model_id(_slugify_id(Path(local_filename).stem), seen_ids)
+        models.append(
+            {
+                "id": local_id,
+                "filename": local_filename,
+                "source_url": None,
+                "source_type": "local_file",
+                "status": "ready",
+                "error": None,
+            }
+        )
+        seen_ids.add(local_id)
+        seen_filenames.add(local_filename)
 
     active_model_id = str(payload.get("active_model_id") or "default")
     if active_model_id not in seen_ids:

@@ -27,6 +27,48 @@ def test_status_includes_models_payload(runtime, monkeypatch):
     assert "countdown_enabled" in body["download"]
 
 
+def test_status_auto_discovers_local_gguf_files_not_in_registry(runtime):
+    app = create_app(runtime=runtime, enable_orchestrator=False)
+    app.dependency_overrides[get_runtime] = lambda: runtime
+
+    (runtime.base_dir / "models" / "custom-local-a.gguf").write_bytes(b"gguf-a")
+    (runtime.base_dir / "models" / "custom-local-b.gguf").write_bytes(b"gguf-b")
+
+    with TestClient(app) as client:
+        response = client.get("/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    names = {item["filename"] for item in body["models"]}
+    assert "custom-local-a.gguf" in names
+    assert "custom-local-b.gguf" in names
+
+    discovered = {
+        item["filename"]: item
+        for item in body["models"]
+        if item["filename"] in {"custom-local-a.gguf", "custom-local-b.gguf"}
+    }
+    assert discovered["custom-local-a.gguf"]["source_type"] == "local_file"
+    assert discovered["custom-local-a.gguf"]["status"] == "ready"
+    assert discovered["custom-local-b.gguf"]["source_type"] == "local_file"
+    assert discovered["custom-local-b.gguf"]["status"] == "ready"
+
+
+def test_status_ignores_mmproj_files_from_local_model_discovery(runtime):
+    app = create_app(runtime=runtime, enable_orchestrator=False)
+    app.dependency_overrides[get_runtime] = lambda: runtime
+
+    (runtime.base_dir / "models" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf").write_bytes(b"mmproj")
+
+    with TestClient(app) as client:
+        response = client.get("/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    names = {item["filename"] for item in body["models"]}
+    assert "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf" not in names
+
+
 def test_toggle_download_countdown_endpoint(runtime):
     runtime.enable_orchestrator = True
     app = create_app(runtime=runtime, enable_orchestrator=True)

@@ -7,8 +7,10 @@ import pytest
 from app.main import (
     RuntimeConfig,
     check_llama_health,
+    compute_required_download_bytes,
     compute_auto_download_remaining_seconds,
     decode_throttled_bits,
+    is_likely_too_large_for_storage,
     probe_llama_inference_slot,
     read_download_progress,
     request_llama_slot_cancel,
@@ -52,6 +54,27 @@ def test_read_download_progress_calculates_percent(runtime):
 
     assert progress["percent"] == 50
     assert progress["speed_bps"] == 50
+
+
+def test_read_download_progress_preserves_specific_error(runtime):
+    runtime.download_state_path.write_text(
+        json.dumps(
+            {
+                "bytes_total": 1000,
+                "bytes_downloaded": 700,
+                "percent": 70,
+                "speed_bps": 0,
+                "eta_seconds": 0,
+                "error": "insufficient_storage",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    progress = read_download_progress(runtime)
+
+    assert progress["error"] == "insufficient_storage"
+    assert progress["percent"] == 70
 
 
 @pytest.mark.anyio
@@ -220,6 +243,22 @@ def test_compute_auto_download_remaining_seconds_zero_when_not_applicable(runtim
     assert remaining == 0
 
 
+def test_compute_auto_download_remaining_seconds_zero_after_first_default_download(runtime):
+    runtime.enable_orchestrator = True
+    runtime.auto_download_idle_seconds = 300
+
+    remaining = compute_auto_download_remaining_seconds(
+        runtime,
+        model_present=False,
+        download_active=False,
+        startup_monotonic=0.0,
+        now_monotonic=10.0,
+        default_model_downloaded_once=True,
+    )
+
+    assert remaining == 0
+
+
 def test_should_auto_start_download_only_after_timeout(runtime):
     runtime.enable_orchestrator = True
     runtime.auto_download_idle_seconds = 300
@@ -241,6 +280,48 @@ def test_should_auto_start_download_only_after_timeout(runtime):
 
     assert before_timeout is False
     assert after_timeout is True
+
+
+def test_should_auto_start_download_stays_false_after_first_default_download(runtime):
+    runtime.enable_orchestrator = True
+    runtime.auto_download_idle_seconds = 300
+
+    should_start = should_auto_start_download(
+        runtime,
+        model_present=False,
+        download_active=False,
+        startup_monotonic=0.0,
+        now_monotonic=999.0,
+        default_model_downloaded_once=True,
+    )
+
+    assert should_start is False
+
+
+def test_should_auto_start_download_false_when_countdown_disabled(runtime):
+    runtime.enable_orchestrator = True
+    runtime.auto_download_idle_seconds = 300
+
+    should_start = should_auto_start_download(
+        runtime,
+        model_present=False,
+        download_active=False,
+        startup_monotonic=0.0,
+        now_monotonic=999.0,
+        countdown_enabled=False,
+    )
+
+    assert should_start is False
+
+
+def test_compute_required_download_bytes_accounts_for_partial_file():
+    assert compute_required_download_bytes(1_000, 200) == 800
+    assert compute_required_download_bytes(1_000, 1_200) == 0
+
+
+def test_is_likely_too_large_for_storage_uses_required_bytes():
+    assert is_likely_too_large_for_storage(total_bytes=1_000, free_bytes=700, partial_bytes=200) is True
+    assert is_likely_too_large_for_storage(total_bytes=1_000, free_bytes=800, partial_bytes=200) is False
 
 
 def test_decode_throttled_bits_reports_current_and_history_flags():

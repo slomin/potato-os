@@ -4,7 +4,7 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
-from app.main import create_app, get_runtime
+from app.main import create_app, ensure_models_state, get_runtime, save_models_state
 
 
 async def _healthy_true(_runtime):
@@ -186,6 +186,129 @@ def test_delete_model_allows_active_model(runtime):
     assert body["deleted_file"] is True
     assert not active_path.exists()
     assert all(model["id"] != active_model_id for model in status.json()["models"])
+
+
+def test_delete_model_removes_partial_download_file(runtime):
+    runtime.enable_orchestrator = True
+    app = create_app(runtime=runtime, enable_orchestrator=True)
+    app.dependency_overrides[get_runtime] = lambda: runtime
+
+    with TestClient(app) as client:
+        reg = client.post(
+            "/internal/models/register",
+            json={"source_url": "https://example.com/partial-only.gguf"},
+        )
+        model = reg.json()["model"]
+        model_id = model["id"]
+        partial_path = runtime.model_path.parent / f"{model['filename']}.part"
+        partial_path.write_bytes(b"partial-data")
+
+        delete = client.post("/internal/models/delete", json={"model_id": model_id})
+
+    assert reg.status_code == 200
+    assert delete.status_code == 200
+    body = delete.json()
+    assert body["deleted"] is True
+    assert body["deleted_file"] is True
+    assert body["freed_bytes"] >= len(b"partial-data")
+    assert not partial_path.exists()
+
+
+def test_delete_model_cancels_active_download_for_same_model(runtime, monkeypatch):
+    runtime.enable_orchestrator = True
+    app = create_app(runtime=runtime, enable_orchestrator=True)
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    task_sentinel = object()
+
+    async def _fake_cancel(_app, _runtime, **_kwargs):
+        state = ensure_models_state(runtime)
+        state["current_download_model_id"] = None
+        for item in state.get("models", []):
+            if isinstance(item, dict) and item.get("status") == "downloading":
+                item["status"] = "not_downloaded"
+                item["error"] = None
+        save_models_state(runtime, state)
+        app.state.model_download_task = None
+        return True, "cancelled"
+
+    monkeypatch.setattr("app.main.is_download_task_active", lambda task: task is task_sentinel)
+    monkeypatch.setattr("app.main._cancel_model_download_locked", _fake_cancel)
+
+    with TestClient(app) as client:
+        reg = client.post(
+            "/internal/models/register",
+            json={"source_url": "https://example.com/downloading.gguf"},
+        )
+        model = reg.json()["model"]
+        model_id = model["id"]
+        partial_path = runtime.model_path.parent / f"{model['filename']}.part"
+        partial_path.write_bytes(b"partial")
+
+        state = ensure_models_state(runtime)
+        state["current_download_model_id"] = model_id
+        for item in state["models"]:
+            if isinstance(item, dict) and item.get("id") == model_id:
+                item["status"] = "downloading"
+                item["error"] = None
+        save_models_state(runtime, state)
+        app.state.model_download_task = task_sentinel
+
+        response = client.post("/internal/models/delete", json={"model_id": model_id})
+        status = client.get("/status")
+        app.state.model_download_task = None
+
+    assert reg.status_code == 200
+    assert response.status_code == 200
+    body = response.json()
+    assert body["deleted"] is True
+    assert body["cancelled_download"] is True
+    assert body["reason"] == "deleted"
+    assert not partial_path.exists()
+    assert all(model["id"] != model_id for model in status.json()["models"])
+
+
+def test_delete_model_returns_conflict_when_cancel_active_download_times_out(runtime, monkeypatch):
+    runtime.enable_orchestrator = True
+    app = create_app(runtime=runtime, enable_orchestrator=True)
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    task_sentinel = object()
+
+    async def _fake_cancel(_app, _runtime, **_kwargs):
+        return False, "cancel_timeout"
+
+    monkeypatch.setattr("app.main.is_download_task_active", lambda task: task is task_sentinel)
+    monkeypatch.setattr("app.main._cancel_model_download_locked", _fake_cancel)
+
+    with TestClient(app) as client:
+        reg = client.post(
+            "/internal/models/register",
+            json={"source_url": "https://example.com/downloading-timeout.gguf"},
+        )
+        model = reg.json()["model"]
+        model_id = model["id"]
+        partial_path = runtime.model_path.parent / f"{model['filename']}.part"
+        partial_path.write_bytes(b"partial")
+
+        state = ensure_models_state(runtime)
+        state["current_download_model_id"] = model_id
+        for item in state["models"]:
+            if isinstance(item, dict) and item.get("id") == model_id:
+                item["status"] = "downloading"
+                item["error"] = None
+        save_models_state(runtime, state)
+        app.state.model_download_task = task_sentinel
+
+        response = client.post("/internal/models/delete", json={"model_id": model_id})
+        status = client.get("/status")
+        app.state.model_download_task = None
+
+    assert reg.status_code == 200
+    assert response.status_code == 409
+    body = response.json()
+    assert body["deleted"] is False
+    assert body["reason"] == "delete_cancel_timeout"
+    assert partial_path.exists()
+    assert any(model["id"] == model_id for model in status.json()["models"])
 
 
 def test_purge_models_clears_files_and_model_metadata(runtime):

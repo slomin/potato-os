@@ -51,6 +51,7 @@ Every implementation ticket must include:
 - explicit Non-goals
 - TDD-first requirement
 - Test expectations by layer (unit/API/UI as applicable)
+- general, readable language focused on the product outcome
 
 ## TDD Rule
 
@@ -117,6 +118,8 @@ This ticket must be developed **TDD-first**.
 ### Non-goals
 - ...
 ```
+
+Keep ticket text general and readable. Capture the outcome and boundaries clearly, but avoid turning the issue body into a temporary debugging log or implementation transcript.
 
 ## Helpful CLI snippets
 

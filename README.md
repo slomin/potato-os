@@ -17,6 +17,7 @@ Working rules:
 - Open an issue for each meaningful change.
 - Link both issue and PR to the `Potato OS` project.
 - Keep the status updated as work moves.
+- Keep issue descriptions general, readable, and focused on the outcome.
 - Use labels for fast triage: `type:feature`, `type:bug`, `type:chore`.
 - Use area labels for ownership: `area:ui`, `area:backend`, `area:pi-image`, `area:ops`.
 - Use `blocked` when progress is externally blocked.

@@ -3320,6 +3320,18 @@ CHAT_HTML = """<!doctype html>
       box-shadow: 0 3px 14px rgba(16, 23, 42, 0.06);
     }
 
+    .message-bubble.processing {
+      background: color-mix(in srgb, var(--assistant-bg) 90%, var(--panel-muted));
+      border-color: color-mix(in srgb, #60a5fa 20%, var(--border));
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.06);
+      padding: 10px 12px;
+    }
+
+    .message-bubble.processing[data-phase="generating"] {
+      border-color: color-mix(in srgb, #10a37f 28%, var(--border));
+      box-shadow: 0 8px 20px rgba(16, 163, 127, 0.08);
+    }
+
     .message-bubble.with-image {
       display: flex;
       flex-direction: column;
@@ -3339,6 +3351,55 @@ CHAT_HTML = """<!doctype html>
     .message-text {
       white-space: pre-wrap;
       line-height: inherit;
+    }
+
+    .message-processing-shell {
+      display: grid;
+      gap: 7px;
+    }
+
+    .message-processing-label {
+      font-size: 13.5px;
+      line-height: 1.25;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .message-processing-meter {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .message-processing-bar {
+      position: relative;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--border) 60%, transparent);
+    }
+
+    .message-processing-bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #60a5fa 0%, #10a37f 100%);
+      transition: width 180ms ease;
+    }
+
+    .message-bubble.processing[data-phase="generating"] .message-processing-bar-fill {
+      width: 38%;
+      animation: message-processing-indeterminate 1.2s ease-in-out infinite;
+    }
+
+    .message-processing-percent {
+      font-size: 11.5px;
+      line-height: 1;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.02em;
     }
 
     .message-meta {
@@ -3622,6 +3683,12 @@ CHAT_HTML = """<!doctype html>
     @keyframes chip-spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
+    }
+
+    @keyframes message-processing-indeterminate {
+      0% { transform: translateX(-18%); }
+      50% { transform: translateX(112%); }
+      100% { transform: translateX(-18%); }
     }
 
     .settings {
@@ -4291,7 +4358,8 @@ CHAT_HTML = """<!doctype html>
     };
     const settingsKey = "potato_settings_v2";
     const PREFILL_METRICS_KEY = "potato_prefill_metrics_v1";
-    const PREFILL_PROGRESS_CAP = 95;
+    const PREFILL_PROGRESS_CAP = 99;
+    const PREFILL_PROGRESS_TAIL_START = 89;
     const PREFILL_PROGRESS_FLOOR = 6;
     const PREFILL_TICK_MS = 180;
     const STATUS_CHIP_MIN_VISIBLE_MS = 260;
@@ -5164,6 +5232,11 @@ CHAT_HTML = """<!doctype html>
 
       setComposerActivity("Preparing prompt...");
       setComposerStatusChip(`Preparing prompt • ${Math.round(initialProgress)}%`, { phase: "prefill" });
+      setMessageProcessingState(requestCtx?.assistantView, {
+        phase: "prefill",
+        label: "Prompt processing",
+        percent: initialProgress,
+      });
 
       activePrefillProgress.timerId = window.setInterval(() => {
         const active = activePrefillProgress;
@@ -5171,16 +5244,26 @@ CHAT_HTML = """<!doctype html>
         const elapsedMs = Math.max(0, performance.now() - active.startedAtMs);
         const normalized = Math.max(0, elapsedMs / Math.max(active.etaMs, 1));
         const eased = 1 - Math.exp(-3.2 * Math.min(1.4, normalized));
-        let target = PREFILL_PROGRESS_FLOOR + ((PREFILL_PROGRESS_CAP - PREFILL_PROGRESS_FLOOR) * eased);
+        let target = PREFILL_PROGRESS_FLOOR + ((95 - PREFILL_PROGRESS_FLOOR) * eased);
         if (normalized > 0.75) {
           target -= Math.min(2.8, (normalized - 0.75) * 7.5);
         }
         if (elapsedMs > active.etaMs) {
-          target += ((elapsedMs - active.etaMs) / 1000) * 0.22;
+          const overtimeSeconds = (elapsedMs - active.etaMs) / 1000;
+          const tail = Math.min(
+            PREFILL_PROGRESS_CAP - PREFILL_PROGRESS_TAIL_START,
+            Math.log1p(overtimeSeconds) * 2.6
+          );
+          target = Math.max(target, PREFILL_PROGRESS_TAIL_START + tail);
         }
         active.progress = Math.max(active.progress, Math.min(PREFILL_PROGRESS_CAP, target));
         const percent = Math.round(Math.min(PREFILL_PROGRESS_CAP, active.progress));
         setComposerStatusChip(`Preparing prompt • ${percent}%`, { phase: "prefill" });
+        setMessageProcessingState(requestCtx?.assistantView, {
+          phase: "prefill",
+          label: "Prompt processing",
+          percent,
+        });
       }, PREFILL_TICK_MS);
     }
 
@@ -5193,6 +5276,10 @@ CHAT_HTML = """<!doctype html>
       active.timerId = null;
       setComposerActivity("Generating...");
       setComposerStatusChip("Generating...", { phase: "generating" });
+      setMessageProcessingState(requestCtx?.assistantView, {
+        phase: "generating",
+        label: "Prompt processing",
+      });
     }
 
     function stopPrefillProgress(options = {}) {
@@ -5293,12 +5380,66 @@ CHAT_HTML = """<!doctype html>
       row.appendChild(stack);
       box.appendChild(row);
       box.scrollTop = box.scrollHeight;
-      return { bubble, meta };
+      return { row, stack, bubble, meta };
+    }
+
+    function setMessageProcessingState(messageView, options = {}) {
+      const bubble = messageView?.bubble || messageView;
+      if (!bubble) return;
+      const phase = String(options.phase || "prefill");
+      const percentRaw = Number(options.percent);
+      const percent = Number.isFinite(percentRaw)
+        ? Math.max(0, Math.min(100, Math.round(percentRaw)))
+        : null;
+      const label = String(options.label || "Prompt processing");
+
+      bubble.classList.remove("with-image");
+      bubble.classList.add("processing");
+      bubble.dataset.phase = phase;
+      bubble.replaceChildren();
+
+      const shell = document.createElement("div");
+      shell.className = "message-processing-shell";
+
+      const labelEl = document.createElement("div");
+      labelEl.className = "message-processing-label";
+      labelEl.textContent = label;
+
+      const meter = document.createElement("div");
+      meter.className = "message-processing-meter";
+
+      const bar = document.createElement("div");
+      bar.className = "message-processing-bar";
+
+      const barFill = document.createElement("div");
+      barFill.className = "message-processing-bar-fill";
+      if (percent !== null && phase !== "generating") {
+        barFill.style.width = `${percent}%`;
+      }
+      bar.appendChild(barFill);
+
+      const percentEl = document.createElement("div");
+      percentEl.className = "message-processing-percent";
+      percentEl.textContent = phase === "generating"
+        ? "Live"
+        : `${percent ?? 0}%`;
+
+      meter.appendChild(bar);
+      meter.appendChild(percentEl);
+
+      shell.appendChild(labelEl);
+      shell.appendChild(meter);
+      bubble.appendChild(shell);
+
+      const box = document.getElementById("messages");
+      box.scrollTop = box.scrollHeight;
     }
 
     function updateMessage(messageView, content, options = {}) {
       const bubble = messageView?.bubble || messageView;
       if (!bubble) return;
+      bubble.classList.remove("processing");
+      delete bubble.dataset.phase;
       renderBubbleContent(bubble, content, options);
       const box = document.getElementById("messages");
       box.scrollTop = box.scrollHeight;
@@ -5310,6 +5451,13 @@ CHAT_HTML = """<!doctype html>
       const text = String(content || "").trim();
       meta.hidden = text.length === 0;
       meta.textContent = text;
+    }
+
+    function removeMessage(messageView) {
+      const row = messageView?.row;
+      if (row && row.parentNode) {
+        row.parentNode.removeChild(row);
+      }
     }
 
     function isLocalModelConnected(statusPayload) {
@@ -6616,7 +6764,23 @@ CHAT_HTML = """<!doctype html>
       }
     }
 
-    function formatAssistantStats(source, elapsedSeconds = 0) {
+    function resolveTimeToFirstTokenMs(source, fallbackMs = 0) {
+      const direct = Number(
+        source?.timings?.ttft_ms
+        ?? source?.timings?.first_token_ms
+        ?? source?.timings?.prompt_ms
+      );
+      if (Number.isFinite(direct) && direct > 0) {
+        return direct;
+      }
+      const fallback = Number(fallbackMs);
+      if (Number.isFinite(fallback) && fallback > 0) {
+        return fallback;
+      }
+      return 0;
+    }
+
+    function formatAssistantStats(source, elapsedSeconds = 0, firstTokenLatencyMs = 0) {
       const timings = source?.timings && typeof source.timings === "object" ? source.timings : {};
       const usage = source?.usage && typeof source.usage === "object" ? source.usage : {};
       const rawTokens = Number(timings.predicted_n ?? usage.completion_tokens ?? 0);
@@ -6633,7 +6797,9 @@ CHAT_HTML = """<!doctype html>
       }
 
       const finishReason = source?.finish_reason ?? source?.choices?.[0]?.finish_reason ?? null;
-      return `${tokPerSecond.toFixed(2)} tok/sec, ${tokens} tokens, ${seconds.toFixed(2)}s Stop reason: ${formatStopReason(finishReason)}`;
+      const ttftMs = resolveTimeToFirstTokenMs(source, firstTokenLatencyMs);
+      const ttftText = ttftMs > 0 ? `${(ttftMs / 1000).toFixed(2)}s` : "--";
+      return `TTFT ${ttftText} · ${tokPerSecond.toFixed(2)} tok/sec · ${tokens} tokens · ${seconds.toFixed(2)}s · Stop reason: ${formatStopReason(finishReason)}`;
     }
 
     function classifyPi5MemoryTier(totalBytes) {
@@ -6837,6 +7003,8 @@ CHAT_HTML = """<!doctype html>
         imageDataUrl: userBubblePayload.imageDataUrl,
         imageName: userBubblePayload.imageName,
       });
+      activeAssistantView = appendMessage("assistant", "");
+      requestCtx.assistantView = activeAssistantView;
       userPrompt.value = "";
       clearPendingImage();
       focusPromptInput();
@@ -6892,13 +7060,11 @@ CHAT_HTML = """<!doctype html>
         if (!res.ok) {
           stopPrefillProgress();
           const body = await res.json().catch(() => ({}));
-          appendMessage("assistant", `Request failed (${res.status}): ${JSON.stringify(body)}`);
+          updateMessage(activeAssistantView, `Request failed (${res.status}): ${JSON.stringify(body)}`);
           return;
         }
 
         if (settings.stream) {
-          const assistantDiv = appendMessage("assistant", "");
-          activeAssistantView = assistantDiv;
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           const state = { buffer: "" };
@@ -6930,12 +7096,12 @@ CHAT_HTML = """<!doctype html>
                 markPrefillGenerationStarted(requestCtx);
               }
               assistantText += delta;
-              updateMessage(assistantDiv, assistantText);
+              updateMessage(activeAssistantView, assistantText);
             }
             for (const reasoningDelta of parsed.reasoningDeltas) {
               assistantReasoningText += reasoningDelta;
               if (!assistantText.trim()) {
-                updateMessage(assistantDiv, formatReasoningOnlyMessage(assistantReasoningText));
+                updateMessage(activeAssistantView, formatReasoningOnlyMessage(assistantReasoningText));
               }
             }
             for (const event of parsed.events) {
@@ -6971,13 +7137,13 @@ CHAT_HTML = """<!doctype html>
             markPrefillGenerationStarted(requestCtx);
           }
           const finalAssistantText = assistantText.trim() || formatReasoningOnlyMessage(assistantReasoningText);
-          updateMessage(assistantDiv, finalAssistantText);
+          updateMessage(activeAssistantView, finalAssistantText);
           chatHistory.push({ role: "assistant", content: finalAssistantText });
           const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
           if (requestCtx.stoppedByUser) {
             streamStats.finish_reason = "cancelled";
           }
-          setMessageMeta(assistantDiv, formatAssistantStats(streamStats, elapsedSeconds));
+          setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs));
           recordPrefillMetric(
             requestCtx.prefillBucket,
             resolvePromptPrefillMs(streamStats, requestCtx.firstTokenLatencyMs),
@@ -6995,9 +7161,9 @@ CHAT_HTML = """<!doctype html>
         const messageContent = typeof message?.content === "string" ? message.content.trim() : "";
         const msg = messageContent || formatReasoningOnlyMessage(message?.reasoning_content) || JSON.stringify(body);
         chatHistory.push({ role: "assistant", content: msg });
-        const assistantDiv = appendMessage("assistant", msg);
+        updateMessage(activeAssistantView, msg);
         const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
-        setMessageMeta(assistantDiv, formatAssistantStats(body, elapsedSeconds));
+        setMessageMeta(activeAssistantView, formatAssistantStats(body, elapsedSeconds, requestCtx.firstTokenLatencyMs));
         recordPrefillMetric(
           requestCtx.prefillBucket,
           resolvePromptPrefillMs(body, requestCtx.firstTokenLatencyMs),
@@ -7005,6 +7171,9 @@ CHAT_HTML = """<!doctype html>
       } catch (err) {
         if (requestCtx.stoppedByUser) {
           const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
+          if (requestCtx.hideProcessingBubbleOnCancel === true && requestCtx.generationStarted !== true) {
+            return;
+          }
           if (activeAssistantView) {
             const partial = activeAssistantView.bubble.textContent.trim();
             if (!partial) {
@@ -7013,13 +7182,17 @@ CHAT_HTML = """<!doctype html>
               chatHistory.push({ role: "assistant", content: partial });
             }
             streamStats.finish_reason = "cancelled";
-            setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds));
+            setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs));
           } else {
             const stoppedDiv = appendMessage("assistant", "(stopped)");
-            setMessageMeta(stoppedDiv, formatAssistantStats({ finish_reason: "cancelled" }, elapsedSeconds));
+            setMessageMeta(stoppedDiv, formatAssistantStats({ finish_reason: "cancelled" }, elapsedSeconds, requestCtx.firstTokenLatencyMs));
           }
         } else {
-          appendMessage("assistant", `Request error: ${err}`);
+          if (activeAssistantView) {
+            updateMessage(activeAssistantView, `Request error: ${err}`);
+          } else {
+            appendMessage("assistant", `Request error: ${err}`);
+          }
         }
       } finally {
         requestInFlight = false;
@@ -7152,6 +7325,10 @@ CHAT_HTML = """<!doctype html>
         setComposerActivity("Cancelling...");
         setComposerStatusChip("Cancelling...", { phase: "cancel" });
         setCancelEnabled(false);
+        if (current && current.generationStarted !== true && current.assistantView?.bubble?.classList?.contains("processing")) {
+          current.hideProcessingBubbleOnCancel = true;
+          removeMessage(current.assistantView);
+        }
         stopGeneration();
         queueImageCancelRecovery(current);
       }

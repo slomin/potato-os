@@ -366,7 +366,7 @@ def test_chat_ui_streaming_parses_sse_and_ignores_done_marker():
     assert "function consumeSseDeltas" in CHAT_HTML
     assert 'dataPayload === "[DONE]"' in CHAT_HTML
     assert "event?.choices?.[0]?.delta?.content" in CHAT_HTML
-    assert "updateMessage(assistantDiv, assistantText)" in CHAT_HTML
+    assert "updateMessage(activeAssistantView, assistantText)" in CHAT_HTML
     assert 'renderMessage("assistant", output.trim())' not in CHAT_HTML
 
 
@@ -768,15 +768,22 @@ def test_chat_ui_shows_processing_indicator_while_generating():
     assert "function hideComposerStatusChip(" in CHAT_HTML
     assert "function setCancelEnabled(" in CHAT_HTML
     assert "function cancelCurrentWork(" in CHAT_HTML
-    assert "const PREFILL_PROGRESS_CAP = 95;" in CHAT_HTML
+    assert "const PREFILL_PROGRESS_CAP = 99;" in CHAT_HTML
     assert "function estimatePrefillEtaMs(" in CHAT_HTML
     assert "function beginPrefillProgress(" in CHAT_HTML
     assert "function markPrefillGenerationStarted(" in CHAT_HTML
     assert "function stopPrefillProgress(" in CHAT_HTML
+    assert "function setMessageProcessingState(" in CHAT_HTML
+    assert "className = \"message-processing-shell\"" in CHAT_HTML
+    assert "const PREFILL_PROGRESS_TAIL_START = 89;" in CHAT_HTML
+    assert "Prompt processing" in CHAT_HTML
+    assert "Generating reply" not in CHAT_HTML
     assert "potato_prefill_metrics_v1" in CHAT_HTML
     assert "Preparing prompt..." in CHAT_HTML
     assert "Preparing prompt • " in CHAT_HTML
     assert "Preparing prompt: " not in CHAT_HTML
+    assert "1 - Math.exp(-3.2 * Math.min(1.4, normalized))" in CHAT_HTML
+    assert "Math.log1p(overtimeSeconds) * 2.6" in CHAT_HTML
     assert "Math.min(PREFILL_PROGRESS_CAP" in CHAT_HTML
     assert 'setComposerStatusChip("Generating..."' in CHAT_HTML
     assert 'setComposerActivity("Reading image...")' in CHAT_HTML
@@ -784,3 +791,4 @@ def test_chat_ui_shows_processing_indicator_while_generating():
     assert "pendingImageReader.abort();" in CHAT_HTML
     assert 'document.getElementById("cancelBtn").addEventListener("click", cancelCurrentWork);' in CHAT_HTML
     assert "setComposerActivity(\"\")" in CHAT_HTML
+    assert "TTFT " in CHAT_HTML

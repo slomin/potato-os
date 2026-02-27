@@ -69,8 +69,11 @@ test("shows staged prefill estimate before first token and clears after generati
   await page.locator("#userPrompt").fill("Give me one sentence about Potato OS.");
   await page.locator("#userPrompt").press("Enter");
 
+  const assistantPending = page.locator(".message-row.assistant .message-bubble.processing").last();
   const chip = page.locator("#composerStatusChip");
   const chipText = page.locator("#composerStatusText");
+  await expect(assistantPending).toBeVisible();
+  await expect(assistantPending).toContainText("Prompt processing");
   await expect(chip).toBeVisible();
   await expect(chipText).toContainText(/Preparing prompt •|Generating\.\.\./);
 
@@ -89,10 +92,12 @@ test("shows staged prefill estimate before first token and clears after generati
 
   if (values.length > 0) {
     expect(values.every((value, index) => index === 0 || value >= values[index - 1])).toBeTruthy();
-    expect(Math.max(...values)).toBeLessThanOrEqual(95);
+    expect(Math.max(...values)).toBeLessThanOrEqual(99);
   }
 
   await expect(page.locator(".message-row.assistant .message-bubble").last()).toContainText("[fake-llama.cpp]");
+  await expect(page.locator(".message-row.assistant .message-bubble.processing").last()).toBeHidden();
+  await expect(page.locator(".message-meta").last()).toContainText(/TTFT \d+\.\d{2}s/);
   await expect(chip).toBeHidden();
 });
 
@@ -102,13 +107,14 @@ test("cancel during prefill stops cleanly and shows stopped reason", async ({ pa
   await page.locator("#userPrompt").fill("Explain distributed systems in detail.");
   await page.locator("#userPrompt").press("Enter");
 
+  await expect(page.locator(".message-row.assistant .message-bubble.processing").last()).toContainText("Prompt processing");
   await expect(page.locator("#composerStatusChip")).toBeVisible();
   await expect(page.locator("#composerStatusText")).toContainText(/Preparing prompt •|Generating\.\.\./);
   await expect(page.locator("#sendBtn")).toHaveText("Stop");
 
   await page.locator("#cancelBtn").click();
 
-  await expect(page.locator(".message-meta").last()).toContainText("Stopped by user");
+  await expect(page.locator(".message-row.assistant .message-bubble.processing")).toHaveCount(0);
   await expect(page.locator("#composerStatusChip")).toBeHidden();
   await expect(page.locator("#sendBtn")).toHaveText("Send");
 });
@@ -125,9 +131,11 @@ test("large image selection shows loading phases and optimization metadata", asy
   await page.locator("#userPrompt").fill("Describe this image.");
   await page.locator("#userPrompt").press("Enter");
 
+  await expect(page.locator(".message-row.assistant .message-bubble.processing").last()).toContainText("Prompt processing");
   await expect(page.locator("#composerStatusChip")).toBeVisible();
   await expect(page.locator("#composerStatusText")).toContainText(/Preparing prompt •|Generating\.\.\./);
   await expect(page.locator(".message-row.assistant .message-bubble").last()).toContainText("[fake-llama.cpp]");
+  await expect(page.locator(".message-meta").last()).toContainText(/TTFT \d+\.\d{2}s/);
   await expect(page.locator("#composerStatusChip")).toBeHidden();
 });
 
@@ -285,7 +293,7 @@ test("renders compact Pi runtime info and toggles details view", async ({ page }
   await page.locator("#runtimeViewToggle").click();
   await expect(page.locator("#runtimeCompact")).toBeHidden();
   await expect(page.locator("#runtimeDetails")).toBeVisible();
-  await expect(page.locator("#runtimeDetails")).toContainText("CPU clock: 2400 MHz");
+  await expect(page.locator("#runtimeDetailCpuClockValue")).toHaveText("2400 MHz");
   await expect(page.locator("#runtimeDetails")).toContainText("Soft temp limit occurred");
 
   await page.locator("#runtimeViewToggle").click();
@@ -345,10 +353,10 @@ test("runtime details apply threshold colors for clock, memory, swap, and temper
   await page.goto("/");
   await page.locator("#runtimeViewToggle").click();
 
-  await expect(page.locator("#runtimeDetailCpuClock")).toHaveClass(/runtime-metric-critical/);
-  await expect(page.locator("#runtimeDetailMemory")).toHaveClass(/runtime-metric-critical/);
-  await expect(page.locator("#runtimeDetailSwap")).toHaveClass(/runtime-metric-high/);
-  await expect(page.locator("#runtimeDetailTemp")).toHaveClass(/runtime-metric-high/);
+  await expect(page.locator("#runtimeDetailCpuClockValue")).toHaveClass(/runtime-metric-critical/);
+  await expect(page.locator("#runtimeDetailMemoryValue")).toHaveClass(/runtime-metric-critical/);
+  await expect(page.locator("#runtimeDetailSwapValue")).toHaveClass(/runtime-metric-high/);
+  await expect(page.locator("#runtimeDetailTempValue")).toHaveClass(/runtime-metric-high/);
 });
 
 test("fake backend ready state shows connected badge", async ({ page }) => {

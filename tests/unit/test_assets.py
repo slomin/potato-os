@@ -587,7 +587,8 @@ def test_chat_ui_uses_continuous_chat_history_in_openai_messages_format():
     assert "const userMessage = { role: \"user\", content: buildUserMessageContent(content) };" in CHAT_HTML
     assert "chatHistory.push(userMessage);" in CHAT_HTML
     assert CHAT_HTML.index("reqBody.messages.push(userMessage);") < CHAT_HTML.index("chatHistory.push(userMessage);")
-    assert "chatHistory.push({ role: \"assistant\", content: assistantText.trim() || \"(empty response)\" });" in CHAT_HTML
+    assert "const finalAssistantText = assistantText.trim() || formatReasoningOnlyMessage(assistantReasoningText);" in CHAT_HTML
+    assert "chatHistory.push({ role: \"assistant\", content: finalAssistantText });" in CHAT_HTML
     assert "chatHistory.push({ role: \"assistant\", content: msg });" in CHAT_HTML
 
 

@@ -127,6 +127,7 @@ def test_status_includes_platform_version_and_power_fields_under_system(client):
     assert "bootloader_version" in system
     assert "firmware_version" in system
     assert "power_estimate" in system
+    assert "swap_label" in system
 
     power = system["power_estimate"]
     assert power["method"] == "pmic_read_adc"
@@ -137,6 +138,7 @@ def test_status_includes_platform_version_and_power_fields_under_system(client):
     assert "adjusted_total_watts" in power
     assert "calibration" in power
     assert power["calibration"]["mode"] in {"default", "custom"}
+    assert system["swap_label"] in {"swap", "zram"}
 
 
 def test_status_stays_ready_when_active_model_healthy_and_download_error_is_from_side_model(

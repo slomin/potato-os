@@ -1225,6 +1225,7 @@ def default_system_metrics_snapshot() -> dict[str, Any]:
         "memory_total_bytes": 0,
         "memory_used_bytes": 0,
         "memory_percent": None,
+        "swap_label": "swap",
         "swap_total_bytes": 0,
         "swap_used_bytes": 0,
         "swap_percent": None,
@@ -1446,6 +1447,23 @@ def _read_kernel_version_info() -> dict[str, str | None]:
     }
 
 
+def _read_swap_label() -> str:
+    path = Path("/proc/swaps")
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return "swap"
+
+    for line in raw.splitlines()[1:]:
+        text = line.strip()
+        if not text:
+            continue
+        filename = text.split()[0]
+        if "zram" in filename.lower():
+            return "zram"
+    return "swap"
+
+
 def _collect_static_platform_info_uncached() -> dict[str, Any]:
     kernel_info = _read_kernel_version_info()
     return {
@@ -1528,6 +1546,7 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
     now_unix = int(snapshot["updated_at_unix"])
 
     metrics_collected = False
+    snapshot["swap_label"] = _read_swap_label()
 
     static_info = _collect_static_platform_info_cached(now_unix=now_unix)
     if isinstance(static_info, dict):
@@ -1563,6 +1582,7 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
             snapshot["memory_total_bytes"] = int(memory.total)
             snapshot["memory_used_bytes"] = int(memory.used)
             snapshot["memory_percent"] = round(_safe_float(memory.percent), 2)
+            snapshot["swap_label"] = _read_swap_label()
             snapshot["swap_total_bytes"] = int(swap.total)
             snapshot["swap_used_bytes"] = int(swap.used)
             snapshot["swap_percent"] = round(_safe_float(swap.percent), 2)
@@ -2953,31 +2973,78 @@ CHAT_HTML = """<!doctype html>
     }
 
     .runtime-compact {
-      font-size: 12px;
+      font-size: 11.5px;
       line-height: 1.45;
       color: var(--text-muted);
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
 
     .runtime-details {
       margin-top: 8px;
-      font-size: 12px;
-      line-height: 1.4;
-      color: var(--text-muted);
       display: grid;
-      gap: 4px;
+      gap: 10px;
     }
 
     .runtime-details[hidden] {
       display: none;
     }
 
+    .runtime-detail-group {
+      display: grid;
+      gap: 6px;
+      border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+      background: color-mix(in srgb, var(--panel-muted) 72%, transparent);
+      border-radius: 12px;
+      padding: 10px 11px;
+    }
+
+    .runtime-detail-group--power {
+      gap: 4px;
+      background: color-mix(in srgb, var(--status-bg) 56%, var(--panel));
+      border-color: color-mix(in srgb, var(--focus) 24%, var(--border));
+    }
+
+    .runtime-detail-group-title {
+      font-size: 11px;
+      line-height: 1.2;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
     .runtime-detail-prominent {
-      font-size: 13.5px;
+      font-size: 15px;
       line-height: 1.35;
-      font-weight: 680;
+      font-weight: 760;
       color: var(--text);
-      margin-bottom: 2px;
+      margin-bottom: 1px;
+    }
+
+    .runtime-detail-secondary {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--text-muted);
+    }
+
+    .runtime-detail-row {
+      display: grid;
+      grid-template-columns: minmax(92px, 132px) 1fr;
+      gap: 10px;
+      align-items: baseline;
+      font-size: 12.5px;
+      line-height: 1.4;
+    }
+
+    .runtime-detail-label {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .runtime-detail-value {
+      color: var(--text);
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .runtime-metric-normal {
@@ -3572,18 +3639,19 @@ CHAT_HTML = """<!doctype html>
     }
 
     .settings-grid {
-      margin-top: 10px;
+      margin-top: 12px;
       display: grid;
-      gap: 10px;
+      gap: 12px;
       grid-template-columns: 1fr;
     }
 
     .settings-grid label {
-      font-size: 13px;
+      font-size: 12.5px;
       color: var(--text-muted);
       display: flex;
       flex-direction: column;
       gap: 6px;
+      min-width: 0;
     }
 
     .settings-grid input,
@@ -3595,6 +3663,10 @@ CHAT_HTML = """<!doctype html>
       color: var(--text);
       padding: 8px 10px;
       font: inherit;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
     }
 
     .settings-grid textarea {
@@ -3613,15 +3685,96 @@ CHAT_HTML = """<!doctype html>
       grid-column: 1 / -1;
     }
 
+    .settings-section {
+      display: grid;
+      gap: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--panel) 72%, var(--panel-muted));
+      padding: 13px;
+      min-width: 0;
+    }
+
+    .settings-section-title {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+      font-weight: 720;
+      text-transform: none;
+    }
+
+    .settings-section-note {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .settings-subdetails {
+      border: 1px dashed color-mix(in srgb, var(--border) 88%, transparent);
+      border-radius: 10px;
+      padding: 10px;
+      background: color-mix(in srgb, var(--panel-muted) 65%, transparent);
+    }
+
+    .settings-subdetails summary {
+      cursor: pointer;
+      list-style: none;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .settings-subdetails summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .settings-subdetails[open] summary {
+      margin-bottom: 10px;
+    }
+
     .settings-action-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr;
       gap: 8px;
-      align-items: center;
+      align-items: stretch;
+      min-width: 0;
     }
 
     .settings-action-row .ghost-btn {
       width: 100%;
       text-align: center;
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    .settings-grid > *,
+    .settings-section > *,
+    .settings-subdetails > *,
+    .model-row,
+    #modelsList {
+      min-width: 0;
+    }
+
+    .settings-subdetails {
+      min-width: 0;
+    }
+
+    .settings-subdetails .settings-action-row {
+      margin-top: 4px;
+    }
+
+    .model-row-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .model-row-actions .ghost-btn {
+      width: 100%;
+      min-width: 0;
+      justify-content: center;
+      box-sizing: border-box;
     }
 
     .model-row {
@@ -3731,7 +3884,7 @@ CHAT_HTML = """<!doctype html>
     }
 
     .app-shell {
-      grid-template-columns: 320px 1fr;
+      grid-template-columns: 396px minmax(0, 1fr);
     }
 
     .sidebar {
@@ -3739,6 +3892,7 @@ CHAT_HTML = """<!doctype html>
       background: var(--panel-muted);
       gap: 12px;
       overflow: auto;
+      min-width: 0;
     }
 
     .sidebar-section {
@@ -3759,6 +3913,7 @@ CHAT_HTML = """<!doctype html>
       max-width: 980px;
       grid-template-rows: auto 1fr auto;
       padding: 22px 20px;
+      min-width: 0;
     }
 
     .messages {
@@ -3878,7 +4033,7 @@ CHAT_HTML = """<!doctype html>
       </div>
       <section class="sidebar-section">
         <h2 class="brand">Potato OS</h2>
-        <p class="sidebar-note">Local-first chat frontend on your Pi.</p>
+        <p id="sidebarNote" class="sidebar-note">v0.2</p>
         <div id="statusText" class="status-card">Checking status...</div>
         <div id="downloadPrompt" class="download-prompt" hidden>
           <p class="download-prompt-title">Model download required</p>
@@ -3898,33 +4053,44 @@ CHAT_HTML = """<!doctype html>
           </div>
           <div id="runtimeCompact" class="runtime-compact">CPU -- | Cores -- | GPU -- | Swap -- | Throttle --</div>
           <div id="runtimeDetails" class="runtime-details" hidden>
-            <div id="runtimeDetailPower" class="runtime-detail-prominent">Power (estimated total): --</div>
-            <div id="runtimeDetailPowerRaw">Power (PMIC raw): --</div>
-            <div id="runtimeDetailPowerNote">Power note: --</div>
-            <div id="runtimeDetailCpu">CPU total: --</div>
-            <div id="runtimeDetailCores">CPU cores: --</div>
-            <div id="runtimeDetailCpuClock">CPU clock: --</div>
-            <div id="runtimeDetailMemory">Memory: --</div>
-            <div id="runtimeDetailSwap">Swap: --</div>
-            <div id="runtimeDetailStorage">Storage free: --</div>
-            <div id="runtimeDetailTemp">Temperature: --</div>
-            <div id="runtimeDetailPiModel">Pi model: --</div>
-            <div id="runtimeDetailOs">OS: --</div>
-            <div id="runtimeDetailKernel">Kernel: --</div>
-            <div id="runtimeDetailBootloader">Bootloader: --</div>
-            <div id="runtimeDetailFirmware">Firmware: --</div>
-            <div id="runtimeDetailGpu">GPU clock: --</div>
-            <div id="runtimeDetailThrottle">Throttling: --</div>
-            <div id="runtimeDetailThrottleHistory">Throttling history: --</div>
-            <div id="runtimeDetailUpdated">Updated: --</div>
+            <section id="runtimeDetailsPowerGroup" class="runtime-detail-group runtime-detail-group--power" aria-label="Power">
+              <div class="runtime-detail-group-title">Power</div>
+              <div id="runtimeDetailPower" class="runtime-detail-prominent">Power (estimated total): --</div>
+              <div id="runtimeDetailPowerRaw" class="runtime-detail-secondary">Power (PMIC raw): --</div>
+            </section>
+            <section id="runtimeDetailsPerformanceGroup" class="runtime-detail-group" aria-label="Performance">
+              <div class="runtime-detail-group-title">Performance</div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">CPU total</span><span id="runtimeDetailCpuValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">CPU cores</span><span id="runtimeDetailCoresValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">CPU clock</span><span id="runtimeDetailCpuClockValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">GPU clock</span><span id="runtimeDetailGpuValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Temperature</span><span id="runtimeDetailTempValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Throttling</span><span id="runtimeDetailThrottleValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">History</span><span id="runtimeDetailThrottleHistoryValue" class="runtime-detail-value">--</span></div>
+            </section>
+            <section id="runtimeDetailsMemoryGroup" class="runtime-detail-group" aria-label="Memory and storage">
+              <div class="runtime-detail-group-title">Memory &amp; storage</div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Memory</span><span id="runtimeDetailMemoryValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span id="runtimeDetailSwapLabel" class="runtime-detail-label">zram</span><span id="runtimeDetailSwapValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Storage free</span><span id="runtimeDetailStorageValue" class="runtime-detail-value">--</span></div>
+            </section>
+            <section id="runtimeDetailsPlatformGroup" class="runtime-detail-group" aria-label="Platform">
+              <div class="runtime-detail-group-title">Platform</div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Pi model</span><span id="runtimeDetailPiModelValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">OS</span><span id="runtimeDetailOsValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Kernel</span><span id="runtimeDetailKernelValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Bootloader</span><span id="runtimeDetailBootloaderValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Firmware</span><span id="runtimeDetailFirmwareValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Updated</span><span id="runtimeDetailUpdatedValue" class="runtime-detail-value">--</span></div>
+            </section>
           </div>
         </div>
       </section>
       <details class="settings">
         <summary>Settings</summary>
         <div class="settings-grid">
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Large Model Compatibility</h3>
+          <section id="settingsRuntimeSection" class="settings-section full">
+            <h3 class="settings-section-title">Runtime controls</h3>
             <label class="full" style="display:flex; align-items:center; gap:8px;">
               <input id="largeModelOverrideEnabled" type="checkbox">
               <span>Allow unsupported large models (try anyway)</span>
@@ -3933,9 +4099,6 @@ CHAT_HTML = """<!doctype html>
               <button id="applyLargeModelOverrideBtn" class="ghost-btn" type="button">Apply compatibility override</button>
             </div>
             <div id="largeModelOverrideStatus" class="runtime-compact">Compatibility override: default warnings</div>
-          </div>
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Model Memory Loading</h3>
             <label class="full">GGUF loading mode (requires runtime restart)
               <select id="llamaMemoryLoadingMode">
                 <option value="auto">Automatic (profile-based)</option>
@@ -3947,64 +4110,59 @@ CHAT_HTML = """<!doctype html>
               <button id="applyLlamaMemoryLoadingBtn" class="ghost-btn" type="button">Apply memory loading + restart</button>
             </div>
             <div id="llamaMemoryLoadingStatus" class="runtime-compact">Current memory loading: unknown</div>
-          </div>
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Power Calibration (Pi 5)</h3>
-            <div id="powerCalibrationLiveStatus" class="runtime-compact">Current PMIC raw power: --</div>
-            <label class="full">Wall meter reading (W)
-              <input id="powerCalibrationWallWatts" type="number" min="0" step="0.01" placeholder="e.g. 9.4">
-            </label>
-            <div class="settings-action-row full">
-              <button id="capturePowerCalibrationSampleBtn" class="ghost-btn" type="button">Capture calibration sample</button>
-              <button id="fitPowerCalibrationBtn" class="ghost-btn" type="button">Compute calibration</button>
-              <button id="resetPowerCalibrationBtn" class="ghost-btn danger-btn" type="button">Reset calibration</button>
+            <div class="full">
+              <h3 class="settings-section-title">Llama Runtime Bundle</h3>
+              <div id="llamaRuntimeCurrent" class="runtime-compact">Current runtime: unknown</div>
+              <label class="full">Installed/Test Bundles
+                <select id="llamaRuntimeBundleSelect">
+                  <option value="">No bundles discovered</option>
+                </select>
+              </label>
+              <div class="settings-action-row full">
+                <button id="switchLlamaRuntimeBtn" class="ghost-btn" type="button">Switch llama runtime</button>
+              </div>
+              <div id="llamaRuntimeSwitchStatus" class="runtime-compact">No runtime switch in progress.</div>
             </div>
-            <div id="powerCalibrationStatus" class="runtime-compact">Power calibration: default correction</div>
-          </div>
-          <label class="full">System Prompt (optional)
-            <textarea id="systemPrompt" placeholder="Set assistant behavior for this chat"></textarea>
-          </label>
-          <label class="full">Loaded Model
-            <input id="modelName" type="text" value="Checking..." readonly>
-          </label>
-          <label class="full">Auto-download default model
-            <select id="downloadCountdownEnabled">
-              <option value="true">Enabled</option>
-              <option value="false">Paused</option>
-            </select>
-          </label>
-          <label class="full">Add model by URL
-            <input id="modelUrlInput" type="url" placeholder="https://.../model.gguf">
-          </label>
-          <div class="settings-action-row full">
-            <button id="registerModelBtn" class="ghost-btn" type="button">Add URL model</button>
-          </div>
-          <label class="full">Upload local GGUF to Pi
-            <input id="modelUploadInput" type="file" accept=".gguf,application/octet-stream">
-          </label>
-          <div class="settings-action-row full">
-            <button id="uploadModelBtn" class="ghost-btn" type="button">Upload model</button>
-            <button id="cancelUploadBtn" class="ghost-btn" type="button" hidden>Cancel upload</button>
-            <button id="purgeModelsBtn" class="ghost-btn danger-btn" type="button">Delete all models</button>
-          </div>
-          <div id="modelUploadStatus" class="runtime-compact full">No upload in progress.</div>
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Available Models</h3>
-            <div id="modelsList" class="runtime-details"></div>
-          </div>
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Llama Runtime Bundle</h3>
-            <div id="llamaRuntimeCurrent" class="runtime-compact">Current runtime: unknown</div>
-            <label class="full">Installed/Test Bundles
-              <select id="llamaRuntimeBundleSelect">
-                <option value="">No bundles discovered</option>
+            <div class="settings-action-row full">
+              <button id="resetRuntimeBtn" class="ghost-btn danger-btn" type="button">Unload model + clean memory + restart</button>
+            </div>
+          </section>
+          <section id="settingsModelSection" class="settings-section full">
+            <h3 class="settings-section-title">Models</h3>
+            <label class="full">Loaded Model
+              <input id="modelName" type="text" value="Checking..." readonly>
+            </label>
+            <label class="full">Auto-download default model
+              <select id="downloadCountdownEnabled">
+                <option value="true">Enabled</option>
+                <option value="false">Paused</option>
               </select>
             </label>
+            <label class="full">Add model by URL
+              <input id="modelUrlInput" type="url" placeholder="https://.../model.gguf">
+            </label>
             <div class="settings-action-row full">
-              <button id="switchLlamaRuntimeBtn" class="ghost-btn" type="button">Switch llama runtime</button>
+              <button id="registerModelBtn" class="ghost-btn" type="button">Add URL model</button>
             </div>
-            <div id="llamaRuntimeSwitchStatus" class="runtime-compact">No runtime switch in progress.</div>
-          </div>
+            <label class="full">Upload local GGUF to Pi
+              <input id="modelUploadInput" type="file" accept=".gguf,application/octet-stream">
+            </label>
+            <div class="settings-action-row full">
+              <button id="uploadModelBtn" class="ghost-btn" type="button">Upload model</button>
+              <button id="cancelUploadBtn" class="ghost-btn" type="button" hidden>Cancel upload</button>
+              <button id="purgeModelsBtn" class="ghost-btn danger-btn" type="button">Delete all models</button>
+            </div>
+            <div id="modelUploadStatus" class="runtime-compact full">No upload in progress.</div>
+            <div class="full">
+              <h3 class="settings-section-title">Available Models</h3>
+              <div id="modelsList" class="runtime-details"></div>
+            </div>
+          </section>
+          <section id="settingsAdvancedSection" class="settings-section full">
+            <h3 class="settings-section-title">Chat & advanced</h3>
+            <label class="full">System Prompt (optional)
+              <textarea id="systemPrompt" placeholder="Set assistant behavior for this chat"></textarea>
+            </label>
           <label>Streaming
             <select id="stream">
               <option value="true">true</option>
@@ -4038,9 +4196,21 @@ CHAT_HTML = """<!doctype html>
           <label>Max Tokens
             <input id="max_tokens" type="number" step="1" min="1">
           </label>
-          <div class="settings-action-row full">
-            <button id="resetRuntimeBtn" class="ghost-btn danger-btn" type="button">Unload model + clean memory + restart</button>
-          </div>
+            <details id="settingsPowerCalibration" class="settings-subdetails full">
+              <summary>Power calibration</summary>
+              <div class="settings-section-note">Optional wall-meter calibration for Pi 5 power estimates.</div>
+              <div id="powerCalibrationLiveStatus" class="runtime-compact">Current PMIC raw power: --</div>
+              <label class="full">Wall meter reading (W)
+                <input id="powerCalibrationWallWatts" type="number" min="0" step="0.01" placeholder="e.g. 9.4">
+              </label>
+              <div class="settings-action-row full">
+                <button id="capturePowerCalibrationSampleBtn" class="ghost-btn" type="button">Capture calibration sample</button>
+                <button id="fitPowerCalibrationBtn" class="ghost-btn" type="button">Compute calibration</button>
+                <button id="resetPowerCalibrationBtn" class="ghost-btn danger-btn" type="button">Reset calibration</button>
+              </div>
+              <div id="powerCalibrationStatus" class="runtime-compact">Power calibration: default correction</div>
+            </details>
+          </section>
         </div>
       </details>
     </aside>
@@ -5263,47 +5433,47 @@ CHAT_HTML = """<!doctype html>
       if (!compact) return;
 
       const available = systemPayload?.available === true;
-      const cpuDetail = document.getElementById("runtimeDetailCpu");
-      const coresDetail = document.getElementById("runtimeDetailCores");
-      const cpuClockDetail = document.getElementById("runtimeDetailCpuClock");
-      const memoryDetail = document.getElementById("runtimeDetailMemory");
-      const swapDetail = document.getElementById("runtimeDetailSwap");
-      const storageDetail = document.getElementById("runtimeDetailStorage");
-      const tempDetail = document.getElementById("runtimeDetailTemp");
-      const piModelDetail = document.getElementById("runtimeDetailPiModel");
-      const osDetail = document.getElementById("runtimeDetailOs");
-      const kernelDetail = document.getElementById("runtimeDetailKernel");
-      const bootloaderDetail = document.getElementById("runtimeDetailBootloader");
-      const firmwareDetail = document.getElementById("runtimeDetailFirmware");
+      const cpuDetail = document.getElementById("runtimeDetailCpuValue");
+      const coresDetail = document.getElementById("runtimeDetailCoresValue");
+      const cpuClockDetail = document.getElementById("runtimeDetailCpuClockValue");
+      const memoryDetail = document.getElementById("runtimeDetailMemoryValue");
+      const swapLabelDetail = document.getElementById("runtimeDetailSwapLabel");
+      const swapDetail = document.getElementById("runtimeDetailSwapValue");
+      const storageDetail = document.getElementById("runtimeDetailStorageValue");
+      const tempDetail = document.getElementById("runtimeDetailTempValue");
+      const piModelDetail = document.getElementById("runtimeDetailPiModelValue");
+      const osDetail = document.getElementById("runtimeDetailOsValue");
+      const kernelDetail = document.getElementById("runtimeDetailKernelValue");
+      const bootloaderDetail = document.getElementById("runtimeDetailBootloaderValue");
+      const firmwareDetail = document.getElementById("runtimeDetailFirmwareValue");
       const powerDetail = document.getElementById("runtimeDetailPower");
       const powerRawDetail = document.getElementById("runtimeDetailPowerRaw");
-      const powerNoteDetail = document.getElementById("runtimeDetailPowerNote");
-      const gpuDetail = document.getElementById("runtimeDetailGpu");
-      const throttleDetail = document.getElementById("runtimeDetailThrottle");
-      const throttleHistoryDetail = document.getElementById("runtimeDetailThrottleHistory");
-      const updatedDetail = document.getElementById("runtimeDetailUpdated");
+      const gpuDetail = document.getElementById("runtimeDetailGpuValue");
+      const throttleDetail = document.getElementById("runtimeDetailThrottleValue");
+      const throttleHistoryDetail = document.getElementById("runtimeDetailThrottleHistoryValue");
+      const updatedDetail = document.getElementById("runtimeDetailUpdatedValue");
 
       if (!available) {
         compact.textContent = "CPU -- | Cores -- | GPU -- | Swap -- | Throttle --";
-        if (cpuDetail) cpuDetail.textContent = "CPU total: --";
-        if (coresDetail) coresDetail.textContent = "CPU cores: --";
-        if (cpuClockDetail) cpuClockDetail.textContent = "CPU clock: --";
-        if (memoryDetail) memoryDetail.textContent = "Memory: --";
-        if (swapDetail) swapDetail.textContent = "Swap: --";
-        if (storageDetail) storageDetail.textContent = "Storage free: --";
-        if (tempDetail) tempDetail.textContent = "Temperature: --";
-        if (piModelDetail) piModelDetail.textContent = "Pi model: --";
-        if (osDetail) osDetail.textContent = "OS: --";
-        if (kernelDetail) kernelDetail.textContent = "Kernel: --";
-        if (bootloaderDetail) bootloaderDetail.textContent = "Bootloader: --";
-        if (firmwareDetail) firmwareDetail.textContent = "Firmware: --";
+        if (cpuDetail) cpuDetail.textContent = "--";
+        if (coresDetail) coresDetail.textContent = "--";
+        if (cpuClockDetail) cpuClockDetail.textContent = "--";
+        if (memoryDetail) memoryDetail.textContent = "--";
+        if (swapLabelDetail) swapLabelDetail.textContent = "zram";
+        if (swapDetail) swapDetail.textContent = "--";
+        if (storageDetail) storageDetail.textContent = "--";
+        if (tempDetail) tempDetail.textContent = "--";
+        if (piModelDetail) piModelDetail.textContent = "--";
+        if (osDetail) osDetail.textContent = "--";
+        if (kernelDetail) kernelDetail.textContent = "--";
+        if (bootloaderDetail) bootloaderDetail.textContent = "--";
+        if (firmwareDetail) firmwareDetail.textContent = "--";
         if (powerDetail) powerDetail.textContent = "Power (estimated total): --";
         if (powerRawDetail) powerRawDetail.textContent = "Power (PMIC raw): --";
-        if (powerNoteDetail) powerNoteDetail.textContent = "Power note: --";
-        if (gpuDetail) gpuDetail.textContent = "GPU clock: --";
-        if (throttleDetail) throttleDetail.textContent = "Throttling: --";
-        if (throttleHistoryDetail) throttleHistoryDetail.textContent = "Throttling history: --";
-        if (updatedDetail) updatedDetail.textContent = "Updated: --";
+        if (gpuDetail) gpuDetail.textContent = "--";
+        if (throttleDetail) throttleDetail.textContent = "--";
+        if (throttleHistoryDetail) throttleHistoryDetail.textContent = "--";
+        if (updatedDetail) updatedDetail.textContent = "--";
         applyRuntimeMetricSeverity(cpuClockDetail, Number.NaN);
         applyRuntimeMetricSeverity(memoryDetail, Number.NaN);
         applyRuntimeMetricSeverity(swapDetail, Number.NaN);
@@ -5326,61 +5496,63 @@ CHAT_HTML = """<!doctype html>
       const gpuCompact = (gpuCore !== "--" || gpuV3d !== "--")
         ? `${gpuCore.replace(" MHz", "")}/${gpuV3d.replace(" MHz", "")} MHz`
         : "--";
+      const swapLabel = String(systemPayload?.swap_label || "swap").trim() || "swap";
       const swapPercent = formatPercent(systemPayload?.swap_percent, 0);
       const storageFree = formatBytes(systemPayload?.storage_free_bytes);
       const storagePercent = formatPercent(systemPayload?.storage_percent, 0);
       const throttlingNow = systemPayload?.throttling?.any_current === true ? "Yes" : "No";
-      compact.textContent = `CPU ${cpuTotal} @ ${cpuClock} | Cores ${coresText} | GPU ${gpuCompact} | Swap ${swapPercent} | Free ${storageFree} | Throttle ${throttlingNow}`;
+      compact.textContent = `CPU ${cpuTotal} @ ${cpuClock} | Cores ${coresText} | GPU ${gpuCompact} | ${swapLabel} ${swapPercent} | Free ${storageFree} | Throttle ${throttlingNow}`;
 
-      if (cpuDetail) cpuDetail.textContent = `CPU total: ${cpuTotal}`;
-      if (coresDetail) coresDetail.textContent = `CPU cores: ${coresText}`;
-      if (cpuClockDetail) cpuClockDetail.textContent = `CPU clock: ${cpuClock}`;
+      if (cpuDetail) cpuDetail.textContent = cpuTotal;
+      if (coresDetail) coresDetail.textContent = coresText;
+      if (cpuClockDetail) cpuClockDetail.textContent = cpuClock;
       applyRuntimeMetricSeverity(cpuClockDetail, percentFromRatio(systemPayload?.cpu_clock_arm_hz, CPU_CLOCK_MAX_HZ_PI5));
 
       const memUsed = formatBytes(systemPayload?.memory_used_bytes);
       const memTotal = formatBytes(systemPayload?.memory_total_bytes);
       const memPercent = formatPercent(systemPayload?.memory_percent, 0);
-      if (memoryDetail) memoryDetail.textContent = `Memory: ${memUsed} / ${memTotal} (${memPercent})`;
+      if (memoryDetail) memoryDetail.textContent = `${memUsed} / ${memTotal} (${memPercent})`;
       applyRuntimeMetricSeverity(memoryDetail, systemPayload?.memory_percent);
 
       const swapUsed = formatBytes(systemPayload?.swap_used_bytes);
       const swapTotal = formatBytes(systemPayload?.swap_total_bytes);
-      if (swapDetail) swapDetail.textContent = `Swap: ${swapUsed} / ${swapTotal} (${swapPercent})`;
+      if (swapLabelDetail) swapLabelDetail.textContent = swapLabel;
+      if (swapDetail) swapDetail.textContent = `${swapUsed} / ${swapTotal} (${swapPercent})`;
       applyRuntimeMetricSeverity(swapDetail, systemPayload?.swap_percent);
 
       const storageUsed = formatBytes(systemPayload?.storage_used_bytes);
       const storageTotal = formatBytes(systemPayload?.storage_total_bytes);
-      if (storageDetail) storageDetail.textContent = `Storage free: ${storageFree} (${storageUsed} / ${storageTotal} used, ${storagePercent})`;
+      if (storageDetail) storageDetail.textContent = `${storageFree} (${storageUsed} / ${storageTotal} used, ${storagePercent})`;
       applyRuntimeMetricSeverity(storageDetail, systemPayload?.storage_percent);
 
       const tempRaw = systemPayload?.temperature_c;
       const tempValue = typeof tempRaw === "number" ? tempRaw : Number.NaN;
       if (tempDetail) {
         tempDetail.textContent = Number.isFinite(tempValue)
-          ? `Temperature: ${tempValue.toFixed(1)}°C`
-          : "Temperature: --";
+          ? `${tempValue.toFixed(1)}°C`
+          : "--";
       }
       applyRuntimeMetricSeverity(tempDetail, tempValue);
 
       const piModelName = String(systemPayload?.pi_model_name || "").trim();
       if (piModelDetail) {
-        piModelDetail.textContent = piModelName ? `Pi model: ${piModelName}` : "Pi model: --";
+        piModelDetail.textContent = piModelName || "--";
       }
 
       const osPrettyName = String(systemPayload?.os_pretty_name || "").trim();
       if (osDetail) {
-        osDetail.textContent = osPrettyName ? `OS: ${osPrettyName}` : "OS: --";
+        osDetail.textContent = osPrettyName || "--";
       }
 
       const kernelRelease = String(systemPayload?.kernel_release || "").trim();
       const kernelVersion = String(systemPayload?.kernel_version || "").trim();
       if (kernelDetail) {
         if (kernelRelease && kernelVersion) {
-          kernelDetail.textContent = `Kernel: ${kernelRelease} | ${kernelVersion}`;
+          kernelDetail.textContent = `${kernelRelease} • ${kernelVersion}`;
         } else if (kernelRelease || kernelVersion) {
-          kernelDetail.textContent = `Kernel: ${kernelRelease || kernelVersion}`;
+          kernelDetail.textContent = kernelRelease || kernelVersion;
         } else {
-          kernelDetail.textContent = "Kernel: --";
+          kernelDetail.textContent = "--";
         }
       }
 
@@ -5389,11 +5561,11 @@ CHAT_HTML = """<!doctype html>
       const bootloaderVersion = String(bootloader?.version || "").trim();
       if (bootloaderDetail) {
         if (bootloaderDate && bootloaderVersion) {
-          bootloaderDetail.textContent = `Bootloader: ${bootloaderDate} | ${bootloaderVersion}`;
+          bootloaderDetail.textContent = `${bootloaderDate} • ${bootloaderVersion}`;
         } else if (bootloaderDate || bootloaderVersion) {
-          bootloaderDetail.textContent = `Bootloader: ${bootloaderDate || bootloaderVersion}`;
+          bootloaderDetail.textContent = bootloaderDate || bootloaderVersion;
         } else {
-          bootloaderDetail.textContent = "Bootloader: --";
+          bootloaderDetail.textContent = "--";
         }
       }
 
@@ -5402,11 +5574,11 @@ CHAT_HTML = """<!doctype html>
       const firmwareVersion = String(firmware?.version || "").trim();
       if (firmwareDetail) {
         if (firmwareDate && firmwareVersion) {
-          firmwareDetail.textContent = `Firmware: ${firmwareDate} | ${firmwareVersion}`;
+          firmwareDetail.textContent = `${firmwareDate} • ${firmwareVersion}`;
         } else if (firmwareDate || firmwareVersion) {
-          firmwareDetail.textContent = `Firmware: ${firmwareDate || firmwareVersion}`;
+          firmwareDetail.textContent = firmwareDate || firmwareVersion;
         } else {
-          firmwareDetail.textContent = "Firmware: --";
+          firmwareDetail.textContent = "--";
         }
       }
 
@@ -5423,14 +5595,8 @@ CHAT_HTML = """<!doctype html>
           ? `Power (PMIC raw): ${rawPowerWatts.toFixed(3)} W`
           : "Power (PMIC raw): --";
       }
-      if (powerNoteDetail) {
-        const note = String(powerEstimate?.estimated_total_disclaimer || powerEstimate?.disclaimer || "").trim();
-        powerNoteDetail.textContent = (powerEstimate?.available === true || Number.isFinite(adjustedPowerWatts)) && note
-          ? `Power note: ${note}`
-          : "Power note: --";
-      }
 
-      if (gpuDetail) gpuDetail.textContent = `GPU clock: core ${gpuCore}, v3d ${gpuV3d}`;
+      if (gpuDetail) gpuDetail.textContent = `core ${gpuCore}, v3d ${gpuV3d}`;
       const gpuPeakHz = Math.max(
         Number(systemPayload?.gpu_clock_core_hz) || 0,
         Number(systemPayload?.gpu_clock_v3d_hz) || 0,
@@ -5445,20 +5611,20 @@ CHAT_HTML = """<!doctype html>
         : [];
       if (throttleDetail) {
         throttleDetail.textContent = currentFlags.length > 0
-          ? `Throttling: Yes (${currentFlags.join(", ")})`
-          : "Throttling: No";
+          ? `Yes (${currentFlags.join(", ")})`
+          : "No";
       }
       if (throttleHistoryDetail) {
         throttleHistoryDetail.textContent = historyFlags.length > 0
-          ? `Throttling history: ${historyFlags.join(", ")}`
-          : "Throttling history: None";
+          ? historyFlags.join(", ")
+          : "None";
       }
 
       const updatedTs = Number(systemPayload?.updated_at_unix);
       if (updatedDetail) {
         updatedDetail.textContent = Number.isFinite(updatedTs) && updatedTs > 0
-          ? `Updated: ${new Date(updatedTs * 1000).toLocaleTimeString()}`
-          : "Updated: --";
+          ? new Date(updatedTs * 1000).toLocaleTimeString()
+          : "--";
       }
     }
 
@@ -6470,12 +6636,44 @@ CHAT_HTML = """<!doctype html>
       return `${tokPerSecond.toFixed(2)} tok/sec, ${tokens} tokens, ${seconds.toFixed(2)}s Stop reason: ${formatStopReason(finishReason)}`;
     }
 
+    function classifyPi5MemoryTier(totalBytes) {
+      const value = Number(totalBytes);
+      if (!Number.isFinite(value) || value <= 0) return null;
+      const gib = value / (1024 ** 3);
+      const supportedTiers = [1, 2, 4, 8, 16];
+      let bestTier = supportedTiers[0];
+      let bestDistance = Math.abs(gib - bestTier);
+      for (const tier of supportedTiers.slice(1)) {
+        const distance = Math.abs(gib - tier);
+        if (distance < bestDistance) {
+          bestTier = tier;
+          bestDistance = distance;
+        }
+      }
+      return `${bestTier}GB`;
+    }
+
+    function setSidebarNote(systemPayload) {
+      const noteEl = document.getElementById("sidebarNote");
+      if (!noteEl) return;
+      const piModelName = String(systemPayload?.pi_model_name || "").trim();
+      const memoryTier = classifyPi5MemoryTier(systemPayload?.memory_total_bytes);
+      if (piModelName && memoryTier) {
+        noteEl.textContent = `v0.2 · ${piModelName} · ${memoryTier}`;
+        return;
+      }
+      noteEl.textContent = piModelName
+        ? `v0.2 · ${piModelName}`
+        : "v0.2";
+    }
+
     function setStatus(statusPayload) {
       latestStatus = statusPayload;
       const downloaded = formatBytes(statusPayload.download.bytes_downloaded);
       const total = formatBytes(statusPayload.download.bytes_total);
       const text = `State: ${statusPayload.state} | Download: ${statusPayload.download.percent}% (${downloaded} / ${total})`;
       document.getElementById("statusText").textContent = text;
+      setSidebarNote(statusPayload?.system);
       const modelNameField = document.getElementById("modelName");
       if (modelNameField) {
         const modelName = statusPayload?.model?.filename || "Unknown model";
@@ -6969,7 +7167,6 @@ CHAT_HTML = """<!doctype html>
     bindSettings();
     bindMobileSidebar();
     setRuntimeDetailsExpanded(false);
-    appendMessage("assistant", "Potato OS is online. Ask anything to get started.");
     setInterval(pollStatus, 2000);
     pollStatus();
 

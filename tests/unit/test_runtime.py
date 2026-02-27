@@ -25,6 +25,7 @@ from app.main import (
     _parse_vcgencmd_bootloader_version,
     _parse_vcgencmd_firmware_version,
     _parse_vcgencmd_pmic_read_adc,
+    _read_swap_label,
     probe_llama_inference_slot,
     read_download_progress,
     request_llama_slot_cancel,
@@ -462,6 +463,20 @@ def test_parse_vcgencmd_pmic_read_adc_sums_paired_rails_and_ignores_unmatched():
     assert payload["error"] is None
 
 
+def test_read_swap_label_prefers_zram_when_active(monkeypatch):
+    class _SwapFile:
+        def read_text(self, encoding="utf-8"):
+            return (
+                "Filename\t\t\tType\t\tSize\t\tUsed\t\tPriority\n"
+                "/dev/zram0                              partition\t2097148\t114688\t100\n"
+            )
+
+    monkeypatch.setattr("app.main.Path.exists", lambda self: str(self) == "/proc/swaps")
+    monkeypatch.setattr("app.main.Path.read_text", lambda self, encoding="utf-8": _SwapFile().read_text(encoding))
+
+    assert _read_swap_label() == "zram"
+
+
 def test_collect_system_metrics_snapshot_includes_platform_and_power_fields(monkeypatch):
     monkeypatch.setitem(app_main._SYSTEM_STATIC_INFO_CACHE, "expires_at_unix", 0)
     monkeypatch.setitem(app_main._SYSTEM_STATIC_INFO_CACHE, "value", None)
@@ -492,6 +507,7 @@ def test_collect_system_metrics_snapshot_includes_platform_and_power_fields(monk
 
     monkeypatch.setattr("app.main._run_vcgencmd", _fake_vcgencmd)
     monkeypatch.setattr("app.main._read_sysfs_temp", lambda: None)
+    monkeypatch.setattr("app.main._read_swap_label", lambda: "zram")
 
     snapshot = collect_system_metrics_snapshot()
 
@@ -504,6 +520,7 @@ def test_collect_system_metrics_snapshot_includes_platform_and_power_fields(monk
     assert snapshot["firmware_version"]["available"] is True
     assert snapshot["power_estimate"]["available"] is True
     assert snapshot["power_estimate"]["total_watts"] == pytest.approx(1.35, rel=0, abs=1e-6)
+    assert snapshot["swap_label"] == "zram"
 
 
 def test_fit_linear_power_calibration_from_two_samples():

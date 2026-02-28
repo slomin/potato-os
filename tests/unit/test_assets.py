@@ -214,6 +214,11 @@ def test_chat_html_loads_local_markdown_assets_and_renders_assistant_markdown():
     assert "function renderAssistantMarkdownToHtml(text)" in CHAT_HTML
     assert "window.marked?.parse" in CHAT_HTML
     assert "window.DOMPurify?.sanitize" in CHAT_HTML
+    assert "ALLOWED_TAGS" in CHAT_HTML
+    assert "ALLOWED_ATTR" in CHAT_HTML
+    assert '"img",' not in CHAT_HTML
+    assert "'img'," not in CHAT_HTML
+    assert "USE_PROFILES: { html: true }" not in CHAT_HTML
     assert "bubble.innerHTML = sanitizedHtml;" in CHAT_HTML
     assert "renderBubbleContent(bubble, content, { ...options, role });" in CHAT_HTML
 
@@ -783,6 +788,11 @@ def test_chat_ui_shows_processing_indicator_while_generating():
     assert "function beginPrefillProgress(" in CHAT_HTML
     assert "function markPrefillGenerationStarted(" in CHAT_HTML
     assert "function stopPrefillProgress(" in CHAT_HTML
+    assert "return Promise.resolve({ cancelled: false });" in CHAT_HTML
+    assert "resolve({ cancelled: true });" in CHAT_HTML
+    assert "resolve({ cancelled: false });" in CHAT_HTML
+    assert "function throwIfRequestStoppedAfterPrefill(" in CHAT_HTML
+    assert "if (finishResult?.cancelled || requestCtx?.stoppedByUser)" in CHAT_HTML
     assert "const PREFILL_FINISH_DURATION_MS =" in CHAT_HTML
     assert "const PREFILL_FINISH_HOLD_MS =" in CHAT_HTML
     assert "function setMessageProcessingState(" in CHAT_HTML

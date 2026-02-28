@@ -116,6 +116,7 @@ test("renders assistant markdown as formatted html", async ({ page }) => {
   await waitUntilReady(page);
 
   await page.route("**/v1/chat/completions", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 180));
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -159,6 +160,153 @@ test("renders assistant markdown as formatted html", async ({ page }) => {
   await expect(bubble.locator("li")).toHaveCount(2);
   await expect(bubble.locator("strong")).toHaveText("Linux");
   await expect(bubble.locator("code")).toHaveText("uname -a");
+});
+
+test("streaming cancel during finish animation does not render buffered assistant output", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 1200;
+    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 250;
+  });
+  await waitUntilReady(page);
+
+  await page.locator("#userPrompt").fill("Give me a streamed response.");
+  await page.locator("#userPrompt").press("Enter");
+
+  const chipText = page.locator("#composerStatusText");
+  await expect
+    .poll(async () => {
+      const label = await chipText.innerText();
+      const match = label.match(/(\d+)%/);
+      return match ? Number(match[1]) : 0;
+    })
+    .toBeGreaterThanOrEqual(95);
+
+  await page.locator("#cancelBtn").click();
+
+  await expect(page.locator(".message-row.assistant .message-bubble.processing")).toHaveCount(0);
+  await expect(page.locator("#composerStatusChip")).toBeHidden();
+  await expect(page.locator("#sendBtn")).toHaveText("Send");
+  await page.waitForTimeout(1500);
+  await expect(page.locator(".message-row.assistant .message-bubble")).toHaveCount(0);
+});
+
+test("non-stream cancel during finish animation does not render buffered assistant output", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 1200;
+    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 250;
+  });
+  await waitUntilReady(page);
+
+  await page.route("**/v1/chat/completions", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "chatcmpl-cancel",
+        object: "chat.completion",
+        created: 1771778048,
+        model: "qwen-local",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "This should never appear after cancel.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        timings: {
+          prompt_ms: 1200,
+          predicted_ms: 500,
+          predicted_n: 8,
+          predicted_per_second: 16,
+        },
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 8,
+          total_tokens: 18,
+        },
+      }),
+    });
+  });
+
+  await page.locator("details.settings").evaluate((el) => { el.open = true; });
+  await page.locator("#stream").selectOption("false");
+  await page.locator("#userPrompt").fill("Give me a non-stream response.");
+  await page.locator("#userPrompt").press("Enter");
+
+  await page.waitForTimeout(350);
+
+  await page.locator("#cancelBtn").click();
+
+  await expect(page.locator(".message-row.assistant .message-bubble.processing")).toHaveCount(0);
+  await expect(page.locator("#composerStatusChip")).toBeHidden();
+  await expect(page.locator("#sendBtn")).toHaveText("Send");
+  await page.waitForTimeout(1500);
+  await expect(page.locator(".message-row.assistant .message-bubble")).toHaveCount(0);
+});
+
+test("assistant markdown strips remote resource tags while keeping safe formatting", async ({ page }) => {
+  await waitUntilReady(page);
+
+  const remoteRequests = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://example.com/")) {
+      remoteRequests.push(request.url());
+    }
+  });
+
+  await page.route("https://example.com/**", async (route) => {
+    await route.abort();
+  });
+
+  await page.route("**/v1/chat/completions", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "chatcmpl-md-safe",
+        object: "chat.completion",
+        created: 1771778048,
+        model: "qwen-local",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "# Linus Torvalds\n\n- **Linux** kernel\n- Open source\n\n![tracker](https://example.com/tracker.png)\n<img src=\"https://example.com/raw.png\" alt=\"raw\">\n\n`uname -a`",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        timings: {
+          prompt_ms: 1200,
+          predicted_ms: 800,
+          predicted_n: 12,
+          predicted_per_second: 15,
+        },
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 12,
+          total_tokens: 22,
+        },
+      }),
+    });
+  });
+
+  await page.locator("details.settings").evaluate((el) => { el.open = true; });
+  await page.locator("#stream").selectOption("false");
+  await page.locator("#userPrompt").fill("Format this safely.");
+  await page.locator("#userPrompt").press("Enter");
+
+  const bubble = page.locator(".message-row.assistant .message-bubble").last();
+  await expect(bubble.locator("h1")).toHaveText("Linus Torvalds");
+  await expect(bubble.locator("li")).toHaveCount(2);
+  await expect(bubble.locator("strong")).toHaveText("Linux");
+  await expect(bubble.locator("code")).toHaveText("uname -a");
+  await expect(bubble.locator("img")).toHaveCount(0);
+  expect(remoteRequests).toHaveLength(0);
 });
 
 test("cancel during prefill stops cleanly and shows stopped reason", async ({ page }) => {

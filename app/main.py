@@ -5358,7 +5358,7 @@ CHAT_HTML = """<!doctype html>
 
     function markPrefillGenerationStarted(requestCtx) {
       const active = activePrefillProgress;
-      if (!active || active.requestCtx !== requestCtx) return Promise.resolve();
+      if (!active || active.requestCtx !== requestCtx) return Promise.resolve({ cancelled: false });
       if (active.finishPromise) {
         return active.finishPromise;
       }
@@ -5385,7 +5385,7 @@ CHAT_HTML = """<!doctype html>
             activePrefillProgress = null;
           }
           if (cancelled) {
-            resolve();
+            resolve({ cancelled: true });
             return;
           }
           applyPrefillProgressState(requestCtx, 100);
@@ -5395,7 +5395,7 @@ CHAT_HTML = """<!doctype html>
               active.finishTimerId = null;
             }
             hideComposerStatusChip({ immediate: true });
-            resolve();
+            resolve({ cancelled: false });
           }, PREFILL_FINISH_HOLD_MS);
         };
 
@@ -5431,7 +5431,7 @@ CHAT_HTML = """<!doctype html>
         window.clearTimeout(active.finishTimerId);
       }
       if (active && typeof active.finishResolve === "function") {
-        active.finishResolve();
+        active.finishResolve({ cancelled: true });
       }
       activePrefillProgress = null;
       if (options.resetUi !== false) {
@@ -5501,7 +5501,21 @@ CHAT_HTML = """<!doctype html>
         markdownRendererConfigured = true;
       }
       const renderedHtml = window.marked?.parse(source) || "";
-      return window.DOMPurify?.sanitize(renderedHtml, { USE_PROFILES: { html: true } }) || "";
+      return window.DOMPurify?.sanitize(renderedHtml, {
+        ALLOWED_TAGS: [
+          "a", "blockquote", "br", "code", "em", "h1", "h2", "h3", "h4",
+          "li", "ol", "p", "pre", "strong", "ul",
+        ],
+        ALLOWED_ATTR: ["href", "title"],
+      }) || "";
+    }
+
+    function throwIfRequestStoppedAfterPrefill(requestCtx, finishResult) {
+      if (finishResult?.cancelled || requestCtx?.stoppedByUser) {
+        const error = new Error("Request cancelled");
+        error.name = "AbortError";
+        throw error;
+      }
     }
 
     function renderBubbleContent(bubble, content, options = {}) {
@@ -7277,7 +7291,8 @@ CHAT_HTML = """<!doctype html>
               if (!requestCtx.generationStarted) {
                 requestCtx.generationStarted = true;
                 requestCtx.firstTokenLatencyMs = Math.max(0, performance.now() - requestStartMs);
-                await markPrefillGenerationStarted(requestCtx);
+                const finishResult = await markPrefillGenerationStarted(requestCtx);
+                throwIfRequestStoppedAfterPrefill(requestCtx, finishResult);
               }
               assistantText += delta;
               updateMessage(activeAssistantView, assistantText);
@@ -7318,7 +7333,8 @@ CHAT_HTML = """<!doctype html>
           if (!requestCtx.generationStarted) {
             requestCtx.generationStarted = true;
             requestCtx.firstTokenLatencyMs = Math.max(0, performance.now() - requestStartMs);
-            await markPrefillGenerationStarted(requestCtx);
+            const finishResult = await markPrefillGenerationStarted(requestCtx);
+            throwIfRequestStoppedAfterPrefill(requestCtx, finishResult);
           }
           const finalAssistantText = assistantText.trim() || formatReasoningOnlyMessage(assistantReasoningText);
           updateMessage(activeAssistantView, finalAssistantText);
@@ -7339,7 +7355,8 @@ CHAT_HTML = """<!doctype html>
         if (!requestCtx.generationStarted) {
           requestCtx.generationStarted = true;
           requestCtx.firstTokenLatencyMs = Math.max(0, performance.now() - requestStartMs);
-          await markPrefillGenerationStarted(requestCtx);
+          const finishResult = await markPrefillGenerationStarted(requestCtx);
+          throwIfRequestStoppedAfterPrefill(requestCtx, finishResult);
         }
         const message = body?.choices?.[0]?.message || {};
         const messageContent = typeof message?.content === "string" ? message.content.trim() : "";
@@ -7353,9 +7370,9 @@ CHAT_HTML = """<!doctype html>
           resolvePromptPrefillMs(body, requestCtx.firstTokenLatencyMs),
         );
       } catch (err) {
-        if (requestCtx.stoppedByUser) {
-          const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
-          if (requestCtx.hideProcessingBubbleOnCancel === true && requestCtx.generationStarted !== true) {
+          if (requestCtx.stoppedByUser) {
+            const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
+          if (requestCtx.hideProcessingBubbleOnCancel === true) {
             return;
           }
           if (activeAssistantView) {
@@ -7509,7 +7526,7 @@ CHAT_HTML = """<!doctype html>
         setComposerActivity("Cancelling...");
         setComposerStatusChip("Cancelling...", { phase: "cancel" });
         setCancelEnabled(false);
-        if (current && current.generationStarted !== true && current.assistantView?.bubble?.classList?.contains("processing")) {
+        if (current && current.assistantView?.bubble?.classList?.contains("processing")) {
           current.hideProcessingBubbleOnCancel = true;
           removeMessage(current.assistantView);
         }

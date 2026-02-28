@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from app.runtime_state import RuntimeConfig, _atomic_write_json
+try:
+    from app.runtime_state import RuntimeConfig, _atomic_write_json
+except ModuleNotFoundError:
+    from runtime_state import RuntimeConfig, _atomic_write_json  # type: ignore[no-redef]
 
 logger = logging.getLogger("potato")
 

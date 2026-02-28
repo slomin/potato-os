@@ -123,9 +123,9 @@ def test_register_model_url_returns_warning_for_large_model_on_unsupported_pi(ru
         return 6 * 1024 * 1024 * 1024
 
     monkeypatch.setattr("app.main.fetch_remote_content_length_bytes", _fake_size)
-    monkeypatch.setattr("app.main._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
-    monkeypatch.setattr("app.main._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
-    monkeypatch.setattr("app.main.get_large_model_warn_threshold_bytes", lambda: 1)
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
+    monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
+    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda: 1)
 
     with TestClient(app) as client:
         response = client.post(
@@ -161,9 +161,9 @@ def test_upload_returns_warning_for_large_model_on_unsupported_pi(runtime, monke
     app = create_app(runtime=runtime, enable_orchestrator=True)
     app.dependency_overrides[get_runtime] = lambda: runtime
 
-    monkeypatch.setattr("app.main._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
-    monkeypatch.setattr("app.main._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
-    monkeypatch.setattr("app.main.get_large_model_warn_threshold_bytes", lambda: 1)
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
+    monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
+    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda: 1)
 
     with TestClient(app) as client:
         response = client.post(
@@ -232,7 +232,7 @@ def test_switch_llama_runtime_bundle_copies_selected_bundle_and_reports_status(r
 
     monkeypatch.setattr("app.main.install_llama_runtime_bundle", _fake_install)
     monkeypatch.setattr("app.main.restart_managed_llama_process", _fake_restart)
-    monkeypatch.setattr("app.main._default_llama_runtime_bundle_roots", lambda _runtime: [bundle.parent])
+    monkeypatch.setattr("app.runtime_state._default_llama_runtime_bundle_roots", lambda _runtime: [bundle.parent])
 
     with TestClient(app) as client:
         response = client.post("/internal/llama-runtime/switch", json={"bundle_path": str(bundle)})
@@ -286,9 +286,9 @@ def test_set_large_model_override_persists_without_restart(runtime, monkeypatch)
     runtime.enable_orchestrator = True
     app = create_app(runtime=runtime, enable_orchestrator=True)
     app.dependency_overrides[get_runtime] = lambda: runtime
-    monkeypatch.setattr("app.main._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
-    monkeypatch.setattr("app.main._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
-    monkeypatch.setattr("app.main.get_large_model_warn_threshold_bytes", lambda: 1)
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
+    monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
+    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda: 1)
     with runtime.model_path.open("wb") as handle:
         handle.seek((6 * 1024 * 1024 * 1024) - 1)
         handle.write(b"x")

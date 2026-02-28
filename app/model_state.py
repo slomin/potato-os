@@ -1,0 +1,405 @@
+from __future__ import annotations
+
+import json
+import logging
+import re
+from pathlib import Path
+from typing import Any
+from urllib.parse import unquote, urlparse
+
+try:
+    from app.runtime_state import RuntimeConfig, _atomic_write_json
+except ModuleNotFoundError:
+    from runtime_state import RuntimeConfig, _atomic_write_json  # type: ignore[no-redef]
+
+logger = logging.getLogger("potato")
+
+MODEL_FILENAME = "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+MODEL_URL = (
+    "https://huggingface.co/unsloth/Qwen3-VL-4B-Instruct-GGUF/resolve/main/"
+    "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+)
+MODELS_STATE_VERSION = 1
+
+
+def _model_file_path(runtime: RuntimeConfig, filename: str) -> Path:
+    return runtime.base_dir / "models" / filename
+
+
+def _sanitize_filename(filename: str) -> str:
+    candidate = Path(filename).name.strip()
+    candidate = re.sub(r"[^A-Za-z0-9._-]+", "-", candidate)
+    candidate = candidate.lstrip(".")
+    return candidate or "model.gguf"
+
+
+def _slugify_id(raw: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
+    return slug or "model"
+
+
+def is_qwen35_a3b_filename(filename: str | None) -> bool:
+    value = str(filename or "").strip().lower()
+    return bool(value) and "qwen" in value and "3.5" in value and "35b" in value and "a3b" in value
+
+
+def apply_model_chat_defaults(payload: dict[str, Any], *, active_model_filename: str | None) -> dict[str, Any]:
+    if not is_qwen35_a3b_filename(active_model_filename):
+        return payload
+
+    chat_template_kwargs = payload.get("chat_template_kwargs")
+    if isinstance(chat_template_kwargs, dict) and "enable_thinking" in chat_template_kwargs:
+        return payload
+
+    updated = dict(payload)
+    if isinstance(chat_template_kwargs, dict):
+        merged = dict(chat_template_kwargs)
+    else:
+        merged = {}
+    merged["enable_thinking"] = False
+    updated["chat_template_kwargs"] = merged
+    return updated
+
+
+def _unique_model_id(base_id: str, existing_ids: set[str]) -> str:
+    candidate = base_id
+    idx = 2
+    while candidate in existing_ids:
+        candidate = f"{base_id}-{idx}"
+        idx += 1
+    return candidate
+
+
+def _unique_filename(base_name: str, existing_names: set[str]) -> str:
+    stem = Path(base_name).stem
+    suffix = Path(base_name).suffix or ".gguf"
+    candidate = f"{stem}{suffix}"
+    idx = 2
+    while candidate in existing_names:
+        candidate = f"{stem}-{idx}{suffix}"
+        idx += 1
+    return candidate
+
+
+def validate_model_url(source_url: str) -> tuple[bool, str, str]:
+    parsed = urlparse(source_url.strip())
+    if parsed.scheme != "https":
+        return False, "https_required", ""
+    basename = unquote(Path(parsed.path).name)
+    if not basename:
+        return False, "filename_missing", ""
+    if not basename.lower().endswith(".gguf"):
+        return False, "gguf_required", ""
+    safe_name = _sanitize_filename(basename)
+    if not safe_name.lower().endswith(".gguf"):
+        safe_name = f"{Path(safe_name).stem}.gguf"
+    return True, "", safe_name
+
+
+def _default_model_record(_runtime: RuntimeConfig) -> dict[str, Any]:
+    return {
+        "id": "default",
+        "filename": MODEL_FILENAME,
+        "source_url": MODEL_URL,
+        "source_type": "url",
+        "status": "not_downloaded",
+        "error": None,
+    }
+
+
+def _is_discoverable_local_model_filename(filename: str) -> bool:
+    name = _sanitize_filename(filename)
+    if not name.lower().endswith(".gguf"):
+        return False
+    stem = Path(name).stem.lower()
+    if stem.startswith("mmproj") or "mmproj" in stem:
+        return False
+    return True
+
+
+def _discover_local_model_filenames(runtime: RuntimeConfig) -> list[str]:
+    model_dir = runtime.base_dir / "models"
+    try:
+        children = list(model_dir.iterdir())
+    except OSError:
+        return []
+    names: list[str] = []
+    for child in children:
+        if not child.is_file():
+            continue
+        filename = _sanitize_filename(child.name)
+        if not _is_discoverable_local_model_filename(filename):
+            continue
+        names.append(filename)
+    return sorted(set(names))
+
+
+def model_file_present(runtime: RuntimeConfig, filename: str) -> bool:
+    path = _model_file_path(runtime, filename)
+    try:
+        return path.exists() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _normalize_models_state(runtime: RuntimeConfig, raw: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = raw or {}
+    models_raw = payload.get("models")
+    models: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_filenames: set[str] = set()
+
+    if isinstance(models_raw, list):
+        for item in models_raw:
+            if not isinstance(item, dict):
+                continue
+            source_url = str(item.get("source_url") or "")
+            filename = _sanitize_filename(str(item.get("filename") or ""))
+            if not filename.lower().endswith(".gguf"):
+                filename = f"{Path(filename).stem}.gguf"
+            item_id_raw = str(item.get("id") or _slugify_id(Path(filename).stem))
+            item_id = _unique_model_id(_slugify_id(item_id_raw), seen_ids)
+            filename = _unique_filename(filename, seen_filenames)
+            seen_ids.add(item_id)
+            seen_filenames.add(filename)
+            source_type_raw = str(item.get("source_type") or "").strip().lower()
+            if source_url:
+                source_type = source_type_raw or "url"
+            elif source_type_raw in {"upload", "local_file"}:
+                source_type = source_type_raw
+            else:
+                source_type = "upload"
+            models.append(
+                {
+                    "id": item_id,
+                    "filename": filename,
+                    "source_url": source_url or None,
+                    "source_type": source_type,
+                    "status": str(item.get("status") or "not_downloaded"),
+                    "error": item.get("error"),
+                }
+            )
+
+    if not models:
+        default_model = _default_model_record(runtime)
+        models.append(default_model)
+        seen_ids.add(default_model["id"])
+        seen_filenames.add(default_model["filename"])
+    elif "default" not in seen_ids:
+        default_model = _default_model_record(runtime)
+        default_model["id"] = _unique_model_id("default", seen_ids)
+        default_model["filename"] = _unique_filename(default_model["filename"], seen_filenames)
+        models.insert(0, default_model)
+        seen_ids.add(default_model["id"])
+        seen_filenames.add(default_model["filename"])
+
+    for local_filename in _discover_local_model_filenames(runtime):
+        if local_filename in seen_filenames:
+            continue
+        local_id = _unique_model_id(_slugify_id(Path(local_filename).stem), seen_ids)
+        models.append(
+            {
+                "id": local_id,
+                "filename": local_filename,
+                "source_url": None,
+                "source_type": "local_file",
+                "status": "ready",
+                "error": None,
+            }
+        )
+        seen_ids.add(local_id)
+        seen_filenames.add(local_filename)
+
+    active_model_id = str(payload.get("active_model_id") or "default")
+    if active_model_id not in seen_ids:
+        active_model_id = models[0]["id"]
+
+    default_model_id = str(payload.get("default_model_id") or "default")
+    if default_model_id not in seen_ids:
+        default_model_id = "default" if "default" in seen_ids else models[0]["id"]
+
+    current_download_model_id = payload.get("current_download_model_id")
+    if current_download_model_id not in seen_ids:
+        current_download_model_id = None
+
+    return {
+        "version": MODELS_STATE_VERSION,
+        "countdown_enabled": bool(payload.get("countdown_enabled", True)),
+        "default_model_downloaded_once": bool(payload.get("default_model_downloaded_once", False)),
+        "active_model_id": active_model_id,
+        "default_model_id": default_model_id,
+        "current_download_model_id": current_download_model_id,
+        "models": models,
+    }
+
+
+def ensure_models_state(runtime: RuntimeConfig) -> dict[str, Any]:
+    raw: dict[str, Any] | None = None
+    if runtime.models_state_path.exists():
+        try:
+            loaded = json.loads(runtime.models_state_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                raw = loaded
+        except (OSError, json.JSONDecodeError):
+            raw = None
+
+    normalized = _normalize_models_state(runtime, raw)
+    default_model_id = str(normalized.get("default_model_id") or "default")
+    default_model = get_model_by_id(normalized, default_model_id)
+    if isinstance(default_model, dict):
+        default_filename = str(default_model.get("filename") or "")
+        if default_filename == MODEL_FILENAME and model_file_present(runtime, default_filename):
+            normalized["default_model_downloaded_once"] = True
+    _atomic_write_json(runtime.models_state_path, normalized)
+    return normalized
+
+
+def save_models_state(runtime: RuntimeConfig, state: dict[str, Any]) -> dict[str, Any]:
+    normalized = _normalize_models_state(runtime, state)
+    _atomic_write_json(runtime.models_state_path, normalized)
+    return normalized
+
+
+def get_model_by_id(state: dict[str, Any], model_id: str) -> dict[str, Any] | None:
+    for item in state.get("models", []):
+        if isinstance(item, dict) and item.get("id") == model_id:
+            return item
+    return None
+
+
+def resolve_active_model(state: dict[str, Any], runtime: RuntimeConfig) -> tuple[dict[str, Any], Path]:
+    active_id = str(state.get("active_model_id") or "")
+    model = get_model_by_id(state, active_id)
+    if model is None:
+        model = state["models"][0]
+        state["active_model_id"] = model["id"]
+    path = _model_file_path(runtime, str(model["filename"]))
+    runtime.model_path = path
+    return model, path
+
+
+def model_present(runtime: RuntimeConfig) -> bool:
+    state = ensure_models_state(runtime)
+    _, active_model_path = resolve_active_model(state, runtime)
+    try:
+        return active_model_path.exists() and active_model_path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def set_download_countdown_enabled(runtime: RuntimeConfig, enabled: bool) -> dict[str, Any]:
+    state = ensure_models_state(runtime)
+    state["countdown_enabled"] = bool(enabled)
+    return save_models_state(runtime, state)
+
+
+def register_model_url(runtime: RuntimeConfig, source_url: str, alias: str | None = None) -> tuple[bool, str, dict[str, Any] | None]:
+    ok, reason, filename = validate_model_url(source_url)
+    if not ok:
+        return False, reason, None
+
+    state = ensure_models_state(runtime)
+    models = state.get("models", [])
+    assert isinstance(models, list)
+    existing_ids = {str(item.get("id")) for item in models if isinstance(item, dict)}
+    existing_names = {str(item.get("filename")) for item in models if isinstance(item, dict)}
+
+    for item in models:
+        if isinstance(item, dict) and str(item.get("source_url") or "") == source_url:
+            saved = save_models_state(runtime, state)
+            model = get_model_by_id(saved, str(item.get("id") or ""))
+            return True, "already_exists", model
+
+    preferred_name = filename
+    if alias:
+        alias_safe = _sanitize_filename(alias)
+        if not alias_safe.lower().endswith(".gguf"):
+            alias_safe = f"{Path(alias_safe).stem}.gguf"
+        if alias_safe:
+            preferred_name = alias_safe
+
+    final_name = _unique_filename(preferred_name, existing_names)
+    model_id = _unique_model_id(_slugify_id(Path(final_name).stem), existing_ids)
+    model_record = {
+        "id": model_id,
+        "filename": final_name,
+        "source_url": source_url,
+        "source_type": "url",
+        "status": "ready" if model_file_present(runtime, final_name) else "not_downloaded",
+        "error": None,
+    }
+    models.append(model_record)
+    saved = save_models_state(runtime, state)
+    created = get_model_by_id(saved, model_id)
+    return True, "registered", created
+
+
+def delete_model(runtime: RuntimeConfig, *, model_id: str) -> tuple[bool, str, bool, int, bool]:
+    state = ensure_models_state(runtime)
+    active_model_id = str(state.get("active_model_id") or "")
+    target = get_model_by_id(state, model_id)
+    if target is None:
+        return False, "model_not_found", False, 0, False
+    was_active = model_id == active_model_id
+
+    filename = str(target.get("filename") or "")
+    models = state.get("models", [])
+    assert isinstance(models, list)
+
+    same_filename_elsewhere = any(
+        isinstance(item, dict)
+        and str(item.get("id") or "") != model_id
+        and str(item.get("filename") or "") == filename
+        for item in models
+    )
+
+    deleted_file = False
+    freed_bytes = 0
+    if filename and not same_filename_elsewhere:
+        candidate_paths = (
+            _model_file_path(runtime, filename),
+            _model_file_path(runtime, filename + ".part"),
+        )
+        for candidate_path in candidate_paths:
+            if not candidate_path.exists():
+                continue
+            try:
+                file_size = max(0, candidate_path.stat().st_size)
+            except OSError:
+                file_size = 0
+            try:
+                candidate_path.unlink(missing_ok=True)
+                deleted_file = True
+                freed_bytes += file_size
+            except OSError:
+                logger.warning("Could not delete model file: %s", candidate_path, exc_info=True)
+                return False, "delete_failed", False, 0, was_active
+
+    remaining_models = [
+        item
+        for item in models
+        if not (isinstance(item, dict) and str(item.get("id") or "") == model_id)
+    ]
+    state["models"] = remaining_models
+    if str(state.get("current_download_model_id") or "") == model_id:
+        state["current_download_model_id"] = None
+    if was_active:
+        next_active_id: str | None = None
+        for item in remaining_models:
+            if not isinstance(item, dict):
+                continue
+            candidate_id = str(item.get("id") or "")
+            candidate_name = str(item.get("filename") or "")
+            if candidate_id and model_file_present(runtime, candidate_name):
+                next_active_id = candidate_id
+                break
+        if next_active_id is None:
+            for item in remaining_models:
+                if isinstance(item, dict) and item.get("id"):
+                    next_active_id = str(item["id"])
+                    break
+        if next_active_id is None:
+            next_active_id = str(state.get("default_model_id") or "default")
+        state["active_model_id"] = next_active_id
+    save_models_state(runtime, state)
+    return True, "deleted", deleted_file, freed_bytes, was_active

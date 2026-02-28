@@ -4,17 +4,9 @@ import asyncio
 
 import pytest
 
-from app.main import (
-    RuntimeConfig,
-    compute_auto_download_remaining_seconds,
-    create_app,
-    ensure_models_state,
-    get_free_storage_bytes,
-    is_likely_too_large_for_storage,
-    read_download_progress,
-    start_model_download,
-    validate_model_url,
-)
+from app.main import compute_auto_download_remaining_seconds, create_app, start_model_download
+from app.model_state import ensure_models_state, validate_model_url
+from app.runtime_state import RuntimeConfig, get_free_storage_bytes, is_likely_too_large_for_storage, read_download_progress
 
 
 def test_validate_model_url_accepts_https_gguf():
@@ -101,7 +93,7 @@ async def test_start_model_download_predicts_insufficient_storage(runtime: Runti
 
 
 def test_get_free_storage_bytes_returns_unknown_when_psutil_missing(runtime: RuntimeConfig, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("app.main.psutil", None)
+    monkeypatch.setattr("app.runtime_state.psutil", None)
 
     free_bytes = get_free_storage_bytes(runtime)
 

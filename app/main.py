@@ -17,6 +17,7 @@ from urllib.parse import unquote, urlparse
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 try:
     from app.repositories import (
@@ -87,6 +88,7 @@ SYSTEM_STATIC_INFO_CACHE_TTL_SECONDS = 60
 SYSTEM_POWER_ESTIMATE_DISCLAIMER = (
     "Estimated from PMIC rails; excludes main 5V input current/peripherals/HATs and conversion losses."
 )
+WEB_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
 _SYSTEM_STATIC_INFO_CACHE: dict[str, Any] = {
     "expires_at_unix": 0,
@@ -1225,6 +1227,7 @@ def default_system_metrics_snapshot() -> dict[str, Any]:
         "memory_total_bytes": 0,
         "memory_used_bytes": 0,
         "memory_percent": None,
+        "swap_label": "swap",
         "swap_total_bytes": 0,
         "swap_used_bytes": 0,
         "swap_percent": None,
@@ -1446,6 +1449,23 @@ def _read_kernel_version_info() -> dict[str, str | None]:
     }
 
 
+def _read_swap_label() -> str:
+    path = Path("/proc/swaps")
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return "swap"
+
+    for line in raw.splitlines()[1:]:
+        text = line.strip()
+        if not text:
+            continue
+        filename = text.split()[0]
+        if "zram" in filename.lower():
+            return "zram"
+    return "swap"
+
+
 def _collect_static_platform_info_uncached() -> dict[str, Any]:
     kernel_info = _read_kernel_version_info()
     return {
@@ -1528,6 +1548,7 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
     now_unix = int(snapshot["updated_at_unix"])
 
     metrics_collected = False
+    snapshot["swap_label"] = _read_swap_label()
 
     static_info = _collect_static_platform_info_cached(now_unix=now_unix)
     if isinstance(static_info, dict):
@@ -1563,6 +1584,7 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
             snapshot["memory_total_bytes"] = int(memory.total)
             snapshot["memory_used_bytes"] = int(memory.used)
             snapshot["memory_percent"] = round(_safe_float(memory.percent), 2)
+            snapshot["swap_label"] = _read_swap_label()
             snapshot["swap_total_bytes"] = int(swap.total)
             snapshot["swap_used_bytes"] = int(swap.used)
             snapshot["swap_percent"] = round(_safe_float(swap.percent), 2)
@@ -2953,31 +2975,78 @@ CHAT_HTML = """<!doctype html>
     }
 
     .runtime-compact {
-      font-size: 12px;
+      font-size: 11.5px;
       line-height: 1.45;
       color: var(--text-muted);
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
 
     .runtime-details {
       margin-top: 8px;
-      font-size: 12px;
-      line-height: 1.4;
-      color: var(--text-muted);
       display: grid;
-      gap: 4px;
+      gap: 10px;
     }
 
     .runtime-details[hidden] {
       display: none;
     }
 
+    .runtime-detail-group {
+      display: grid;
+      gap: 6px;
+      border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+      background: color-mix(in srgb, var(--panel-muted) 72%, transparent);
+      border-radius: 12px;
+      padding: 10px 11px;
+    }
+
+    .runtime-detail-group--power {
+      gap: 4px;
+      background: color-mix(in srgb, var(--status-bg) 56%, var(--panel));
+      border-color: color-mix(in srgb, var(--focus) 24%, var(--border));
+    }
+
+    .runtime-detail-group-title {
+      font-size: 11px;
+      line-height: 1.2;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
     .runtime-detail-prominent {
-      font-size: 13.5px;
+      font-size: 15px;
       line-height: 1.35;
-      font-weight: 680;
+      font-weight: 760;
       color: var(--text);
-      margin-bottom: 2px;
+      margin-bottom: 1px;
+    }
+
+    .runtime-detail-secondary {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--text-muted);
+    }
+
+    .runtime-detail-row {
+      display: grid;
+      grid-template-columns: minmax(92px, 132px) 1fr;
+      gap: 10px;
+      align-items: baseline;
+      font-size: 12.5px;
+      line-height: 1.4;
+    }
+
+    .runtime-detail-label {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .runtime-detail-value {
+      color: var(--text);
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .runtime-metric-normal {
@@ -3253,10 +3322,105 @@ CHAT_HTML = """<!doctype html>
       box-shadow: 0 3px 14px rgba(16, 23, 42, 0.06);
     }
 
+    .message-bubble.processing {
+      background: color-mix(in srgb, var(--assistant-bg) 90%, var(--panel-muted));
+      border-color: color-mix(in srgb, #60a5fa 20%, var(--border));
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.06);
+      padding: 10px 12px;
+    }
+
+    .message-bubble.processing[data-phase="generating"] {
+      border-color: color-mix(in srgb, #10a37f 28%, var(--border));
+      box-shadow: 0 8px 20px rgba(16, 163, 127, 0.08);
+    }
+
     .message-bubble.with-image {
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+
+    .message-bubble.markdown-rendered {
+      white-space: normal;
+    }
+
+    .message-bubble.markdown-rendered > *:first-child {
+      margin-top: 0;
+    }
+
+    .message-bubble.markdown-rendered > *:last-child {
+      margin-bottom: 0;
+    }
+
+    .message-bubble.markdown-rendered p,
+    .message-bubble.markdown-rendered ul,
+    .message-bubble.markdown-rendered ol,
+    .message-bubble.markdown-rendered pre,
+    .message-bubble.markdown-rendered blockquote,
+    .message-bubble.markdown-rendered h1,
+    .message-bubble.markdown-rendered h2,
+    .message-bubble.markdown-rendered h3,
+    .message-bubble.markdown-rendered h4 {
+      margin: 0 0 0.8em;
+    }
+
+    .message-bubble.markdown-rendered h1,
+    .message-bubble.markdown-rendered h2,
+    .message-bubble.markdown-rendered h3,
+    .message-bubble.markdown-rendered h4 {
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    .message-bubble.markdown-rendered h1 {
+      font-size: 1.22em;
+    }
+
+    .message-bubble.markdown-rendered h2 {
+      font-size: 1.12em;
+    }
+
+    .message-bubble.markdown-rendered ul,
+    .message-bubble.markdown-rendered ol {
+      padding-left: 1.2em;
+    }
+
+    .message-bubble.markdown-rendered li + li {
+      margin-top: 0.28em;
+    }
+
+    .message-bubble.markdown-rendered code {
+      font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+      font-size: 0.92em;
+      background: color-mix(in srgb, var(--panel-muted) 82%, transparent);
+      border-radius: 7px;
+      padding: 0.12em 0.38em;
+    }
+
+    .message-bubble.markdown-rendered pre {
+      overflow: auto;
+      padding: 0.8em 0.9em;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--panel-muted) 90%, transparent);
+      border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    }
+
+    .message-bubble.markdown-rendered pre code {
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .message-bubble.markdown-rendered blockquote {
+      border-left: 3px solid color-mix(in srgb, var(--brand) 42%, var(--border));
+      padding-left: 0.85em;
+      color: var(--text-muted);
+    }
+
+    .message-bubble.markdown-rendered a {
+      color: inherit;
+      text-decoration-thickness: 0.08em;
+      text-underline-offset: 0.14em;
     }
 
     .message-image-thumb {
@@ -3272,6 +3436,55 @@ CHAT_HTML = """<!doctype html>
     .message-text {
       white-space: pre-wrap;
       line-height: inherit;
+    }
+
+    .message-processing-shell {
+      display: grid;
+      gap: 7px;
+    }
+
+    .message-processing-label {
+      font-size: 13.5px;
+      line-height: 1.25;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .message-processing-meter {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .message-processing-bar {
+      position: relative;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--border) 60%, transparent);
+    }
+
+    .message-processing-bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #60a5fa 0%, #10a37f 100%);
+      transition: width 180ms ease;
+    }
+
+    .message-bubble.processing[data-phase="generating"] .message-processing-bar-fill {
+      width: 38%;
+      animation: message-processing-indeterminate 1.2s ease-in-out infinite;
+    }
+
+    .message-processing-percent {
+      font-size: 11.5px;
+      line-height: 1;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.02em;
     }
 
     .message-meta {
@@ -3557,6 +3770,12 @@ CHAT_HTML = """<!doctype html>
       to { transform: rotate(360deg); }
     }
 
+    @keyframes message-processing-indeterminate {
+      0% { transform: translateX(-18%); }
+      50% { transform: translateX(112%); }
+      100% { transform: translateX(-18%); }
+    }
+
     .settings {
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -3572,18 +3791,19 @@ CHAT_HTML = """<!doctype html>
     }
 
     .settings-grid {
-      margin-top: 10px;
+      margin-top: 12px;
       display: grid;
-      gap: 10px;
+      gap: 12px;
       grid-template-columns: 1fr;
     }
 
     .settings-grid label {
-      font-size: 13px;
+      font-size: 12.5px;
       color: var(--text-muted);
       display: flex;
       flex-direction: column;
       gap: 6px;
+      min-width: 0;
     }
 
     .settings-grid input,
@@ -3595,6 +3815,10 @@ CHAT_HTML = """<!doctype html>
       color: var(--text);
       padding: 8px 10px;
       font: inherit;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
     }
 
     .settings-grid textarea {
@@ -3613,15 +3837,96 @@ CHAT_HTML = """<!doctype html>
       grid-column: 1 / -1;
     }
 
+    .settings-section {
+      display: grid;
+      gap: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--panel) 72%, var(--panel-muted));
+      padding: 13px;
+      min-width: 0;
+    }
+
+    .settings-section-title {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+      font-weight: 720;
+      text-transform: none;
+    }
+
+    .settings-section-note {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .settings-subdetails {
+      border: 1px dashed color-mix(in srgb, var(--border) 88%, transparent);
+      border-radius: 10px;
+      padding: 10px;
+      background: color-mix(in srgb, var(--panel-muted) 65%, transparent);
+    }
+
+    .settings-subdetails summary {
+      cursor: pointer;
+      list-style: none;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .settings-subdetails summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .settings-subdetails[open] summary {
+      margin-bottom: 10px;
+    }
+
     .settings-action-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr;
       gap: 8px;
-      align-items: center;
+      align-items: stretch;
+      min-width: 0;
     }
 
     .settings-action-row .ghost-btn {
       width: 100%;
       text-align: center;
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    .settings-grid > *,
+    .settings-section > *,
+    .settings-subdetails > *,
+    .model-row,
+    #modelsList {
+      min-width: 0;
+    }
+
+    .settings-subdetails {
+      min-width: 0;
+    }
+
+    .settings-subdetails .settings-action-row {
+      margin-top: 4px;
+    }
+
+    .model-row-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .model-row-actions .ghost-btn {
+      width: 100%;
+      min-width: 0;
+      justify-content: center;
+      box-sizing: border-box;
     }
 
     .model-row {
@@ -3731,7 +4036,7 @@ CHAT_HTML = """<!doctype html>
     }
 
     .app-shell {
-      grid-template-columns: 320px 1fr;
+      grid-template-columns: 396px minmax(0, 1fr);
     }
 
     .sidebar {
@@ -3739,6 +4044,7 @@ CHAT_HTML = """<!doctype html>
       background: var(--panel-muted);
       gap: 12px;
       overflow: auto;
+      min-width: 0;
     }
 
     .sidebar-section {
@@ -3759,6 +4065,7 @@ CHAT_HTML = """<!doctype html>
       max-width: 980px;
       grid-template-rows: auto 1fr auto;
       padding: 22px 20px;
+      min-width: 0;
     }
 
     .messages {
@@ -3878,7 +4185,7 @@ CHAT_HTML = """<!doctype html>
       </div>
       <section class="sidebar-section">
         <h2 class="brand">Potato OS</h2>
-        <p class="sidebar-note">Local-first chat frontend on your Pi.</p>
+        <p id="sidebarNote" class="sidebar-note">v0.2</p>
         <div id="statusText" class="status-card">Checking status...</div>
         <div id="downloadPrompt" class="download-prompt" hidden>
           <p class="download-prompt-title">Model download required</p>
@@ -3898,33 +4205,44 @@ CHAT_HTML = """<!doctype html>
           </div>
           <div id="runtimeCompact" class="runtime-compact">CPU -- | Cores -- | GPU -- | Swap -- | Throttle --</div>
           <div id="runtimeDetails" class="runtime-details" hidden>
-            <div id="runtimeDetailPower" class="runtime-detail-prominent">Power (estimated total): --</div>
-            <div id="runtimeDetailPowerRaw">Power (PMIC raw): --</div>
-            <div id="runtimeDetailPowerNote">Power note: --</div>
-            <div id="runtimeDetailCpu">CPU total: --</div>
-            <div id="runtimeDetailCores">CPU cores: --</div>
-            <div id="runtimeDetailCpuClock">CPU clock: --</div>
-            <div id="runtimeDetailMemory">Memory: --</div>
-            <div id="runtimeDetailSwap">Swap: --</div>
-            <div id="runtimeDetailStorage">Storage free: --</div>
-            <div id="runtimeDetailTemp">Temperature: --</div>
-            <div id="runtimeDetailPiModel">Pi model: --</div>
-            <div id="runtimeDetailOs">OS: --</div>
-            <div id="runtimeDetailKernel">Kernel: --</div>
-            <div id="runtimeDetailBootloader">Bootloader: --</div>
-            <div id="runtimeDetailFirmware">Firmware: --</div>
-            <div id="runtimeDetailGpu">GPU clock: --</div>
-            <div id="runtimeDetailThrottle">Throttling: --</div>
-            <div id="runtimeDetailThrottleHistory">Throttling history: --</div>
-            <div id="runtimeDetailUpdated">Updated: --</div>
+            <section id="runtimeDetailsPowerGroup" class="runtime-detail-group runtime-detail-group--power" aria-label="Power">
+              <div class="runtime-detail-group-title">Power</div>
+              <div id="runtimeDetailPower" class="runtime-detail-prominent">Power (estimated total): --</div>
+              <div id="runtimeDetailPowerRaw" class="runtime-detail-secondary">Power (PMIC raw): --</div>
+            </section>
+            <section id="runtimeDetailsPerformanceGroup" class="runtime-detail-group" aria-label="Performance">
+              <div class="runtime-detail-group-title">Performance</div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">CPU total</span><span id="runtimeDetailCpuValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">CPU cores</span><span id="runtimeDetailCoresValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">CPU clock</span><span id="runtimeDetailCpuClockValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">GPU clock</span><span id="runtimeDetailGpuValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Temperature</span><span id="runtimeDetailTempValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Throttling</span><span id="runtimeDetailThrottleValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">History</span><span id="runtimeDetailThrottleHistoryValue" class="runtime-detail-value">--</span></div>
+            </section>
+            <section id="runtimeDetailsMemoryGroup" class="runtime-detail-group" aria-label="Memory and storage">
+              <div class="runtime-detail-group-title">Memory &amp; storage</div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Memory</span><span id="runtimeDetailMemoryValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span id="runtimeDetailSwapLabel" class="runtime-detail-label">zram</span><span id="runtimeDetailSwapValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Storage free</span><span id="runtimeDetailStorageValue" class="runtime-detail-value">--</span></div>
+            </section>
+            <section id="runtimeDetailsPlatformGroup" class="runtime-detail-group" aria-label="Platform">
+              <div class="runtime-detail-group-title">Platform</div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Pi model</span><span id="runtimeDetailPiModelValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">OS</span><span id="runtimeDetailOsValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Kernel</span><span id="runtimeDetailKernelValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Bootloader</span><span id="runtimeDetailBootloaderValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Firmware</span><span id="runtimeDetailFirmwareValue" class="runtime-detail-value">--</span></div>
+              <div class="runtime-detail-row"><span class="runtime-detail-label">Updated</span><span id="runtimeDetailUpdatedValue" class="runtime-detail-value">--</span></div>
+            </section>
           </div>
         </div>
       </section>
       <details class="settings">
         <summary>Settings</summary>
         <div class="settings-grid">
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Large Model Compatibility</h3>
+          <section id="settingsRuntimeSection" class="settings-section full">
+            <h3 class="settings-section-title">Runtime controls</h3>
             <label class="full" style="display:flex; align-items:center; gap:8px;">
               <input id="largeModelOverrideEnabled" type="checkbox">
               <span>Allow unsupported large models (try anyway)</span>
@@ -3933,9 +4251,6 @@ CHAT_HTML = """<!doctype html>
               <button id="applyLargeModelOverrideBtn" class="ghost-btn" type="button">Apply compatibility override</button>
             </div>
             <div id="largeModelOverrideStatus" class="runtime-compact">Compatibility override: default warnings</div>
-          </div>
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Model Memory Loading</h3>
             <label class="full">GGUF loading mode (requires runtime restart)
               <select id="llamaMemoryLoadingMode">
                 <option value="auto">Automatic (profile-based)</option>
@@ -3947,64 +4262,59 @@ CHAT_HTML = """<!doctype html>
               <button id="applyLlamaMemoryLoadingBtn" class="ghost-btn" type="button">Apply memory loading + restart</button>
             </div>
             <div id="llamaMemoryLoadingStatus" class="runtime-compact">Current memory loading: unknown</div>
-          </div>
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Power Calibration (Pi 5)</h3>
-            <div id="powerCalibrationLiveStatus" class="runtime-compact">Current PMIC raw power: --</div>
-            <label class="full">Wall meter reading (W)
-              <input id="powerCalibrationWallWatts" type="number" min="0" step="0.01" placeholder="e.g. 9.4">
-            </label>
-            <div class="settings-action-row full">
-              <button id="capturePowerCalibrationSampleBtn" class="ghost-btn" type="button">Capture calibration sample</button>
-              <button id="fitPowerCalibrationBtn" class="ghost-btn" type="button">Compute calibration</button>
-              <button id="resetPowerCalibrationBtn" class="ghost-btn danger-btn" type="button">Reset calibration</button>
+            <div class="full">
+              <h3 class="settings-section-title">Llama Runtime Bundle</h3>
+              <div id="llamaRuntimeCurrent" class="runtime-compact">Current runtime: unknown</div>
+              <label class="full">Installed/Test Bundles
+                <select id="llamaRuntimeBundleSelect">
+                  <option value="">No bundles discovered</option>
+                </select>
+              </label>
+              <div class="settings-action-row full">
+                <button id="switchLlamaRuntimeBtn" class="ghost-btn" type="button">Switch llama runtime</button>
+              </div>
+              <div id="llamaRuntimeSwitchStatus" class="runtime-compact">No runtime switch in progress.</div>
             </div>
-            <div id="powerCalibrationStatus" class="runtime-compact">Power calibration: default correction</div>
-          </div>
-          <label class="full">System Prompt (optional)
-            <textarea id="systemPrompt" placeholder="Set assistant behavior for this chat"></textarea>
-          </label>
-          <label class="full">Loaded Model
-            <input id="modelName" type="text" value="Checking..." readonly>
-          </label>
-          <label class="full">Auto-download default model
-            <select id="downloadCountdownEnabled">
-              <option value="true">Enabled</option>
-              <option value="false">Paused</option>
-            </select>
-          </label>
-          <label class="full">Add model by URL
-            <input id="modelUrlInput" type="url" placeholder="https://.../model.gguf">
-          </label>
-          <div class="settings-action-row full">
-            <button id="registerModelBtn" class="ghost-btn" type="button">Add URL model</button>
-          </div>
-          <label class="full">Upload local GGUF to Pi
-            <input id="modelUploadInput" type="file" accept=".gguf,application/octet-stream">
-          </label>
-          <div class="settings-action-row full">
-            <button id="uploadModelBtn" class="ghost-btn" type="button">Upload model</button>
-            <button id="cancelUploadBtn" class="ghost-btn" type="button" hidden>Cancel upload</button>
-            <button id="purgeModelsBtn" class="ghost-btn danger-btn" type="button">Delete all models</button>
-          </div>
-          <div id="modelUploadStatus" class="runtime-compact full">No upload in progress.</div>
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Available Models</h3>
-            <div id="modelsList" class="runtime-details"></div>
-          </div>
-          <div class="full">
-            <h3 style="margin: 0 0 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Llama Runtime Bundle</h3>
-            <div id="llamaRuntimeCurrent" class="runtime-compact">Current runtime: unknown</div>
-            <label class="full">Installed/Test Bundles
-              <select id="llamaRuntimeBundleSelect">
-                <option value="">No bundles discovered</option>
+            <div class="settings-action-row full">
+              <button id="resetRuntimeBtn" class="ghost-btn danger-btn" type="button">Unload model + clean memory + restart</button>
+            </div>
+          </section>
+          <section id="settingsModelSection" class="settings-section full">
+            <h3 class="settings-section-title">Models</h3>
+            <label class="full">Loaded Model
+              <input id="modelName" type="text" value="Checking..." readonly>
+            </label>
+            <label class="full">Auto-download default model
+              <select id="downloadCountdownEnabled">
+                <option value="true">Enabled</option>
+                <option value="false">Paused</option>
               </select>
             </label>
+            <label class="full">Add model by URL
+              <input id="modelUrlInput" type="url" placeholder="https://.../model.gguf">
+            </label>
             <div class="settings-action-row full">
-              <button id="switchLlamaRuntimeBtn" class="ghost-btn" type="button">Switch llama runtime</button>
+              <button id="registerModelBtn" class="ghost-btn" type="button">Add URL model</button>
             </div>
-            <div id="llamaRuntimeSwitchStatus" class="runtime-compact">No runtime switch in progress.</div>
-          </div>
+            <label class="full">Upload local GGUF to Pi
+              <input id="modelUploadInput" type="file" accept=".gguf,application/octet-stream">
+            </label>
+            <div class="settings-action-row full">
+              <button id="uploadModelBtn" class="ghost-btn" type="button">Upload model</button>
+              <button id="cancelUploadBtn" class="ghost-btn" type="button" hidden>Cancel upload</button>
+              <button id="purgeModelsBtn" class="ghost-btn danger-btn" type="button">Delete all models</button>
+            </div>
+            <div id="modelUploadStatus" class="runtime-compact full">No upload in progress.</div>
+            <div class="full">
+              <h3 class="settings-section-title">Available Models</h3>
+              <div id="modelsList" class="runtime-details"></div>
+            </div>
+          </section>
+          <section id="settingsAdvancedSection" class="settings-section full">
+            <h3 class="settings-section-title">Chat & advanced</h3>
+            <label class="full">System Prompt (optional)
+              <textarea id="systemPrompt" placeholder="Set assistant behavior for this chat"></textarea>
+            </label>
           <label>Streaming
             <select id="stream">
               <option value="true">true</option>
@@ -4038,9 +4348,21 @@ CHAT_HTML = """<!doctype html>
           <label>Max Tokens
             <input id="max_tokens" type="number" step="1" min="1">
           </label>
-          <div class="settings-action-row full">
-            <button id="resetRuntimeBtn" class="ghost-btn danger-btn" type="button">Unload model + clean memory + restart</button>
-          </div>
+            <details id="settingsPowerCalibration" class="settings-subdetails full">
+              <summary>Power calibration</summary>
+              <div class="settings-section-note">Optional wall-meter calibration for Pi 5 power estimates.</div>
+              <div id="powerCalibrationLiveStatus" class="runtime-compact">Current PMIC raw power: --</div>
+              <label class="full">Wall meter reading (W)
+                <input id="powerCalibrationWallWatts" type="number" min="0" step="0.01" placeholder="e.g. 9.4">
+              </label>
+              <div class="settings-action-row full">
+                <button id="capturePowerCalibrationSampleBtn" class="ghost-btn" type="button">Capture calibration sample</button>
+                <button id="fitPowerCalibrationBtn" class="ghost-btn" type="button">Compute calibration</button>
+                <button id="resetPowerCalibrationBtn" class="ghost-btn danger-btn" type="button">Reset calibration</button>
+              </div>
+              <div id="powerCalibrationStatus" class="runtime-compact">Power calibration: default correction</div>
+            </details>
+          </section>
         </div>
       </details>
     </aside>
@@ -4104,6 +4426,8 @@ CHAT_HTML = """<!doctype html>
     </main>
   </div>
 
+  <script src="/assets/vendor/marked.umd.js"></script>
+  <script src="/assets/vendor/purify.min.js"></script>
   <script>
     const defaultSettings = {
       temperature: 0.7,
@@ -4121,9 +4445,19 @@ CHAT_HTML = """<!doctype html>
     };
     const settingsKey = "potato_settings_v2";
     const PREFILL_METRICS_KEY = "potato_prefill_metrics_v1";
-    const PREFILL_PROGRESS_CAP = 95;
+    const PREFILL_PROGRESS_CAP = 99;
+    const PREFILL_PROGRESS_TAIL_START = 89;
     const PREFILL_PROGRESS_FLOOR = 6;
     const PREFILL_TICK_MS = 180;
+    const PREFILL_FINISH_DURATION_MS = Math.max(
+      120,
+      Number(window.__POTATO_PREFILL_FINISH_DURATION_MS__ || 1000),
+    );
+    const PREFILL_FINISH_TICK_MS = 40;
+    const PREFILL_FINISH_HOLD_MS = Math.max(
+      80,
+      Number(window.__POTATO_PREFILL_FINISH_HOLD_MS__ || 220),
+    );
     const STATUS_CHIP_MIN_VISIBLE_MS = 260;
     const STATUS_POLL_TIMEOUT_MS = 3500;
     const RUNTIME_RECONNECT_INTERVAL_MS = 1200;
@@ -4990,10 +5324,13 @@ CHAT_HTML = """<!doctype html>
         etaMs: estimate.etaMs,
         progress: initialProgress,
         timerId: null,
+        finishTimerId: null,
+        finishPromise: null,
+        finishResolve: null,
       };
 
       setComposerActivity("Preparing prompt...");
-      setComposerStatusChip(`Preparing prompt • ${Math.round(initialProgress)}%`, { phase: "prefill" });
+      applyPrefillProgressState(requestCtx, initialProgress);
 
       activePrefillProgress.timerId = window.setInterval(() => {
         const active = activePrefillProgress;
@@ -5001,34 +5338,100 @@ CHAT_HTML = """<!doctype html>
         const elapsedMs = Math.max(0, performance.now() - active.startedAtMs);
         const normalized = Math.max(0, elapsedMs / Math.max(active.etaMs, 1));
         const eased = 1 - Math.exp(-3.2 * Math.min(1.4, normalized));
-        let target = PREFILL_PROGRESS_FLOOR + ((PREFILL_PROGRESS_CAP - PREFILL_PROGRESS_FLOOR) * eased);
+        let target = PREFILL_PROGRESS_FLOOR + ((95 - PREFILL_PROGRESS_FLOOR) * eased);
         if (normalized > 0.75) {
           target -= Math.min(2.8, (normalized - 0.75) * 7.5);
         }
         if (elapsedMs > active.etaMs) {
-          target += ((elapsedMs - active.etaMs) / 1000) * 0.22;
+          const overtimeSeconds = (elapsedMs - active.etaMs) / 1000;
+          const tail = Math.min(
+            PREFILL_PROGRESS_CAP - PREFILL_PROGRESS_TAIL_START,
+            Math.log1p(overtimeSeconds) * 2.6
+          );
+          target = Math.max(target, PREFILL_PROGRESS_TAIL_START + tail);
         }
         active.progress = Math.max(active.progress, Math.min(PREFILL_PROGRESS_CAP, target));
         const percent = Math.round(Math.min(PREFILL_PROGRESS_CAP, active.progress));
-        setComposerStatusChip(`Preparing prompt • ${percent}%`, { phase: "prefill" });
+        applyPrefillProgressState(requestCtx, percent);
       }, PREFILL_TICK_MS);
     }
 
     function markPrefillGenerationStarted(requestCtx) {
       const active = activePrefillProgress;
-      if (!active || active.requestCtx !== requestCtx) return;
+      if (!active || active.requestCtx !== requestCtx) return Promise.resolve({ cancelled: false });
+      if (active.finishPromise) {
+        return active.finishPromise;
+      }
       if (active.timerId !== null) {
         window.clearInterval(active.timerId);
       }
       active.timerId = null;
-      setComposerActivity("Generating...");
-      setComposerStatusChip("Generating...", { phase: "generating" });
+      const startPercent = Math.max(
+        PREFILL_PROGRESS_FLOOR,
+        Math.min(PREFILL_PROGRESS_CAP, Math.round(Number(active.progress) || PREFILL_PROGRESS_FLOOR)),
+      );
+      active.finishPromise = new Promise((resolve) => {
+        active.finishResolve = resolve;
+        const startedAtMs = performance.now();
+
+        const finalize = (cancelled = false) => {
+          if (active.finishTimerId !== null) {
+            window.clearTimeout(active.finishTimerId);
+            active.finishTimerId = null;
+          }
+          active.finishResolve = null;
+          active.finishPromise = null;
+          if (activePrefillProgress && activePrefillProgress.requestCtx === requestCtx) {
+            activePrefillProgress = null;
+          }
+          if (cancelled) {
+            resolve({ cancelled: true });
+            return;
+          }
+          applyPrefillProgressState(requestCtx, 100);
+          active.finishTimerId = window.setTimeout(() => {
+            if (active.finishTimerId !== null) {
+              window.clearTimeout(active.finishTimerId);
+              active.finishTimerId = null;
+            }
+            hideComposerStatusChip({ immediate: true });
+            resolve({ cancelled: false });
+          }, PREFILL_FINISH_HOLD_MS);
+        };
+
+        const step = () => {
+          if (requestCtx?.stoppedByUser === true) {
+            finalize(true);
+            return;
+          }
+          const elapsedMs = Math.max(0, performance.now() - startedAtMs);
+          const progress = Math.min(1, elapsedMs / PREFILL_FINISH_DURATION_MS);
+          const eased = 1 - Math.pow(1 - progress, 2);
+          const nextPercent = startPercent + ((100 - startPercent) * eased);
+          active.progress = nextPercent;
+          applyPrefillProgressState(requestCtx, nextPercent);
+          if (progress >= 1) {
+            finalize(false);
+            return;
+          }
+          active.finishTimerId = window.setTimeout(step, PREFILL_FINISH_TICK_MS);
+        };
+
+        step();
+      });
+      return active.finishPromise;
     }
 
     function stopPrefillProgress(options = {}) {
       const active = activePrefillProgress;
       if (active && active.timerId !== null) {
         window.clearInterval(active.timerId);
+      }
+      if (active && active.finishTimerId !== null) {
+        window.clearTimeout(active.finishTimerId);
+      }
+      if (active && typeof active.finishResolve === "function") {
+        active.finishResolve({ cancelled: true });
       }
       activePrefillProgress = null;
       if (options.resetUi !== false) {
@@ -5065,6 +5468,16 @@ CHAT_HTML = """<!doctype html>
       savePrefillMetrics(metrics);
     }
 
+    function applyPrefillProgressState(requestCtx, percent) {
+      const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+      setComposerStatusChip(`Preparing prompt • ${safePercent}%`, { phase: "prefill" });
+      setMessageProcessingState(requestCtx?.assistantView, {
+        phase: "prefill",
+        label: "Prompt processing",
+        percent: safePercent,
+      });
+    }
+
     function setCancelEnabled(enabled) {
       const cancelBtn = document.getElementById("cancelBtn");
       if (!cancelBtn) return;
@@ -5073,14 +5486,56 @@ CHAT_HTML = """<!doctype html>
       cancelBtn.disabled = !show;
     }
 
+    let markdownRendererConfigured = false;
+
+    function renderAssistantMarkdownToHtml(text) {
+      const source = String(text || "");
+      if (!window.marked?.parse || !window.DOMPurify?.sanitize) {
+        return null;
+      }
+      if (!markdownRendererConfigured && typeof window.marked.setOptions === "function") {
+        window.marked.setOptions({
+          gfm: true,
+          breaks: true,
+        });
+        markdownRendererConfigured = true;
+      }
+      const renderedHtml = window.marked?.parse(source) || "";
+      return window.DOMPurify?.sanitize(renderedHtml, {
+        ALLOWED_TAGS: [
+          "a", "blockquote", "br", "code", "em", "h1", "h2", "h3", "h4",
+          "li", "ol", "p", "pre", "strong", "ul",
+        ],
+        ALLOWED_ATTR: ["href", "title"],
+      }) || "";
+    }
+
+    function throwIfRequestStoppedAfterPrefill(requestCtx, finishResult) {
+      if (finishResult?.cancelled || requestCtx?.stoppedByUser) {
+        const error = new Error("Request cancelled");
+        error.name = "AbortError";
+        throw error;
+      }
+    }
+
     function renderBubbleContent(bubble, content, options = {}) {
       if (!bubble) return;
       const text = String(content || "");
       const imageDataUrl = typeof options.imageDataUrl === "string" ? options.imageDataUrl : "";
       const imageName = typeof options.imageName === "string" ? options.imageName : "uploaded image";
+      const role = String(options.role || "");
 
+      bubble.classList.remove("markdown-rendered");
       if (!imageDataUrl) {
         bubble.classList.remove("with-image");
+        if (role === "assistant") {
+          const sanitizedHtml = renderAssistantMarkdownToHtml(text);
+          if (sanitizedHtml !== null) {
+            bubble.classList.add("markdown-rendered");
+            bubble.innerHTML = sanitizedHtml;
+            return;
+          }
+        }
         bubble.textContent = text;
         return;
       }
@@ -5112,7 +5567,7 @@ CHAT_HTML = """<!doctype html>
 
       const bubble = document.createElement("div");
       bubble.className = "message-bubble";
-      renderBubbleContent(bubble, content, options);
+      renderBubbleContent(bubble, content, { ...options, role });
 
       const meta = document.createElement("div");
       meta.className = "message-meta";
@@ -5123,13 +5578,67 @@ CHAT_HTML = """<!doctype html>
       row.appendChild(stack);
       box.appendChild(row);
       box.scrollTop = box.scrollHeight;
-      return { bubble, meta };
+      return { row, stack, bubble, meta, role };
+    }
+
+    function setMessageProcessingState(messageView, options = {}) {
+      const bubble = messageView?.bubble || messageView;
+      if (!bubble) return;
+      const phase = String(options.phase || "prefill");
+      const percentRaw = Number(options.percent);
+      const percent = Number.isFinite(percentRaw)
+        ? Math.max(0, Math.min(100, Math.round(percentRaw)))
+        : null;
+      const label = String(options.label || "Prompt processing");
+
+      bubble.classList.remove("with-image");
+      bubble.classList.add("processing");
+      bubble.dataset.phase = phase;
+      bubble.replaceChildren();
+
+      const shell = document.createElement("div");
+      shell.className = "message-processing-shell";
+
+      const labelEl = document.createElement("div");
+      labelEl.className = "message-processing-label";
+      labelEl.textContent = label;
+
+      const meter = document.createElement("div");
+      meter.className = "message-processing-meter";
+
+      const bar = document.createElement("div");
+      bar.className = "message-processing-bar";
+
+      const barFill = document.createElement("div");
+      barFill.className = "message-processing-bar-fill";
+      if (percent !== null && phase !== "generating") {
+        barFill.style.width = `${percent}%`;
+      }
+      bar.appendChild(barFill);
+
+      const percentEl = document.createElement("div");
+      percentEl.className = "message-processing-percent";
+      percentEl.textContent = phase === "generating"
+        ? "Live"
+        : `${percent ?? 0}%`;
+
+      meter.appendChild(bar);
+      meter.appendChild(percentEl);
+
+      shell.appendChild(labelEl);
+      shell.appendChild(meter);
+      bubble.appendChild(shell);
+
+      const box = document.getElementById("messages");
+      box.scrollTop = box.scrollHeight;
     }
 
     function updateMessage(messageView, content, options = {}) {
       const bubble = messageView?.bubble || messageView;
       if (!bubble) return;
-      renderBubbleContent(bubble, content, options);
+      bubble.classList.remove("processing");
+      delete bubble.dataset.phase;
+      renderBubbleContent(bubble, content, { ...options, role: messageView?.role || options.role });
       const box = document.getElementById("messages");
       box.scrollTop = box.scrollHeight;
     }
@@ -5140,6 +5649,13 @@ CHAT_HTML = """<!doctype html>
       const text = String(content || "").trim();
       meta.hidden = text.length === 0;
       meta.textContent = text;
+    }
+
+    function removeMessage(messageView) {
+      const row = messageView?.row;
+      if (row && row.parentNode) {
+        row.parentNode.removeChild(row);
+      }
     }
 
     function isLocalModelConnected(statusPayload) {
@@ -5263,47 +5779,47 @@ CHAT_HTML = """<!doctype html>
       if (!compact) return;
 
       const available = systemPayload?.available === true;
-      const cpuDetail = document.getElementById("runtimeDetailCpu");
-      const coresDetail = document.getElementById("runtimeDetailCores");
-      const cpuClockDetail = document.getElementById("runtimeDetailCpuClock");
-      const memoryDetail = document.getElementById("runtimeDetailMemory");
-      const swapDetail = document.getElementById("runtimeDetailSwap");
-      const storageDetail = document.getElementById("runtimeDetailStorage");
-      const tempDetail = document.getElementById("runtimeDetailTemp");
-      const piModelDetail = document.getElementById("runtimeDetailPiModel");
-      const osDetail = document.getElementById("runtimeDetailOs");
-      const kernelDetail = document.getElementById("runtimeDetailKernel");
-      const bootloaderDetail = document.getElementById("runtimeDetailBootloader");
-      const firmwareDetail = document.getElementById("runtimeDetailFirmware");
+      const cpuDetail = document.getElementById("runtimeDetailCpuValue");
+      const coresDetail = document.getElementById("runtimeDetailCoresValue");
+      const cpuClockDetail = document.getElementById("runtimeDetailCpuClockValue");
+      const memoryDetail = document.getElementById("runtimeDetailMemoryValue");
+      const swapLabelDetail = document.getElementById("runtimeDetailSwapLabel");
+      const swapDetail = document.getElementById("runtimeDetailSwapValue");
+      const storageDetail = document.getElementById("runtimeDetailStorageValue");
+      const tempDetail = document.getElementById("runtimeDetailTempValue");
+      const piModelDetail = document.getElementById("runtimeDetailPiModelValue");
+      const osDetail = document.getElementById("runtimeDetailOsValue");
+      const kernelDetail = document.getElementById("runtimeDetailKernelValue");
+      const bootloaderDetail = document.getElementById("runtimeDetailBootloaderValue");
+      const firmwareDetail = document.getElementById("runtimeDetailFirmwareValue");
       const powerDetail = document.getElementById("runtimeDetailPower");
       const powerRawDetail = document.getElementById("runtimeDetailPowerRaw");
-      const powerNoteDetail = document.getElementById("runtimeDetailPowerNote");
-      const gpuDetail = document.getElementById("runtimeDetailGpu");
-      const throttleDetail = document.getElementById("runtimeDetailThrottle");
-      const throttleHistoryDetail = document.getElementById("runtimeDetailThrottleHistory");
-      const updatedDetail = document.getElementById("runtimeDetailUpdated");
+      const gpuDetail = document.getElementById("runtimeDetailGpuValue");
+      const throttleDetail = document.getElementById("runtimeDetailThrottleValue");
+      const throttleHistoryDetail = document.getElementById("runtimeDetailThrottleHistoryValue");
+      const updatedDetail = document.getElementById("runtimeDetailUpdatedValue");
 
       if (!available) {
         compact.textContent = "CPU -- | Cores -- | GPU -- | Swap -- | Throttle --";
-        if (cpuDetail) cpuDetail.textContent = "CPU total: --";
-        if (coresDetail) coresDetail.textContent = "CPU cores: --";
-        if (cpuClockDetail) cpuClockDetail.textContent = "CPU clock: --";
-        if (memoryDetail) memoryDetail.textContent = "Memory: --";
-        if (swapDetail) swapDetail.textContent = "Swap: --";
-        if (storageDetail) storageDetail.textContent = "Storage free: --";
-        if (tempDetail) tempDetail.textContent = "Temperature: --";
-        if (piModelDetail) piModelDetail.textContent = "Pi model: --";
-        if (osDetail) osDetail.textContent = "OS: --";
-        if (kernelDetail) kernelDetail.textContent = "Kernel: --";
-        if (bootloaderDetail) bootloaderDetail.textContent = "Bootloader: --";
-        if (firmwareDetail) firmwareDetail.textContent = "Firmware: --";
+        if (cpuDetail) cpuDetail.textContent = "--";
+        if (coresDetail) coresDetail.textContent = "--";
+        if (cpuClockDetail) cpuClockDetail.textContent = "--";
+        if (memoryDetail) memoryDetail.textContent = "--";
+        if (swapLabelDetail) swapLabelDetail.textContent = "zram";
+        if (swapDetail) swapDetail.textContent = "--";
+        if (storageDetail) storageDetail.textContent = "--";
+        if (tempDetail) tempDetail.textContent = "--";
+        if (piModelDetail) piModelDetail.textContent = "--";
+        if (osDetail) osDetail.textContent = "--";
+        if (kernelDetail) kernelDetail.textContent = "--";
+        if (bootloaderDetail) bootloaderDetail.textContent = "--";
+        if (firmwareDetail) firmwareDetail.textContent = "--";
         if (powerDetail) powerDetail.textContent = "Power (estimated total): --";
         if (powerRawDetail) powerRawDetail.textContent = "Power (PMIC raw): --";
-        if (powerNoteDetail) powerNoteDetail.textContent = "Power note: --";
-        if (gpuDetail) gpuDetail.textContent = "GPU clock: --";
-        if (throttleDetail) throttleDetail.textContent = "Throttling: --";
-        if (throttleHistoryDetail) throttleHistoryDetail.textContent = "Throttling history: --";
-        if (updatedDetail) updatedDetail.textContent = "Updated: --";
+        if (gpuDetail) gpuDetail.textContent = "--";
+        if (throttleDetail) throttleDetail.textContent = "--";
+        if (throttleHistoryDetail) throttleHistoryDetail.textContent = "--";
+        if (updatedDetail) updatedDetail.textContent = "--";
         applyRuntimeMetricSeverity(cpuClockDetail, Number.NaN);
         applyRuntimeMetricSeverity(memoryDetail, Number.NaN);
         applyRuntimeMetricSeverity(swapDetail, Number.NaN);
@@ -5326,61 +5842,63 @@ CHAT_HTML = """<!doctype html>
       const gpuCompact = (gpuCore !== "--" || gpuV3d !== "--")
         ? `${gpuCore.replace(" MHz", "")}/${gpuV3d.replace(" MHz", "")} MHz`
         : "--";
+      const swapLabel = String(systemPayload?.swap_label || "swap").trim() || "swap";
       const swapPercent = formatPercent(systemPayload?.swap_percent, 0);
       const storageFree = formatBytes(systemPayload?.storage_free_bytes);
       const storagePercent = formatPercent(systemPayload?.storage_percent, 0);
       const throttlingNow = systemPayload?.throttling?.any_current === true ? "Yes" : "No";
-      compact.textContent = `CPU ${cpuTotal} @ ${cpuClock} | Cores ${coresText} | GPU ${gpuCompact} | Swap ${swapPercent} | Free ${storageFree} | Throttle ${throttlingNow}`;
+      compact.textContent = `CPU ${cpuTotal} @ ${cpuClock} | Cores ${coresText} | GPU ${gpuCompact} | ${swapLabel} ${swapPercent} | Free ${storageFree} | Throttle ${throttlingNow}`;
 
-      if (cpuDetail) cpuDetail.textContent = `CPU total: ${cpuTotal}`;
-      if (coresDetail) coresDetail.textContent = `CPU cores: ${coresText}`;
-      if (cpuClockDetail) cpuClockDetail.textContent = `CPU clock: ${cpuClock}`;
+      if (cpuDetail) cpuDetail.textContent = cpuTotal;
+      if (coresDetail) coresDetail.textContent = coresText;
+      if (cpuClockDetail) cpuClockDetail.textContent = cpuClock;
       applyRuntimeMetricSeverity(cpuClockDetail, percentFromRatio(systemPayload?.cpu_clock_arm_hz, CPU_CLOCK_MAX_HZ_PI5));
 
       const memUsed = formatBytes(systemPayload?.memory_used_bytes);
       const memTotal = formatBytes(systemPayload?.memory_total_bytes);
       const memPercent = formatPercent(systemPayload?.memory_percent, 0);
-      if (memoryDetail) memoryDetail.textContent = `Memory: ${memUsed} / ${memTotal} (${memPercent})`;
+      if (memoryDetail) memoryDetail.textContent = `${memUsed} / ${memTotal} (${memPercent})`;
       applyRuntimeMetricSeverity(memoryDetail, systemPayload?.memory_percent);
 
       const swapUsed = formatBytes(systemPayload?.swap_used_bytes);
       const swapTotal = formatBytes(systemPayload?.swap_total_bytes);
-      if (swapDetail) swapDetail.textContent = `Swap: ${swapUsed} / ${swapTotal} (${swapPercent})`;
+      if (swapLabelDetail) swapLabelDetail.textContent = swapLabel;
+      if (swapDetail) swapDetail.textContent = `${swapUsed} / ${swapTotal} (${swapPercent})`;
       applyRuntimeMetricSeverity(swapDetail, systemPayload?.swap_percent);
 
       const storageUsed = formatBytes(systemPayload?.storage_used_bytes);
       const storageTotal = formatBytes(systemPayload?.storage_total_bytes);
-      if (storageDetail) storageDetail.textContent = `Storage free: ${storageFree} (${storageUsed} / ${storageTotal} used, ${storagePercent})`;
+      if (storageDetail) storageDetail.textContent = `${storageFree} (${storageUsed} / ${storageTotal} used, ${storagePercent})`;
       applyRuntimeMetricSeverity(storageDetail, systemPayload?.storage_percent);
 
       const tempRaw = systemPayload?.temperature_c;
       const tempValue = typeof tempRaw === "number" ? tempRaw : Number.NaN;
       if (tempDetail) {
         tempDetail.textContent = Number.isFinite(tempValue)
-          ? `Temperature: ${tempValue.toFixed(1)}°C`
-          : "Temperature: --";
+          ? `${tempValue.toFixed(1)}°C`
+          : "--";
       }
       applyRuntimeMetricSeverity(tempDetail, tempValue);
 
       const piModelName = String(systemPayload?.pi_model_name || "").trim();
       if (piModelDetail) {
-        piModelDetail.textContent = piModelName ? `Pi model: ${piModelName}` : "Pi model: --";
+        piModelDetail.textContent = piModelName || "--";
       }
 
       const osPrettyName = String(systemPayload?.os_pretty_name || "").trim();
       if (osDetail) {
-        osDetail.textContent = osPrettyName ? `OS: ${osPrettyName}` : "OS: --";
+        osDetail.textContent = osPrettyName || "--";
       }
 
       const kernelRelease = String(systemPayload?.kernel_release || "").trim();
       const kernelVersion = String(systemPayload?.kernel_version || "").trim();
       if (kernelDetail) {
         if (kernelRelease && kernelVersion) {
-          kernelDetail.textContent = `Kernel: ${kernelRelease} | ${kernelVersion}`;
+          kernelDetail.textContent = `${kernelRelease} • ${kernelVersion}`;
         } else if (kernelRelease || kernelVersion) {
-          kernelDetail.textContent = `Kernel: ${kernelRelease || kernelVersion}`;
+          kernelDetail.textContent = kernelRelease || kernelVersion;
         } else {
-          kernelDetail.textContent = "Kernel: --";
+          kernelDetail.textContent = "--";
         }
       }
 
@@ -5389,11 +5907,11 @@ CHAT_HTML = """<!doctype html>
       const bootloaderVersion = String(bootloader?.version || "").trim();
       if (bootloaderDetail) {
         if (bootloaderDate && bootloaderVersion) {
-          bootloaderDetail.textContent = `Bootloader: ${bootloaderDate} | ${bootloaderVersion}`;
+          bootloaderDetail.textContent = `${bootloaderDate} • ${bootloaderVersion}`;
         } else if (bootloaderDate || bootloaderVersion) {
-          bootloaderDetail.textContent = `Bootloader: ${bootloaderDate || bootloaderVersion}`;
+          bootloaderDetail.textContent = bootloaderDate || bootloaderVersion;
         } else {
-          bootloaderDetail.textContent = "Bootloader: --";
+          bootloaderDetail.textContent = "--";
         }
       }
 
@@ -5402,11 +5920,11 @@ CHAT_HTML = """<!doctype html>
       const firmwareVersion = String(firmware?.version || "").trim();
       if (firmwareDetail) {
         if (firmwareDate && firmwareVersion) {
-          firmwareDetail.textContent = `Firmware: ${firmwareDate} | ${firmwareVersion}`;
+          firmwareDetail.textContent = `${firmwareDate} • ${firmwareVersion}`;
         } else if (firmwareDate || firmwareVersion) {
-          firmwareDetail.textContent = `Firmware: ${firmwareDate || firmwareVersion}`;
+          firmwareDetail.textContent = firmwareDate || firmwareVersion;
         } else {
-          firmwareDetail.textContent = "Firmware: --";
+          firmwareDetail.textContent = "--";
         }
       }
 
@@ -5423,14 +5941,8 @@ CHAT_HTML = """<!doctype html>
           ? `Power (PMIC raw): ${rawPowerWatts.toFixed(3)} W`
           : "Power (PMIC raw): --";
       }
-      if (powerNoteDetail) {
-        const note = String(powerEstimate?.estimated_total_disclaimer || powerEstimate?.disclaimer || "").trim();
-        powerNoteDetail.textContent = (powerEstimate?.available === true || Number.isFinite(adjustedPowerWatts)) && note
-          ? `Power note: ${note}`
-          : "Power note: --";
-      }
 
-      if (gpuDetail) gpuDetail.textContent = `GPU clock: core ${gpuCore}, v3d ${gpuV3d}`;
+      if (gpuDetail) gpuDetail.textContent = `core ${gpuCore}, v3d ${gpuV3d}`;
       const gpuPeakHz = Math.max(
         Number(systemPayload?.gpu_clock_core_hz) || 0,
         Number(systemPayload?.gpu_clock_v3d_hz) || 0,
@@ -5445,20 +5957,20 @@ CHAT_HTML = """<!doctype html>
         : [];
       if (throttleDetail) {
         throttleDetail.textContent = currentFlags.length > 0
-          ? `Throttling: Yes (${currentFlags.join(", ")})`
-          : "Throttling: No";
+          ? `Yes (${currentFlags.join(", ")})`
+          : "No";
       }
       if (throttleHistoryDetail) {
         throttleHistoryDetail.textContent = historyFlags.length > 0
-          ? `Throttling history: ${historyFlags.join(", ")}`
-          : "Throttling history: None";
+          ? historyFlags.join(", ")
+          : "None";
       }
 
       const updatedTs = Number(systemPayload?.updated_at_unix);
       if (updatedDetail) {
         updatedDetail.textContent = Number.isFinite(updatedTs) && updatedTs > 0
-          ? `Updated: ${new Date(updatedTs * 1000).toLocaleTimeString()}`
-          : "Updated: --";
+          ? new Date(updatedTs * 1000).toLocaleTimeString()
+          : "--";
       }
     }
 
@@ -6450,7 +6962,23 @@ CHAT_HTML = """<!doctype html>
       }
     }
 
-    function formatAssistantStats(source, elapsedSeconds = 0) {
+    function resolveTimeToFirstTokenMs(source, fallbackMs = 0) {
+      const direct = Number(
+        source?.timings?.ttft_ms
+        ?? source?.timings?.first_token_ms
+        ?? source?.timings?.prompt_ms
+      );
+      if (Number.isFinite(direct) && direct > 0) {
+        return direct;
+      }
+      const fallback = Number(fallbackMs);
+      if (Number.isFinite(fallback) && fallback > 0) {
+        return fallback;
+      }
+      return 0;
+    }
+
+    function formatAssistantStats(source, elapsedSeconds = 0, firstTokenLatencyMs = 0) {
       const timings = source?.timings && typeof source.timings === "object" ? source.timings : {};
       const usage = source?.usage && typeof source.usage === "object" ? source.usage : {};
       const rawTokens = Number(timings.predicted_n ?? usage.completion_tokens ?? 0);
@@ -6467,7 +6995,40 @@ CHAT_HTML = """<!doctype html>
       }
 
       const finishReason = source?.finish_reason ?? source?.choices?.[0]?.finish_reason ?? null;
-      return `${tokPerSecond.toFixed(2)} tok/sec, ${tokens} tokens, ${seconds.toFixed(2)}s Stop reason: ${formatStopReason(finishReason)}`;
+      const ttftMs = resolveTimeToFirstTokenMs(source, firstTokenLatencyMs);
+      const ttftText = ttftMs > 0 ? `${(ttftMs / 1000).toFixed(2)}s` : "--";
+      return `TTFT ${ttftText} · ${tokPerSecond.toFixed(2)} tok/sec · ${tokens} tokens · ${seconds.toFixed(2)}s · Stop reason: ${formatStopReason(finishReason)}`;
+    }
+
+    function classifyPi5MemoryTier(totalBytes) {
+      const value = Number(totalBytes);
+      if (!Number.isFinite(value) || value <= 0) return null;
+      const gib = value / (1024 ** 3);
+      const supportedTiers = [1, 2, 4, 8, 16];
+      let bestTier = supportedTiers[0];
+      let bestDistance = Math.abs(gib - bestTier);
+      for (const tier of supportedTiers.slice(1)) {
+        const distance = Math.abs(gib - tier);
+        if (distance < bestDistance) {
+          bestTier = tier;
+          bestDistance = distance;
+        }
+      }
+      return `${bestTier}GB`;
+    }
+
+    function setSidebarNote(systemPayload) {
+      const noteEl = document.getElementById("sidebarNote");
+      if (!noteEl) return;
+      const piModelName = String(systemPayload?.pi_model_name || "").trim();
+      const memoryTier = classifyPi5MemoryTier(systemPayload?.memory_total_bytes);
+      if (piModelName && memoryTier) {
+        noteEl.textContent = `v0.2 · ${piModelName} · ${memoryTier}`;
+        return;
+      }
+      noteEl.textContent = piModelName
+        ? `v0.2 · ${piModelName}`
+        : "v0.2";
     }
 
     function setStatus(statusPayload) {
@@ -6476,6 +7037,7 @@ CHAT_HTML = """<!doctype html>
       const total = formatBytes(statusPayload.download.bytes_total);
       const text = `State: ${statusPayload.state} | Download: ${statusPayload.download.percent}% (${downloaded} / ${total})`;
       document.getElementById("statusText").textContent = text;
+      setSidebarNote(statusPayload?.system);
       const modelNameField = document.getElementById("modelName");
       if (modelNameField) {
         const modelName = statusPayload?.model?.filename || "Unknown model";
@@ -6639,6 +7201,8 @@ CHAT_HTML = """<!doctype html>
         imageDataUrl: userBubblePayload.imageDataUrl,
         imageName: userBubblePayload.imageName,
       });
+      activeAssistantView = appendMessage("assistant", "");
+      requestCtx.assistantView = activeAssistantView;
       userPrompt.value = "";
       clearPendingImage();
       focusPromptInput();
@@ -6694,13 +7258,11 @@ CHAT_HTML = """<!doctype html>
         if (!res.ok) {
           stopPrefillProgress();
           const body = await res.json().catch(() => ({}));
-          appendMessage("assistant", `Request failed (${res.status}): ${JSON.stringify(body)}`);
+          updateMessage(activeAssistantView, `Request failed (${res.status}): ${JSON.stringify(body)}`);
           return;
         }
 
         if (settings.stream) {
-          const assistantDiv = appendMessage("assistant", "");
-          activeAssistantView = assistantDiv;
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           const state = { buffer: "" };
@@ -6729,15 +7291,16 @@ CHAT_HTML = """<!doctype html>
               if (!requestCtx.generationStarted) {
                 requestCtx.generationStarted = true;
                 requestCtx.firstTokenLatencyMs = Math.max(0, performance.now() - requestStartMs);
-                markPrefillGenerationStarted(requestCtx);
+                const finishResult = await markPrefillGenerationStarted(requestCtx);
+                throwIfRequestStoppedAfterPrefill(requestCtx, finishResult);
               }
               assistantText += delta;
-              updateMessage(assistantDiv, assistantText);
+              updateMessage(activeAssistantView, assistantText);
             }
             for (const reasoningDelta of parsed.reasoningDeltas) {
               assistantReasoningText += reasoningDelta;
               if (!assistantText.trim()) {
-                updateMessage(assistantDiv, formatReasoningOnlyMessage(assistantReasoningText));
+                updateMessage(activeAssistantView, formatReasoningOnlyMessage(assistantReasoningText));
               }
             }
             for (const event of parsed.events) {
@@ -6770,16 +7333,17 @@ CHAT_HTML = """<!doctype html>
           if (!requestCtx.generationStarted) {
             requestCtx.generationStarted = true;
             requestCtx.firstTokenLatencyMs = Math.max(0, performance.now() - requestStartMs);
-            markPrefillGenerationStarted(requestCtx);
+            const finishResult = await markPrefillGenerationStarted(requestCtx);
+            throwIfRequestStoppedAfterPrefill(requestCtx, finishResult);
           }
           const finalAssistantText = assistantText.trim() || formatReasoningOnlyMessage(assistantReasoningText);
-          updateMessage(assistantDiv, finalAssistantText);
+          updateMessage(activeAssistantView, finalAssistantText);
           chatHistory.push({ role: "assistant", content: finalAssistantText });
           const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
           if (requestCtx.stoppedByUser) {
             streamStats.finish_reason = "cancelled";
           }
-          setMessageMeta(assistantDiv, formatAssistantStats(streamStats, elapsedSeconds));
+          setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs));
           recordPrefillMetric(
             requestCtx.prefillBucket,
             resolvePromptPrefillMs(streamStats, requestCtx.firstTokenLatencyMs),
@@ -6791,22 +7355,26 @@ CHAT_HTML = """<!doctype html>
         if (!requestCtx.generationStarted) {
           requestCtx.generationStarted = true;
           requestCtx.firstTokenLatencyMs = Math.max(0, performance.now() - requestStartMs);
-          markPrefillGenerationStarted(requestCtx);
+          const finishResult = await markPrefillGenerationStarted(requestCtx);
+          throwIfRequestStoppedAfterPrefill(requestCtx, finishResult);
         }
         const message = body?.choices?.[0]?.message || {};
         const messageContent = typeof message?.content === "string" ? message.content.trim() : "";
         const msg = messageContent || formatReasoningOnlyMessage(message?.reasoning_content) || JSON.stringify(body);
         chatHistory.push({ role: "assistant", content: msg });
-        const assistantDiv = appendMessage("assistant", msg);
+        updateMessage(activeAssistantView, msg);
         const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
-        setMessageMeta(assistantDiv, formatAssistantStats(body, elapsedSeconds));
+        setMessageMeta(activeAssistantView, formatAssistantStats(body, elapsedSeconds, requestCtx.firstTokenLatencyMs));
         recordPrefillMetric(
           requestCtx.prefillBucket,
           resolvePromptPrefillMs(body, requestCtx.firstTokenLatencyMs),
         );
       } catch (err) {
-        if (requestCtx.stoppedByUser) {
-          const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
+          if (requestCtx.stoppedByUser) {
+            const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
+          if (requestCtx.hideProcessingBubbleOnCancel === true) {
+            return;
+          }
           if (activeAssistantView) {
             const partial = activeAssistantView.bubble.textContent.trim();
             if (!partial) {
@@ -6815,13 +7383,17 @@ CHAT_HTML = """<!doctype html>
               chatHistory.push({ role: "assistant", content: partial });
             }
             streamStats.finish_reason = "cancelled";
-            setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds));
+            setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs));
           } else {
             const stoppedDiv = appendMessage("assistant", "(stopped)");
-            setMessageMeta(stoppedDiv, formatAssistantStats({ finish_reason: "cancelled" }, elapsedSeconds));
+            setMessageMeta(stoppedDiv, formatAssistantStats({ finish_reason: "cancelled" }, elapsedSeconds, requestCtx.firstTokenLatencyMs));
           }
         } else {
-          appendMessage("assistant", `Request error: ${err}`);
+          if (activeAssistantView) {
+            updateMessage(activeAssistantView, `Request error: ${err}`);
+          } else {
+            appendMessage("assistant", `Request error: ${err}`);
+          }
         }
       } finally {
         requestInFlight = false;
@@ -6954,6 +7526,10 @@ CHAT_HTML = """<!doctype html>
         setComposerActivity("Cancelling...");
         setComposerStatusChip("Cancelling...", { phase: "cancel" });
         setCancelEnabled(false);
+        if (current && current.assistantView?.bubble?.classList?.contains("processing")) {
+          current.hideProcessingBubbleOnCancel = true;
+          removeMessage(current.assistantView);
+        }
         stopGeneration();
         queueImageCancelRecovery(current);
       }
@@ -6969,7 +7545,6 @@ CHAT_HTML = """<!doctype html>
     bindSettings();
     bindMobileSidebar();
     setRuntimeDetailsExpanded(false);
-    appendMessage("assistant", "Potato OS is online. Ask anything to get started.");
     setInterval(pollStatus, 2000);
     pollStatus();
 
@@ -7058,6 +7633,7 @@ CHAT_HTML = """<!doctype html>
 
 def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool | None = None) -> FastAPI:
     app = FastAPI(title="Potato Web", version="0.2")
+    app.mount("/assets", StaticFiles(directory=str(WEB_ASSETS_DIR)), name="assets")
     app.state.runtime = runtime or RuntimeConfig.from_env()
     app.state.llama_process = None
     app.state.model_download_task = None

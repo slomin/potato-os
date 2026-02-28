@@ -208,6 +208,21 @@ def test_clean_image_build_artifacts_script_cleans_outputs_and_optional_caches()
     assert "find \"${target}\" -mindepth 1 -maxdepth 1 -exec rm -rf {} +" in script
 
 
+def test_chat_html_loads_local_markdown_assets_and_renders_assistant_markdown():
+    assert '<script src="/assets/vendor/marked.umd.js"></script>' in CHAT_HTML
+    assert '<script src="/assets/vendor/purify.min.js"></script>' in CHAT_HTML
+    assert "function renderAssistantMarkdownToHtml(text)" in CHAT_HTML
+    assert "window.marked?.parse" in CHAT_HTML
+    assert "window.DOMPurify?.sanitize" in CHAT_HTML
+    assert "ALLOWED_TAGS" in CHAT_HTML
+    assert "ALLOWED_ATTR" in CHAT_HTML
+    assert '"img",' not in CHAT_HTML
+    assert "'img'," not in CHAT_HTML
+    assert "USE_PROFILES: { html: true }" not in CHAT_HTML
+    assert "bubble.innerHTML = sanitizedHtml;" in CHAT_HTML
+    assert "renderBubbleContent(bubble, content, { ...options, role });" in CHAT_HTML
+
+
 def test_imager_manifest_generator_is_pi5_only():
     script = Path("bin/generate_imager_manifest.py").read_text(encoding="utf-8")
 
@@ -366,7 +381,7 @@ def test_chat_ui_streaming_parses_sse_and_ignores_done_marker():
     assert "function consumeSseDeltas" in CHAT_HTML
     assert 'dataPayload === "[DONE]"' in CHAT_HTML
     assert "event?.choices?.[0]?.delta?.content" in CHAT_HTML
-    assert "updateMessage(assistantDiv, assistantText)" in CHAT_HTML
+    assert "updateMessage(activeAssistantView, assistantText)" in CHAT_HTML
     assert 'renderMessage("assistant", output.trim())' not in CHAT_HTML
 
 
@@ -417,7 +432,14 @@ def test_chat_ui_keeps_theme_toggle_clear_of_status_badge():
 
 
 def test_chat_ui_copy_and_stats_footnote_contract():
-    assert "Local-first chat frontend on your Pi." in CHAT_HTML
+    assert 'id="sidebarNote"' in CHAT_HTML
+    assert ">v0.2<" in CHAT_HTML
+    assert "function classifyPi5MemoryTier(" in CHAT_HTML
+    assert "function setSidebarNote(" in CHAT_HTML
+    assert "statusPayload?.system" in CHAT_HTML
+    assert "v0.2 · ${piModelName} · ${memoryTier}" in CHAT_HTML
+    assert "Potato OS is online. Ask anything to get started." not in CHAT_HTML
+    assert "Local-first chat frontend on your Pi." not in CHAT_HTML
     assert "Local-first chat front end on your Pi." not in CHAT_HTML
     assert "Press Enter to send. Shift+Enter adds a new line." not in CHAT_HTML
     assert 'meta.className = "message-meta"' in CHAT_HTML
@@ -466,7 +488,7 @@ def test_chat_ui_exposes_llama_runtime_bundle_switch_controls():
 
 
 def test_chat_ui_exposes_llama_memory_loading_controls():
-    assert "Model Memory Loading" in CHAT_HTML
+    assert "GGUF loading mode (requires runtime restart)" in CHAT_HTML
     assert 'id="llamaMemoryLoadingMode"' in CHAT_HTML
     assert 'id="applyLlamaMemoryLoadingBtn"' in CHAT_HTML
     assert 'id="llamaMemoryLoadingStatus"' in CHAT_HTML
@@ -644,29 +666,40 @@ def test_chat_ui_shows_pi_runtime_compact_with_details_toggle_above_settings():
     assert 'id="runtimeCompact"' in CHAT_HTML
     assert 'id="runtimeDetails"' in CHAT_HTML
     assert 'id="runtimeViewToggle"' in CHAT_HTML
-    assert 'id="runtimeDetailCpuClock"' in CHAT_HTML
+    assert 'id="runtimeDetailsPowerGroup"' in CHAT_HTML
+    assert 'id="runtimeDetailsPerformanceGroup"' in CHAT_HTML
+    assert 'id="runtimeDetailsMemoryGroup"' in CHAT_HTML
+    assert 'id="runtimeDetailsPlatformGroup"' in CHAT_HTML
+    assert 'id="runtimeDetailCpuClockValue"' in CHAT_HTML
     assert "Show details" in CHAT_HTML
     assert "function setRuntimeDetailsExpanded(" in CHAT_HTML
     assert "function renderSystemRuntime(" in CHAT_HTML
-    assert "CPU clock:" in CHAT_HTML
-    assert "Storage free:" in CHAT_HTML
-    assert 'id="runtimeDetailStorage"' in CHAT_HTML
-    assert 'id="runtimeDetailPiModel"' in CHAT_HTML
-    assert 'id="runtimeDetailOs"' in CHAT_HTML
-    assert 'id="runtimeDetailKernel"' in CHAT_HTML
-    assert 'id="runtimeDetailBootloader"' in CHAT_HTML
-    assert 'id="runtimeDetailFirmware"' in CHAT_HTML
+    assert 'id="runtimeDetailStorageValue"' in CHAT_HTML
+    assert 'id="runtimeDetailSwapValue"' in CHAT_HTML
+    assert 'id="runtimeDetailPiModelValue"' in CHAT_HTML
+    assert 'id="runtimeDetailOsValue"' in CHAT_HTML
+    assert 'id="runtimeDetailKernelValue"' in CHAT_HTML
+    assert 'id="runtimeDetailBootloaderValue"' in CHAT_HTML
+    assert 'id="runtimeDetailFirmwareValue"' in CHAT_HTML
     assert 'id="runtimeDetailPower"' in CHAT_HTML
     assert 'id="runtimeDetailPowerRaw"' in CHAT_HTML
-    assert 'id="runtimeDetailPowerNote"' in CHAT_HTML
     assert 'class="runtime-detail-prominent"' in CHAT_HTML
     assert "Power (estimated total):" in CHAT_HTML
     assert "Power (PMIC raw):" in CHAT_HTML
-    assert "Bootloader:" in CHAT_HTML
-    assert "Firmware:" in CHAT_HTML
-    assert CHAT_HTML.index('id="runtimeDetailPower"') < CHAT_HTML.index('id="runtimeDetailCpu"')
+    assert '>Bootloader</span>' in CHAT_HTML
+    assert '>Firmware</span>' in CHAT_HTML
+    assert "Performance" in CHAT_HTML
+    assert "Memory &amp; storage" in CHAT_HTML
+    assert "Platform" in CHAT_HTML
+    assert '>zram</span>' in CHAT_HTML
+    assert "Power note:" not in CHAT_HTML
+    assert CHAT_HTML.index('id="runtimeDetailPower"') < CHAT_HTML.index('id="runtimeDetailCpuValue"')
     assert "renderSystemRuntime(statusPayload?.system)" in CHAT_HTML
     assert CHAT_HTML.index('id="systemRuntimeCard"') < CHAT_HTML.index('<details class="settings"')
+    assert 'id="settingsRuntimeSection"' in CHAT_HTML
+    assert 'id="settingsModelSection"' in CHAT_HTML
+    assert 'id="settingsAdvancedSection"' in CHAT_HTML
+    assert 'id="settingsPowerCalibration"' in CHAT_HTML
     assert 'id="powerCalibrationWallWatts"' in CHAT_HTML
     assert 'id="capturePowerCalibrationSampleBtn"' in CHAT_HTML
     assert 'id="fitPowerCalibrationBtn"' in CHAT_HTML
@@ -750,19 +783,36 @@ def test_chat_ui_shows_processing_indicator_while_generating():
     assert "function hideComposerStatusChip(" in CHAT_HTML
     assert "function setCancelEnabled(" in CHAT_HTML
     assert "function cancelCurrentWork(" in CHAT_HTML
-    assert "const PREFILL_PROGRESS_CAP = 95;" in CHAT_HTML
+    assert "const PREFILL_PROGRESS_CAP = 99;" in CHAT_HTML
     assert "function estimatePrefillEtaMs(" in CHAT_HTML
     assert "function beginPrefillProgress(" in CHAT_HTML
     assert "function markPrefillGenerationStarted(" in CHAT_HTML
     assert "function stopPrefillProgress(" in CHAT_HTML
+    assert "return Promise.resolve({ cancelled: false });" in CHAT_HTML
+    assert "resolve({ cancelled: true });" in CHAT_HTML
+    assert "resolve({ cancelled: false });" in CHAT_HTML
+    assert "function throwIfRequestStoppedAfterPrefill(" in CHAT_HTML
+    assert "if (finishResult?.cancelled || requestCtx?.stoppedByUser)" in CHAT_HTML
+    assert "const PREFILL_FINISH_DURATION_MS =" in CHAT_HTML
+    assert "const PREFILL_FINISH_HOLD_MS =" in CHAT_HTML
+    assert "function setMessageProcessingState(" in CHAT_HTML
+    assert "className = \"message-processing-shell\"" in CHAT_HTML
+    assert "const PREFILL_PROGRESS_TAIL_START = 89;" in CHAT_HTML
+    assert "Prompt processing" in CHAT_HTML
+    assert "Generating reply" not in CHAT_HTML
     assert "potato_prefill_metrics_v1" in CHAT_HTML
     assert "Preparing prompt..." in CHAT_HTML
     assert "Preparing prompt • " in CHAT_HTML
     assert "Preparing prompt: " not in CHAT_HTML
+    assert "1 - Math.exp(-3.2 * Math.min(1.4, normalized))" in CHAT_HTML
+    assert "Math.log1p(overtimeSeconds) * 2.6" in CHAT_HTML
     assert "Math.min(PREFILL_PROGRESS_CAP" in CHAT_HTML
-    assert 'setComposerStatusChip("Generating..."' in CHAT_HTML
+    assert 'applyPrefillProgressState(requestCtx, 100);' in CHAT_HTML
+    assert 'window.__POTATO_PREFILL_FINISH_DURATION_MS__' in CHAT_HTML
+    assert 'window.__POTATO_PREFILL_FINISH_HOLD_MS__' in CHAT_HTML
     assert 'setComposerActivity("Reading image...")' in CHAT_HTML
     assert "reader.onprogress" in CHAT_HTML
     assert "pendingImageReader.abort();" in CHAT_HTML
     assert 'document.getElementById("cancelBtn").addEventListener("click", cancelCurrentWork);' in CHAT_HTML
     assert "setComposerActivity(\"\")" in CHAT_HTML
+    assert "TTFT " in CHAT_HTML

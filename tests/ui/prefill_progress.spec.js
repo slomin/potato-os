@@ -64,36 +64,249 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
 });
 
 test("shows staged prefill estimate before first token and clears after generation starts", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 300;
+    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 350;
+  });
   await waitUntilReady(page);
 
   await page.locator("#userPrompt").fill("Give me one sentence about Potato OS.");
   await page.locator("#userPrompt").press("Enter");
 
+  const assistantPending = page.locator(".message-row.assistant .message-bubble.processing").last();
   const chip = page.locator("#composerStatusChip");
   const chipText = page.locator("#composerStatusText");
+  await expect(assistantPending).toBeVisible();
+  await expect(assistantPending).toContainText("Prompt processing");
   await expect(chip).toBeVisible();
-  await expect(chipText).toContainText(/Preparing prompt •|Generating\.\.\./);
+  await expect(chipText).toContainText(/Preparing prompt •/);
 
   const values = [];
-  for (let i = 0; i < 6; i += 1) {
-    await page.waitForTimeout(180);
-    if (await chip.isHidden()) {
+  let sawHundred = false;
+  for (let i = 0; i < 30; i += 1) {
+    await page.waitForTimeout(120);
+    if (!(await chip.isHidden())) {
+      const label = await chipText.innerText();
+      const match = label.match(/(\d+)%/);
+      if (match) {
+        const value = Number(match[1]);
+        values.push(value);
+        if (value === 100) {
+          sawHundred = true;
+        }
+      }
+    } else if (sawHundred) {
       break;
-    }
-    const label = await chipText.innerText();
-    const match = label.match(/(\d+)%/);
-    if (match) {
-      values.push(Number(match[1]));
     }
   }
 
   if (values.length > 0) {
     expect(values.every((value, index) => index === 0 || value >= values[index - 1])).toBeTruthy();
-    expect(Math.max(...values)).toBeLessThanOrEqual(95);
+    expect(Math.max(...values)).toBeLessThanOrEqual(100);
   }
+  expect(sawHundred).toBeTruthy();
 
   await expect(page.locator(".message-row.assistant .message-bubble").last()).toContainText("[fake-llama.cpp]");
+  await expect(page.locator(".message-row.assistant .message-bubble.processing").last()).toBeHidden();
+  await expect(page.locator(".message-meta").last()).toContainText(/TTFT \d+\.\d{2}s/);
   await expect(chip).toBeHidden();
+});
+
+test("renders assistant markdown as formatted html", async ({ page }) => {
+  await waitUntilReady(page);
+
+  await page.route("**/v1/chat/completions", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "chatcmpl-md",
+        object: "chat.completion",
+        created: 1771778048,
+        model: "qwen-local",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "# Linus Torvalds\n\nHere are the key facts:\n\n- **Linux** kernel\n- Open source\n\n`uname -a`",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        timings: {
+          prompt_ms: 1200,
+          predicted_ms: 800,
+          predicted_n: 12,
+          predicted_per_second: 15,
+        },
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 12,
+          total_tokens: 22,
+        },
+      }),
+    });
+  });
+
+  await page.locator("details.settings").evaluate((el) => { el.open = true; });
+  await page.locator("#stream").selectOption("false");
+  await page.locator("#userPrompt").fill("Format this nicely.");
+  await page.locator("#userPrompt").press("Enter");
+
+  const bubble = page.locator(".message-row.assistant .message-bubble").last();
+  await expect(bubble.locator("h1")).toHaveText("Linus Torvalds");
+  await expect(bubble.locator("li")).toHaveCount(2);
+  await expect(bubble.locator("strong")).toHaveText("Linux");
+  await expect(bubble.locator("code")).toHaveText("uname -a");
+});
+
+test("streaming cancel during finish animation does not render buffered assistant output", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 1200;
+    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 250;
+  });
+  await waitUntilReady(page);
+
+  await page.locator("#userPrompt").fill("Give me a streamed response.");
+  await page.locator("#userPrompt").press("Enter");
+
+  const chipText = page.locator("#composerStatusText");
+  await expect
+    .poll(async () => {
+      const label = await chipText.innerText();
+      const match = label.match(/(\d+)%/);
+      return match ? Number(match[1]) : 0;
+    })
+    .toBeGreaterThanOrEqual(95);
+
+  await page.locator("#cancelBtn").click();
+
+  await expect(page.locator(".message-row.assistant .message-bubble.processing")).toHaveCount(0);
+  await expect(page.locator("#composerStatusChip")).toBeHidden();
+  await expect(page.locator("#sendBtn")).toHaveText("Send");
+  await page.waitForTimeout(1500);
+  await expect(page.locator(".message-row.assistant .message-bubble")).toHaveCount(0);
+});
+
+test("non-stream cancel during finish animation does not render buffered assistant output", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 1200;
+    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 250;
+  });
+  await waitUntilReady(page);
+
+  await page.route("**/v1/chat/completions", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "chatcmpl-cancel",
+        object: "chat.completion",
+        created: 1771778048,
+        model: "qwen-local",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "This should never appear after cancel.",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        timings: {
+          prompt_ms: 1200,
+          predicted_ms: 500,
+          predicted_n: 8,
+          predicted_per_second: 16,
+        },
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 8,
+          total_tokens: 18,
+        },
+      }),
+    });
+  });
+
+  await page.locator("details.settings").evaluate((el) => { el.open = true; });
+  await page.locator("#stream").selectOption("false");
+  await page.locator("#userPrompt").fill("Give me a non-stream response.");
+  await page.locator("#userPrompt").press("Enter");
+
+  await page.waitForTimeout(350);
+
+  await page.locator("#cancelBtn").click();
+
+  await expect(page.locator(".message-row.assistant .message-bubble.processing")).toHaveCount(0);
+  await expect(page.locator("#composerStatusChip")).toBeHidden();
+  await expect(page.locator("#sendBtn")).toHaveText("Send");
+  await page.waitForTimeout(1500);
+  await expect(page.locator(".message-row.assistant .message-bubble")).toHaveCount(0);
+});
+
+test("assistant markdown strips remote resource tags while keeping safe formatting", async ({ page }) => {
+  await waitUntilReady(page);
+
+  const remoteRequests = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://example.com/")) {
+      remoteRequests.push(request.url());
+    }
+  });
+
+  await page.route("https://example.com/**", async (route) => {
+    await route.abort();
+  });
+
+  await page.route("**/v1/chat/completions", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "chatcmpl-md-safe",
+        object: "chat.completion",
+        created: 1771778048,
+        model: "qwen-local",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "# Linus Torvalds\n\n- **Linux** kernel\n- Open source\n\n![tracker](https://example.com/tracker.png)\n<img src=\"https://example.com/raw.png\" alt=\"raw\">\n\n`uname -a`",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        timings: {
+          prompt_ms: 1200,
+          predicted_ms: 800,
+          predicted_n: 12,
+          predicted_per_second: 15,
+        },
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 12,
+          total_tokens: 22,
+        },
+      }),
+    });
+  });
+
+  await page.locator("details.settings").evaluate((el) => { el.open = true; });
+  await page.locator("#stream").selectOption("false");
+  await page.locator("#userPrompt").fill("Format this safely.");
+  await page.locator("#userPrompt").press("Enter");
+
+  const bubble = page.locator(".message-row.assistant .message-bubble").last();
+  await expect(bubble.locator("h1")).toHaveText("Linus Torvalds");
+  await expect(bubble.locator("li")).toHaveCount(2);
+  await expect(bubble.locator("strong")).toHaveText("Linux");
+  await expect(bubble.locator("code")).toHaveText("uname -a");
+  await expect(bubble.locator("img")).toHaveCount(0);
+  expect(remoteRequests).toHaveLength(0);
 });
 
 test("cancel during prefill stops cleanly and shows stopped reason", async ({ page }) => {
@@ -102,18 +315,23 @@ test("cancel during prefill stops cleanly and shows stopped reason", async ({ pa
   await page.locator("#userPrompt").fill("Explain distributed systems in detail.");
   await page.locator("#userPrompt").press("Enter");
 
+  await expect(page.locator(".message-row.assistant .message-bubble.processing").last()).toContainText("Prompt processing");
   await expect(page.locator("#composerStatusChip")).toBeVisible();
-  await expect(page.locator("#composerStatusText")).toContainText(/Preparing prompt •|Generating\.\.\./);
+  await expect(page.locator("#composerStatusText")).toContainText(/Preparing prompt •/);
   await expect(page.locator("#sendBtn")).toHaveText("Stop");
 
   await page.locator("#cancelBtn").click();
 
-  await expect(page.locator(".message-meta").last()).toContainText("Stopped by user");
+  await expect(page.locator(".message-row.assistant .message-bubble.processing")).toHaveCount(0);
   await expect(page.locator("#composerStatusChip")).toBeHidden();
   await expect(page.locator("#sendBtn")).toHaveText("Send");
 });
 
 test("large image selection shows loading phases and optimization metadata", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 300;
+    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 350;
+  });
   await waitUntilReady(page);
 
   await page.locator("#imageInput").setInputFiles("references/test-cat.jpg");
@@ -125,9 +343,25 @@ test("large image selection shows loading phases and optimization metadata", asy
   await page.locator("#userPrompt").fill("Describe this image.");
   await page.locator("#userPrompt").press("Enter");
 
+  await expect(page.locator(".message-row.assistant .message-bubble.processing").last()).toContainText("Prompt processing");
   await expect(page.locator("#composerStatusChip")).toBeVisible();
-  await expect(page.locator("#composerStatusText")).toContainText(/Preparing prompt •|Generating\.\.\./);
+  await expect(page.locator("#composerStatusText")).toContainText(/Preparing prompt •/);
+  let sawHundred = false;
+  for (let i = 0; i < 30; i += 1) {
+    await page.waitForTimeout(120);
+    const chip = page.locator("#composerStatusChip");
+    if (await chip.isHidden()) {
+      if (sawHundred) break;
+      continue;
+    }
+    const label = await page.locator("#composerStatusText").innerText();
+    if (/100%/.test(label)) {
+      sawHundred = true;
+    }
+  }
+  expect(sawHundred).toBeTruthy();
   await expect(page.locator(".message-row.assistant .message-bubble").last()).toContainText("[fake-llama.cpp]");
+  await expect(page.locator(".message-meta").last()).toContainText(/TTFT \d+\.\d{2}s/);
   await expect(page.locator("#composerStatusChip")).toBeHidden();
 });
 
@@ -285,7 +519,7 @@ test("renders compact Pi runtime info and toggles details view", async ({ page }
   await page.locator("#runtimeViewToggle").click();
   await expect(page.locator("#runtimeCompact")).toBeHidden();
   await expect(page.locator("#runtimeDetails")).toBeVisible();
-  await expect(page.locator("#runtimeDetails")).toContainText("CPU clock: 2400 MHz");
+  await expect(page.locator("#runtimeDetailCpuClockValue")).toHaveText("2400 MHz");
   await expect(page.locator("#runtimeDetails")).toContainText("Soft temp limit occurred");
 
   await page.locator("#runtimeViewToggle").click();
@@ -345,10 +579,10 @@ test("runtime details apply threshold colors for clock, memory, swap, and temper
   await page.goto("/");
   await page.locator("#runtimeViewToggle").click();
 
-  await expect(page.locator("#runtimeDetailCpuClock")).toHaveClass(/runtime-metric-critical/);
-  await expect(page.locator("#runtimeDetailMemory")).toHaveClass(/runtime-metric-critical/);
-  await expect(page.locator("#runtimeDetailSwap")).toHaveClass(/runtime-metric-high/);
-  await expect(page.locator("#runtimeDetailTemp")).toHaveClass(/runtime-metric-high/);
+  await expect(page.locator("#runtimeDetailCpuClockValue")).toHaveClass(/runtime-metric-critical/);
+  await expect(page.locator("#runtimeDetailMemoryValue")).toHaveClass(/runtime-metric-critical/);
+  await expect(page.locator("#runtimeDetailSwapValue")).toHaveClass(/runtime-metric-high/);
+  await expect(page.locator("#runtimeDetailTempValue")).toHaveClass(/runtime-metric-high/);
 });
 
 test("fake backend ready state shows connected badge", async ({ page }) => {

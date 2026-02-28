@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -5957,7 +5958,54 @@ CHAT_HTML = """<!doctype html>
 
 
 def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool | None = None) -> FastAPI:
-    app = FastAPI(title="Potato Web", version="0.2")
+    @asynccontextmanager
+    async def _lifespan(app: FastAPI):
+        app.state.startup_monotonic = get_monotonic_time()
+        ensure_models_state(app.state.runtime)
+        prime_system_metrics_counters()
+        app.state.system_metrics_snapshot = collect_system_metrics_snapshot()
+        app.state.system_metrics_task = asyncio.create_task(
+            system_metrics_loop(app),
+            name="potato-system-metrics",
+        )
+        if app.state.runtime.enable_orchestrator:
+            app.state.orchestrator_task = asyncio.create_task(
+                orchestrator_loop(app, app.state.runtime),
+                name="potato-orchestrator",
+            )
+        try:
+            yield
+        finally:
+            task = app.state.orchestrator_task
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            proc = app.state.llama_process
+            if proc is not None and proc.returncode is None:
+                proc.terminate()
+                await proc.wait()
+
+            download_task = app.state.model_download_task
+            if is_download_task_active(download_task):
+                download_task.cancel()
+                try:
+                    await download_task
+                except asyncio.CancelledError:
+                    pass
+
+            system_task = app.state.system_metrics_task
+            if system_task is not None:
+                system_task.cancel()
+                try:
+                    await system_task
+                except asyncio.CancelledError:
+                    pass
+
+    app = FastAPI(title="Potato Web", version="0.2", lifespan=_lifespan)
     app.mount("/assets", StaticFiles(directory=str(WEB_ASSETS_DIR)), name="assets")
     app.state.runtime = runtime or RuntimeConfig.from_env()
     app.state.llama_process = None
@@ -5980,53 +6028,6 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
 
     if enable_orchestrator is not None:
         app.state.runtime.enable_orchestrator = enable_orchestrator
-
-    @app.on_event("startup")
-    async def _startup() -> None:
-        app.state.startup_monotonic = get_monotonic_time()
-        ensure_models_state(app.state.runtime)
-        prime_system_metrics_counters()
-        app.state.system_metrics_snapshot = collect_system_metrics_snapshot()
-        app.state.system_metrics_task = asyncio.create_task(
-            system_metrics_loop(app),
-            name="potato-system-metrics",
-        )
-        if app.state.runtime.enable_orchestrator:
-            app.state.orchestrator_task = asyncio.create_task(
-                orchestrator_loop(app, app.state.runtime),
-                name="potato-orchestrator",
-            )
-
-    @app.on_event("shutdown")
-    async def _shutdown() -> None:
-        task = app.state.orchestrator_task
-        if task is not None:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-        proc = app.state.llama_process
-        if proc is not None and proc.returncode is None:
-            proc.terminate()
-            await proc.wait()
-
-        download_task = app.state.model_download_task
-        if is_download_task_active(download_task):
-            download_task.cancel()
-            try:
-                await download_task
-            except asyncio.CancelledError:
-                pass
-
-        system_task = app.state.system_metrics_task
-        if system_task is not None:
-            system_task.cancel()
-            try:
-                await system_task
-            except asyncio.CancelledError:
-                pass
 
     @app.get("/", response_class=HTMLResponse)
     async def root() -> HTMLResponse:

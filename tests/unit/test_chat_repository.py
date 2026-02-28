@@ -37,7 +37,7 @@ class _FakeAsyncClient:
         self.closed = True
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_llama_stream_closes_upstream_and_client_when_consumer_closes(monkeypatch: pytest.MonkeyPatch):
     upstream = _FakeUpstream()
     client = _FakeAsyncClient(upstream)
@@ -66,7 +66,7 @@ async def test_llama_stream_closes_upstream_and_client_when_consumer_closes(monk
     assert client.closed is True
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fake_stream_uses_test_mode_prefill_and_chunk_delay(monkeypatch: pytest.MonkeyPatch):
     sleep_calls: list[float] = []
 
@@ -96,7 +96,7 @@ async def test_fake_stream_uses_test_mode_prefill_and_chunk_delay(monkeypatch: p
     assert 0.04 in sleep_calls
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_fake_stream_honors_prefill_delay_override_without_test_mode(monkeypatch: pytest.MonkeyPatch):
     sleep_calls: list[float] = []
 

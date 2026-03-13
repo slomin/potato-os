@@ -2527,24 +2527,178 @@ CHAT_HTML = """<!doctype html>
       min-width: 0;
     }
 
+    .settings-utility-card > label,
+    .settings-chat-panel > label.full,
+    .settings-field-grid > label {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      min-width: 0;
+      padding: 12px 14px;
+      border-radius: 18px;
+      border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, white 10%), color-mix(in srgb, var(--panel-muted) 84%, transparent));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      font-size: 12.5px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: var(--text-muted);
+    }
+
+    .settings-field-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .settings-field-hint {
+      font-size: 11px;
+      font-weight: 600;
+      color: color-mix(in srgb, var(--text-muted) 90%, transparent);
+      letter-spacing: 0;
+    }
+
+    .settings-chat-panel > label.full {
+      padding: 14px 16px;
+    }
+
     .settings-grid input,
     .settings-grid select,
     .settings-grid textarea {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--panel-muted);
+      border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+      border-radius: 14px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, white 8%), color-mix(in srgb, var(--panel-muted) 86%, transparent));
       color: var(--text);
-      padding: 8px 10px;
+      padding: 10px 12px;
       font: inherit;
       width: 100%;
       max-width: 100%;
       min-width: 0;
       box-sizing: border-box;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      transition: border-color 140ms ease, box-shadow 160ms ease, background 160ms ease, transform 140ms ease;
+    }
+
+    .settings-utility-card input:not([type="file"]),
+    .settings-utility-card select,
+    .settings-utility-card textarea,
+    .settings-chat-panel input:not([type="checkbox"]):not([type="file"]),
+    .settings-chat-panel select,
+    .settings-chat-panel textarea {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+      border-radius: 14px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 94%, white 6%), color-mix(in srgb, var(--panel-muted) 76%, transparent));
+      color: var(--text);
+      padding: 11px 13px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.4;
+      box-sizing: border-box;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      transition: border-color 140ms ease, box-shadow 160ms ease, background 160ms ease;
+    }
+
+    .settings-utility-card input[type="file"] {
+      width: 100%;
+      min-width: 0;
+      font: inherit;
+      color: var(--text);
+    }
+
+    .settings-chat-panel textarea,
+    .settings-utility-card textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .settings-chat-panel select,
+    .settings-utility-card select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding-right: 38px;
+      background-image:
+        linear-gradient(45deg, transparent 50%, color-mix(in srgb, var(--text-muted) 88%, transparent) 50%),
+        linear-gradient(135deg, color-mix(in srgb, var(--text-muted) 88%, transparent) 50%, transparent 50%);
+      background-position:
+        calc(100% - 20px) calc(50% - 2px),
+        calc(100% - 14px) calc(50% - 2px);
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+    }
+
+    .settings-segmented {
+      display: inline-grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px;
+      padding: 4px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+      background: color-mix(in srgb, var(--panel-muted) 82%, transparent);
+      width: fit-content;
+      min-width: 100%;
+    }
+
+    .settings-segment-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 999px;
+      padding: 9px 12px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: background 140ms ease, color 140ms ease, box-shadow 160ms ease;
+    }
+
+    .settings-segment-btn:hover {
+      color: var(--text);
+    }
+
+    .settings-segment-btn.active {
+      background: color-mix(in srgb, var(--panel) 96%, white 4%);
+      color: var(--text);
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+    }
+
+    .settings-segment-btn:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, #f59e0b 12%, transparent),
+        0 4px 10px rgba(15, 23, 42, 0.08);
     }
 
     .settings-grid textarea {
-      min-height: 70px;
+      min-height: 86px;
       resize: vertical;
+    }
+
+    .settings-grid input:focus,
+    .settings-grid select:focus,
+    .settings-grid textarea:focus,
+    .settings-utility-card input:not([type="file"]):focus,
+    .settings-utility-card select:focus,
+    .settings-utility-card textarea:focus,
+    .settings-chat-panel input:not([type="checkbox"]):not([type="file"]):focus,
+    .settings-chat-panel select:focus,
+    .settings-chat-panel textarea:focus,
+    .settings-yaml-input:focus,
+    .edit-modal-input:focus {
+      outline: none;
+      border-color: color-mix(in srgb, #f59e0b 44%, var(--border));
+      box-shadow:
+        0 0 0 4px color-mix(in srgb, #f59e0b 12%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      background: color-mix(in srgb, var(--panel) 94%, white 6%);
     }
 
     #seed:disabled {
@@ -2572,15 +2726,39 @@ CHAT_HTML = """<!doctype html>
       margin: 0;
       font-size: 13px;
       color: var(--text-muted);
-      letter-spacing: 0.02em;
-      font-weight: 720;
+      letter-spacing: 0.04em;
+      font-weight: 800;
       text-transform: none;
     }
 
     .settings-section-note {
-      font-size: 12px;
+      font-size: 12.5px;
       color: var(--text-muted);
-      line-height: 1.4;
+      line-height: 1.5;
+    }
+
+    .settings-modal .ghost-btn {
+      border-color: color-mix(in srgb, var(--border) 62%, transparent);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, white 8%), color-mix(in srgb, var(--panel-muted) 84%, transparent));
+      color: var(--text);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .settings-modal .ghost-btn:hover {
+      border-color: color-mix(in srgb, #f59e0b 22%, var(--border));
+      background:
+        linear-gradient(180deg, color-mix(in srgb, #f59e0b 8%, var(--panel)), color-mix(in srgb, var(--panel-muted) 80%, transparent));
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.07);
+    }
+
+    .settings-modal .ghost-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
 
     .settings-subdetails {
@@ -2690,14 +2868,16 @@ CHAT_HTML = """<!doctype html>
     }
 
     .settings-modal-shell {
-      width: min(1040px, calc(100vw - 32px));
-      max-height: calc(100vh - 32px);
+      width: min(1180px, calc(100vw - 28px));
+      max-height: calc(100vh - 28px);
       overflow: auto;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      background: var(--panel);
-      box-shadow: var(--shadow);
-      padding: 18px;
+      border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+      border-radius: 32px;
+      background:
+        radial-gradient(circle at top left, color-mix(in srgb, #f59e0b 10%, transparent), transparent 32%),
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 95%, white 5%), color-mix(in srgb, var(--panel-muted) 30%, var(--panel) 70%));
+      box-shadow: 0 34px 90px rgba(15, 23, 42, 0.22);
+      padding: 26px;
       pointer-events: auto;
     }
 
@@ -2705,8 +2885,8 @@ CHAT_HTML = """<!doctype html>
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 12px;
+      gap: 20px;
+      margin-bottom: 10px;
     }
 
     .settings-modal-header-actions {
@@ -2718,14 +2898,17 @@ CHAT_HTML = """<!doctype html>
 
     .settings-modal-title {
       margin: 0;
-      font-size: 20px;
-      line-height: 1.1;
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: -0.03em;
     }
 
     .settings-modal-note {
-      margin: 6px 0 0;
-      font-size: 13px;
+      margin: 10px 0 0;
+      font-size: 14px;
+      line-height: 1.5;
       color: var(--text-muted);
+      max-width: 58ch;
     }
 
     .settings-close-btn {
@@ -2754,31 +2937,38 @@ CHAT_HTML = """<!doctype html>
 
     .settings-workspace-shell {
       display: grid;
-      gap: 14px;
+      gap: 20px;
     }
 
     .settings-workspace-tabs {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
+      padding: 6px;
+      border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel-muted) 78%, transparent);
+      width: fit-content;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
 
     .settings-workspace-tab {
-      border: 1px solid var(--border);
+      border: 1px solid transparent;
       border-radius: 999px;
-      background: var(--panel-muted);
+      background: transparent;
       color: var(--text-muted);
       font: inherit;
-      font-weight: 650;
-      padding: 8px 14px;
+      font-weight: 700;
+      padding: 10px 16px;
       cursor: pointer;
     }
 
     .settings-workspace-tab.active {
-      background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+      background: color-mix(in srgb, var(--panel) 94%, white 6%);
       color: var(--text);
-      border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+      border-color: color-mix(in srgb, #f59e0b 26%, var(--border));
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
     }
 
     .settings-workspace-panel[hidden] {
@@ -2787,23 +2977,150 @@ CHAT_HTML = """<!doctype html>
 
     .settings-workspace-grid {
       display: grid;
-      gap: 14px;
-      grid-template-columns: minmax(280px, 0.92fr) minmax(0, 1.08fr);
+      gap: 22px;
+      grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.15fr);
       align-items: start;
     }
 
-    .selected-model-header {
+    .settings-section {
+      gap: 16px;
+      border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+      border-radius: 22px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 94%, white 6%), color-mix(in srgb, var(--panel-muted) 16%, var(--panel) 84%));
+      padding: 18px;
+      box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
+    }
+
+    .settings-panel-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .settings-utility-card {
       display: grid;
-      gap: 10px;
+      gap: 12px;
+      border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--panel-muted) 86%, transparent), color-mix(in srgb, var(--panel) 92%, var(--panel-muted) 8%));
+      padding: 14px;
+    }
+
+    .settings-model-list-wrap {
+      border-top: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+      padding-top: 8px;
+    }
+
+    .settings-model-list {
+      display: grid;
+      gap: 12px;
+      max-height: 56vh;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .selected-model-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      padding: 18px;
+      border-radius: 22px;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, #f59e0b 12%, var(--panel)) 0%, color-mix(in srgb, var(--panel-muted) 90%, transparent) 48%, color-mix(in srgb, #2f7cf6 6%, var(--panel)) 100%);
+      border: 1px solid color-mix(in srgb, #f59e0b 22%, var(--border));
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+    }
+
+    .selected-model-header-copy {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    #modelName {
+      border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--panel) 86%, white 14%);
+      padding: 12px 14px;
+      font-size: 16px;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .settings-save-btn {
+      white-space: nowrap;
+      font-weight: 700;
+      border-color: color-mix(in srgb, #f59e0b 30%, var(--border));
+      background: color-mix(in srgb, #f59e0b 11%, var(--panel));
+    }
+
+    .settings-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-height: 28px;
+    }
+
+    .settings-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+      background: color-mix(in srgb, var(--panel-muted) 74%, transparent);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .settings-chip[data-kind="active"] {
+      border-color: color-mix(in srgb, #10a37f 40%, var(--border));
+      background: color-mix(in srgb, #10a37f 14%, var(--panel));
+      color: color-mix(in srgb, var(--text) 82%, #10a37f 18%);
+    }
+
+    .settings-chip[data-kind="vision"] {
+      border-color: color-mix(in srgb, #347ae3 40%, var(--border));
+      background: color-mix(in srgb, #347ae3 12%, var(--panel));
+      color: color-mix(in srgb, var(--text) 82%, #347ae3 18%);
+    }
+
+    .settings-chip[data-kind="status"] {
+      border-color: color-mix(in srgb, #f59e0b 38%, var(--border));
+      background: color-mix(in srgb, #f59e0b 12%, var(--panel));
+      color: color-mix(in srgb, var(--text) 80%, #b45309 20%);
+    }
+
+    .settings-chat-panel {
+      gap: 16px;
+    }
+
+    .settings-field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .settings-field-grid label:first-child,
+    .settings-field-grid label:nth-child(2) {
+      grid-column: span 1;
     }
 
     .settings-subpanel {
-      border: 1px dashed color-mix(in srgb, var(--border) 88%, transparent);
-      border-radius: 10px;
-      padding: 10px;
-      background: color-mix(in srgb, var(--panel-muted) 65%, transparent);
+      border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+      border-radius: 18px;
+      padding: 16px;
+      background: color-mix(in srgb, var(--panel-muted) 58%, transparent);
       display: grid;
-      gap: 10px;
+      gap: 14px;
     }
 
     .settings-subpanel-header {
@@ -2817,7 +3134,8 @@ CHAT_HTML = """<!doctype html>
     .settings-subpanel-title {
       margin: 0;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: 0.01em;
       color: var(--text);
     }
 
@@ -2831,14 +3149,14 @@ CHAT_HTML = """<!doctype html>
 
     .settings-yaml-input {
       width: 100%;
-      min-height: 420px;
+      min-height: 460px;
       resize: vertical;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: var(--panel-muted);
+      border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--panel-muted) 76%, transparent);
       color: var(--text);
       font: 500 13px/1.5 "SFMono-Regular", "Menlo", "Monaco", monospace;
-      padding: 12px;
+      padding: 16px;
       box-sizing: border-box;
     }
 
@@ -2900,21 +3218,17 @@ CHAT_HTML = """<!doctype html>
       min-height: 200px;
       max-height: 52vh;
       resize: vertical;
-      border: 1px solid var(--border);
+      border: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
       border-radius: 22px;
-      background: var(--composer-bg);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--composer-bg) 94%, white 6%), color-mix(in srgb, var(--panel-muted) 62%, var(--composer-bg)));
       color: var(--text);
       font: inherit;
       font-size: 16px;
       line-height: 1.5;
       padding: 18px 20px;
-      outline: none;
       box-sizing: border-box;
-    }
-
-    .edit-modal-input:focus {
-      border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
     }
 
     .edit-modal-actions {
@@ -2943,6 +3257,28 @@ CHAT_HTML = """<!doctype html>
       min-width: 118px;
     }
 
+    .edit-modal .ghost-btn,
+    .edit-modal .primary-btn {
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .edit-modal .ghost-btn {
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, white 10%), color-mix(in srgb, var(--panel-muted) 84%, transparent));
+      border-color: color-mix(in srgb, var(--border) 62%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .edit-modal .primary-btn {
+      border: 1px solid color-mix(in srgb, #f59e0b 26%, #10a37f 44%);
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      color: #fffaf2;
+      box-shadow: 0 12px 24px rgba(249, 115, 22, 0.22);
+    }
+
     .model-row-actions {
       display: grid;
       grid-template-columns: 1fr;
@@ -2957,54 +3293,94 @@ CHAT_HTML = """<!doctype html>
     }
 
     .model-row {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--panel-muted);
-      padding: 8px;
+      border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, white 8%), color-mix(in srgb, var(--panel-muted) 10%, var(--panel) 90%));
+      padding: 14px;
       display: grid;
-      gap: 6px;
+      gap: 10px;
       cursor: pointer;
+      transition: border-color 140ms ease, transform 140ms ease, box-shadow 180ms ease, background 180ms ease;
     }
 
     .model-row.selected {
-      border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+      border-color: color-mix(in srgb, #f59e0b 30%, var(--border));
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, #f59e0b 18%, transparent),
+        0 16px 32px rgba(15, 23, 42, 0.10);
+      transform: translateY(-1px);
+      background:
+        linear-gradient(135deg, color-mix(in srgb, #f59e0b 8%, var(--panel)) 0%, color-mix(in srgb, var(--panel-muted) 88%, transparent) 42%, color-mix(in srgb, #2f7cf6 5%, var(--panel)) 100%);
+    }
+
+    .model-row:hover {
+      border-color: color-mix(in srgb, #f59e0b 18%, var(--border));
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+      transform: translateY(-1px);
     }
 
     .model-row-head {
       font-size: 12px;
       color: var(--text);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .model-row-name {
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .model-row-meta {
       display: flex;
-      justify-content: space-between;
+      flex-wrap: wrap;
       gap: 8px;
       align-items: center;
     }
 
-    .model-row-name {
-      font-weight: 600;
-      overflow-wrap: anywhere;
+    .model-mini-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel-muted) 82%, transparent);
+      border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
     }
 
     .model-status-pill {
-      border: 1px solid var(--border);
+      border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
       border-radius: 999px;
-      padding: 2px 8px;
+      padding: 5px 10px;
       font-size: 11px;
       color: var(--text-muted);
-      background: var(--panel);
+      background: color-mix(in srgb, var(--panel-muted) 78%, transparent);
       white-space: nowrap;
+      font-weight: 700;
     }
 
     .model-row-actions {
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
+      align-items: center;
+      padding-top: 4px;
+      border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
     }
 
     .model-row-actions .ghost-btn {
       width: auto;
       font-size: 12px;
-      padding: 5px 10px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel-muted) 75%, transparent);
     }
 
     .danger-btn {
@@ -3184,6 +3560,19 @@ CHAT_HTML = """<!doctype html>
       .settings-workspace-grid {
         grid-template-columns: 1fr;
       }
+      .selected-model-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .model-row-head {
+        grid-template-columns: 1fr;
+      }
+      .settings-field-grid {
+        grid-template-columns: 1fr;
+      }
+      .settings-segmented {
+        width: 100%;
+      }
       .edit-modal {
         padding: 12px;
       }
@@ -3260,7 +3649,7 @@ CHAT_HTML = """<!doctype html>
       </div>
       <section class="sidebar-section">
         <h2 class="brand">Potato OS</h2>
-        <p id="sidebarNote" class="sidebar-note">v0.2</p>
+        <p id="sidebarNote" class="sidebar-note">V0.3 Pre-Alpha</p>
         <div class="status-summary">
           <div id="statusText" class="status-card">Checking status...</div>
           <div id="statusActions" class="status-actions" hidden>
@@ -3399,72 +3788,91 @@ CHAT_HTML = """<!doctype html>
       <div id="settingsModelWorkspace" class="settings-workspace-panel">
         <div class="settings-workspace-grid">
           <section class="settings-section settings-models-column">
-            <h3 class="settings-section-title">Models</h3>
-            <div class="settings-section-note">Auto-download bootstrap is paused for now. Use explicit downloads only.</div>
-            <label class="full">Add model by URL
-              <input id="modelUrlInput" type="url" placeholder="https://.../model.gguf">
-            </label>
-            <div class="settings-action-row full">
-              <button id="registerModelBtn" class="ghost-btn" type="button">Add URL model</button>
+            <div class="settings-panel-heading">
+              <div>
+                <h3 class="settings-section-title">Models</h3>
+                <div class="settings-section-note">Auto-download bootstrap is paused for now. Use explicit downloads only.</div>
+              </div>
             </div>
-            <label class="full">Upload local GGUF to Pi
-              <input id="modelUploadInput" type="file" accept=".gguf,application/octet-stream">
-            </label>
-            <div class="settings-action-row full">
-              <button id="uploadModelBtn" class="ghost-btn" type="button">Upload model</button>
-              <button id="cancelUploadBtn" class="ghost-btn" type="button" hidden>Cancel upload</button>
-              <button id="purgeModelsBtn" class="ghost-btn danger-btn" type="button">Delete all models</button>
+            <div class="settings-utility-card">
+              <label class="full">Add model by URL
+                <input id="modelUrlInput" type="url" placeholder="https://.../model.gguf">
+              </label>
+              <div class="settings-action-row full">
+                <button id="registerModelBtn" class="ghost-btn" type="button">Add URL model</button>
+              </div>
+              <label class="full">Upload local GGUF to Pi
+                <input id="modelUploadInput" type="file" accept=".gguf,application/octet-stream">
+              </label>
+              <div class="settings-action-row full">
+                <button id="uploadModelBtn" class="ghost-btn" type="button">Upload model</button>
+                <button id="cancelUploadBtn" class="ghost-btn" type="button" hidden>Cancel upload</button>
+                <button id="purgeModelsBtn" class="ghost-btn danger-btn" type="button">Delete all models</button>
+              </div>
+              <div id="modelUploadStatus" class="runtime-compact full">No upload in progress.</div>
             </div>
-            <div id="modelUploadStatus" class="runtime-compact full">No upload in progress.</div>
-            <div class="full">
-              <div id="modelsList" class="runtime-details"></div>
+            <div class="full settings-model-list-wrap">
+              <div id="modelsList" class="runtime-details settings-model-list"></div>
             </div>
           </section>
           <section class="settings-section settings-editor-column">
             <div class="selected-model-header">
-              <div>
+              <div class="selected-model-header-copy">
                 <h3 class="settings-section-title">Selected model</h3>
+                <input id="modelName" type="text" value="Checking..." readonly>
                 <div id="modelSettingsStatus" class="runtime-compact">Select a model to edit its chat and vision settings.</div>
               </div>
-              <input id="modelName" type="text" value="Checking..." readonly>
+              <button id="saveModelSettingsBtn" class="ghost-btn settings-save-btn" type="button">Save model settings</button>
             </div>
+            <div id="modelCapabilitiesChips" class="settings-chip-row" aria-live="polite"></div>
             <div id="modelCapabilitiesText" class="settings-section-note">Capabilities unknown.</div>
-            <label class="full">System Prompt (optional)
-              <textarea id="systemPrompt" placeholder="Set assistant behavior for this model"></textarea>
-            </label>
-            <label>Streaming
-              <select id="stream">
-                <option value="true">true</option>
-                <option value="false">false</option>
-              </select>
-            </label>
-            <label>Generation Mode
-              <select id="generationMode">
-                <option value="random">Random</option>
-                <option value="deterministic">Deterministic</option>
-              </select>
-            </label>
-            <label>Seed
-              <input id="seed" type="number" step="1">
-            </label>
-            <label>Temperature
-              <input id="temperature" type="number" step="0.1" min="0" max="2">
-            </label>
-            <label>Top P
-              <input id="top_p" type="number" step="0.1" min="0" max="1">
-            </label>
-            <label>Top K
-              <input id="top_k" type="number" step="1" min="0">
-            </label>
-            <label>Repetition Penalty
-              <input id="repetition_penalty" type="number" step="0.1" min="0">
-            </label>
-            <label>Presence Penalty
-              <input id="presence_penalty" type="number" step="0.1">
-            </label>
-            <label>Max Tokens
-              <input id="max_tokens" type="number" step="1" min="1">
-            </label>
+            <section class="settings-subpanel full settings-chat-panel">
+              <div class="settings-subpanel-header">
+                <h4 class="settings-subpanel-title">Chat profile</h4>
+              </div>
+              <label class="full">System Prompt (optional)
+                <textarea id="systemPrompt" placeholder="Set assistant behavior for this model"></textarea>
+              </label>
+              <div class="settings-field-grid">
+                <label>
+                  <span class="settings-field-label">Streaming</span>
+                  <div class="settings-segmented" data-target="stream" role="group" aria-label="Streaming">
+                    <button type="button" class="settings-segment-btn" data-target="stream" data-value="true">On</button>
+                    <button type="button" class="settings-segment-btn" data-target="stream" data-value="false">Off</button>
+                  </div>
+                  <input id="stream" type="hidden" value="true">
+                </label>
+                <label>
+                  <span class="settings-field-label">Generation Mode</span>
+                  <div class="settings-segmented" data-target="generationMode" role="group" aria-label="Generation Mode">
+                    <button type="button" class="settings-segment-btn" data-target="generationMode" data-value="random">Random</button>
+                    <button type="button" class="settings-segment-btn" data-target="generationMode" data-value="deterministic">Deterministic</button>
+                  </div>
+                  <input id="generationMode" type="hidden" value="random">
+                </label>
+                <label><span class="settings-field-label">Seed <span class="settings-field-hint">Only used in deterministic mode</span></span>
+                  <input id="seed" type="number" step="1">
+                </label>
+                <label><span class="settings-field-label">Temperature</span>
+                  <input id="temperature" type="number" step="0.1" min="0" max="2">
+                </label>
+                <label><span class="settings-field-label">Top P</span>
+                  <input id="top_p" type="number" step="0.1" min="0" max="1">
+                </label>
+                <label><span class="settings-field-label">Top K</span>
+                  <input id="top_k" type="number" step="1" min="0">
+                </label>
+                <label><span class="settings-field-label">Repetition Penalty</span>
+                  <input id="repetition_penalty" type="number" step="0.1" min="0">
+                </label>
+                <label><span class="settings-field-label">Presence Penalty</span>
+                  <input id="presence_penalty" type="number" step="0.1">
+                </label>
+                <label><span class="settings-field-label">Max Tokens</span>
+                  <input id="max_tokens" type="number" step="1" min="1">
+                </label>
+              </div>
+            </section>
             <section id="settingsVisionSection" class="settings-subpanel full">
               <div class="settings-subpanel-header">
                 <h4 class="settings-subpanel-title">Vision</h4>
@@ -3478,9 +3886,6 @@ CHAT_HTML = """<!doctype html>
                 <button id="downloadProjectorBtn" class="ghost-btn" type="button">Download vision encoder</button>
               </div>
             </section>
-            <div class="settings-action-row full">
-              <button id="saveModelSettingsBtn" class="ghost-btn" type="button">Save model settings</button>
-            </div>
           </section>
         </div>
       </div>
@@ -4375,9 +4780,27 @@ CHAT_HTML = """<!doctype html>
       setLegacySettingsModalOpen(false);
     }
 
+    function syncSegmentedControl(targetId) {
+      const currentValue = String(document.getElementById(targetId)?.value || "");
+      document.querySelectorAll(`.settings-segmented[data-target="${targetId}"] .settings-segment-btn`).forEach((button) => {
+        const active = String(button.dataset.value || "") === currentValue;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    function setSegmentedControlValue(targetId, value) {
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      input.value = String(value || "");
+      syncSegmentedControl(targetId);
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
     function renderSelectedModelSettings(statusPayload) {
       const selectedModel = resolveSelectedSettingsModel(statusPayload);
       const modelNameField = document.getElementById("modelName");
+      const capabilitiesChips = document.getElementById("modelCapabilitiesChips");
       const capabilitiesText = document.getElementById("modelCapabilitiesText");
       const statusEl = document.getElementById("modelSettingsStatus");
       const saveBtn = document.getElementById("saveModelSettingsBtn");
@@ -4388,6 +4811,7 @@ CHAT_HTML = """<!doctype html>
       if (!selectedModel) {
         if (modelNameField) modelNameField.value = "No model selected";
         if (capabilitiesText) capabilitiesText.textContent = "Register or upload a model to configure it.";
+        if (capabilitiesChips) capabilitiesChips.replaceChildren();
         if (statusEl) statusEl.textContent = "No models registered yet.";
         if (saveBtn) saveBtn.disabled = true;
         if (projectorBtn) projectorBtn.disabled = true;
@@ -4410,6 +4834,29 @@ CHAT_HTML = """<!doctype html>
           supportsVision ? "Vision capable" : "Text only",
         ].filter(Boolean);
         capabilitiesText.textContent = bits.join(" · ");
+      }
+      if (capabilitiesChips) {
+        const chipSpecs = [
+          {
+            kind: "active",
+            text: selectedModel?.is_active ? "Active" : "Inactive",
+          },
+          {
+            kind: "status",
+            text: formatModelStatusLabel(selectedModel?.status),
+          },
+          {
+            kind: "vision",
+            text: supportsVision ? "Vision" : "Text only",
+          },
+        ];
+        capabilitiesChips.replaceChildren(...chipSpecs.map((chip) => {
+          const node = document.createElement("span");
+          node.className = "settings-chip";
+          node.dataset.kind = String(chip.kind || "");
+          node.textContent = String(chip.text || "");
+          return node;
+        }));
       }
       if (statusEl) {
         const currentText = String(statusEl.textContent || "");
@@ -4434,6 +4881,8 @@ CHAT_HTML = """<!doctype html>
       document.getElementById("repetition_penalty").value = String(chat.repetition_penalty);
       document.getElementById("presence_penalty").value = String(chat.presence_penalty);
       document.getElementById("max_tokens").value = String(chat.max_tokens);
+      syncSegmentedControl("stream");
+      syncSegmentedControl("generationMode");
       updateSeedFieldState(chat.generation_mode);
 
       if (visionSection) {
@@ -4499,6 +4948,20 @@ CHAT_HTML = """<!doctype html>
         status.textContent = formatModelStatusLabel(model?.status);
         head.appendChild(name);
         head.appendChild(status);
+
+        const meta = document.createElement("div");
+        meta.className = "model-row-meta";
+        const metaBits = [];
+        if (model?.is_active === true) metaBits.push("Active");
+        if (model?.capabilities?.vision) metaBits.push("Vision");
+        if (model?.storage?.location === "ssd") metaBits.push("SSD");
+        if (String(model?.source_type || "") === "url") metaBits.push("URL");
+        for (const bit of metaBits) {
+          const chip = document.createElement("span");
+          chip.className = "model-mini-chip";
+          chip.textContent = String(bit);
+          meta.appendChild(chip);
+        }
 
         const actions = document.createElement("div");
         actions.className = "model-row-actions";
@@ -4567,6 +5030,9 @@ CHAT_HTML = """<!doctype html>
           actions.appendChild(progress);
         }
         row.appendChild(head);
+        if (meta.childElementCount > 0) {
+          row.appendChild(meta);
+        }
         row.appendChild(actions);
         container.appendChild(row);
       }
@@ -5004,9 +5470,16 @@ CHAT_HTML = """<!doctype html>
       document.getElementById("downloadProjectorBtn").addEventListener("click", downloadProjectorForSelectedModel);
       document.getElementById("settingsYamlReloadBtn").addEventListener("click", loadSettingsDocument);
       document.getElementById("settingsYamlApplyBtn").addEventListener("click", applySettingsDocument);
+      document.querySelectorAll(".settings-segment-btn").forEach((button) => {
+        button.addEventListener("click", () => {
+          setSegmentedControlValue(String(button.dataset.target || ""), String(button.dataset.value || ""));
+        });
+      });
       document.getElementById("generationMode").addEventListener("change", (event) => {
         updateSeedFieldState(normalizeGenerationMode(event.target?.value));
       });
+      syncSegmentedControl("stream");
+      syncSegmentedControl("generationMode");
       document.getElementById("legacySettingsCloseBtn").addEventListener("click", closeLegacySettingsModal);
       document.getElementById("legacySettingsBackdrop").addEventListener("click", closeLegacySettingsModal);
       document.getElementById("legacySettingsModal").addEventListener("click", (event) => {
@@ -6227,7 +6700,12 @@ CHAT_HTML = """<!doctype html>
     function formatModelStatusLabel(rawStatus) {
       const normalized = String(rawStatus || "unknown").trim().toLowerCase();
       if (!normalized) return "unknown";
-      return normalized.replaceAll("_", " ");
+      return normalized
+        .replaceAll("_", " ")
+        .split(" ")
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
     }
 
     async function postJson(url, payload) {
@@ -6981,12 +7459,12 @@ CHAT_HTML = """<!doctype html>
       const piModelName = String(systemPayload?.pi_model_name || "").trim();
       const memoryTier = classifyPi5MemoryTier(systemPayload?.memory_total_bytes);
       if (piModelName && memoryTier) {
-        noteEl.textContent = `v0.2 · ${piModelName} · ${memoryTier}`;
+        noteEl.textContent = `V0.3 Pre-Alpha · ${piModelName} · ${memoryTier}`;
         return;
       }
       noteEl.textContent = piModelName
-        ? `v0.2 · ${piModelName}`
-        : "v0.2";
+        ? `V0.3 Pre-Alpha · ${piModelName}`
+        : "V0.3 Pre-Alpha";
     }
 
     function setStatus(statusPayload) {
@@ -7656,7 +8134,7 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
                 except asyncio.CancelledError:
                     pass
 
-    app = FastAPI(title="Potato Web", version="0.2", lifespan=_lifespan)
+    app = FastAPI(title="Potato Web", version="0.3-pre-alpha", lifespan=_lifespan)
     app.mount("/assets", StaticFiles(directory=str(WEB_ASSETS_DIR)), name="assets")
     app.state.runtime = runtime or RuntimeConfig.from_env()
     app.state.llama_process = None

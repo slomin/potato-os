@@ -30,6 +30,11 @@ async function saveModelSettings(page) {
   await expect(page.locator("#modelSettingsStatus")).toContainText(/saved|updated/i);
 }
 
+async function chooseModelSegment(page, fieldId, value) {
+  await page.locator(`.settings-segmented[data-target="${fieldId}"] .settings-segment-btn[data-value="${value}"]`).click();
+  await expect(page.locator(`#${fieldId}`)).toHaveValue(String(value));
+}
+
 test("seed mode defaults to random, toggles deterministic, persists, and controls request payload", async ({ page }) => {
   await waitUntilReady(page);
 
@@ -40,8 +45,8 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   const sendBtn = page.locator("#sendBtn");
   await openSettingsModal(page);
 
-  await streamField.selectOption("false");
-  await generationMode.selectOption("random");
+  await chooseModelSegment(page, "stream", "false");
+  await chooseModelSegment(page, "generationMode", "random");
   await expect(seedField).toBeDisabled();
   await saveModelSettings(page);
   await closeSettingsModal(page);
@@ -54,7 +59,7 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await expect(sendBtn).toHaveText("Send");
 
   await openSettingsModal(page);
-  await generationMode.selectOption("deterministic");
+  await chooseModelSegment(page, "generationMode", "deterministic");
   await expect(seedField).toBeEnabled();
   await seedField.fill("1337");
   await saveModelSettings(page);
@@ -69,7 +74,7 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await expect(sendBtn).toHaveText("Send");
 
   await openSettingsModal(page);
-  await generationMode.selectOption("random");
+  await chooseModelSegment(page, "generationMode", "random");
   await expect(seedField).toBeDisabled();
   await expect(seedField).toHaveValue("1337");
   await saveModelSettings(page);
@@ -84,7 +89,7 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await expect(sendBtn).toHaveText("Send");
 
   await openSettingsModal(page);
-  await generationMode.selectOption("deterministic");
+  await chooseModelSegment(page, "generationMode", "deterministic");
   await expect(seedField).toBeEnabled();
   await expect(seedField).toHaveValue("1337");
   await saveModelSettings(page);
@@ -185,7 +190,7 @@ test("renders assistant markdown as formatted html", async ({ page }) => {
   });
 
   await openSettingsModal(page);
-  await page.locator("#stream").selectOption("false");
+  await chooseModelSegment(page, "stream", "false");
   await saveModelSettings(page);
   await closeSettingsModal(page);
   await page.locator("#userPrompt").fill("Format this nicely.");
@@ -268,7 +273,7 @@ test("non-stream cancel during finish animation does not render buffered assista
   });
 
   await openSettingsModal(page);
-  await page.locator("#stream").selectOption("false");
+  await chooseModelSegment(page, "stream", "false");
   await saveModelSettings(page);
   await closeSettingsModal(page);
   await page.locator("#userPrompt").fill("Give me a non-stream response.");
@@ -334,7 +339,7 @@ test("assistant markdown strips remote resource tags while keeping safe formatti
   });
 
   await openSettingsModal(page);
-  await page.locator("#stream").selectOption("false");
+  await chooseModelSegment(page, "stream", "false");
   await saveModelSettings(page);
   await closeSettingsModal(page);
   await page.locator("#userPrompt").fill("Format this safely.");
@@ -579,7 +584,7 @@ test("surfaces failed downloads clearly and resumes them from the UI", async ({ 
 
   await openSettingsModal(page);
   const failedRow = page.locator('#modelsList .model-row[data-model-id="failed-model"]');
-  await expect(failedRow).toContainText("failed");
+  await expect(failedRow).toContainText("Failed");
   await expect(failedRow).toContainText("Failed at");
   await expect(failedRow.locator('button[data-action="download"]')).toHaveText("Resume download");
   await closeSettingsModal(page);
@@ -589,7 +594,7 @@ test("surfaces failed downloads clearly and resumes them from the UI", async ({ 
   await expect.poll(() => downloadCalls).toEqual(["failed-model"]);
   await expect(page.locator("#downloadPrompt")).toBeHidden();
   await expect(page.locator("#statusText")).toContainText("Download: 15%");
-  await expect(failedRow).toContainText("downloading");
+  await expect(failedRow).toContainText("Downloading");
   await expect(failedRow.locator('button[data-action="cancel-download"]')).toHaveText("Stop download");
 });
 
@@ -1088,7 +1093,7 @@ test("sending a new message forces the chat back to the latest turn", async ({ p
   });
 
   await openSettingsModal(page);
-  await page.locator("#stream").selectOption("false");
+  await chooseModelSegment(page, "stream", "false");
   await saveModelSettings(page);
   await closeSettingsModal(page);
 
@@ -1205,7 +1210,7 @@ test("message actions copy assistant text and open the edit modal for user text"
   });
 
   await openSettingsModal(page);
-  await page.locator("#stream").selectOption("false");
+  await chooseModelSegment(page, "stream", "false");
   await saveModelSettings(page);
   await closeSettingsModal(page);
   await page.locator("#userPrompt").fill("Please rewrite this draft.");
@@ -1268,7 +1273,7 @@ test("assistant actions stay hidden until the response is finished", async ({ pa
   });
 
   await openSettingsModal(page);
-  await page.locator("#stream").selectOption("false");
+  await chooseModelSegment(page, "stream", "false");
   await saveModelSettings(page);
   await closeSettingsModal(page);
 
@@ -1335,7 +1340,7 @@ test("editing a finished user turn resends from that point and removes later tur
   });
 
   await openSettingsModal(page);
-  await page.locator("#stream").selectOption("false");
+  await chooseModelSegment(page, "stream", "false");
   await saveModelSettings(page);
   await closeSettingsModal(page);
 
@@ -1414,7 +1419,7 @@ test("editing while a reply is generating cancels it and restarts from that turn
   });
 
   await openSettingsModal(page);
-  await page.locator("#stream").selectOption("false");
+  await chooseModelSegment(page, "stream", "false");
   await saveModelSettings(page);
   await closeSettingsModal(page);
 
@@ -1755,6 +1760,10 @@ test("model-first settings save per model, yaml can be applied, and projector do
 
   await page.locator('#modelsList .model-row[data-model-id="default"]').click();
   await expect(page.locator("#modelName")).toHaveValue(/Qwen3-VL-4B-Instruct-Q4_K_M.gguf/);
+  await expect(page.locator("#modelCapabilitiesChips .settings-chip")).toHaveCount(3);
+  await expect(page.locator("#modelCapabilitiesChips")).toContainText("Active");
+  await expect(page.locator("#modelCapabilitiesChips")).toContainText("Ready");
+  await expect(page.locator("#modelCapabilitiesChips")).toContainText("Vision");
   await expect(page.locator("#downloadProjectorBtn")).toBeVisible();
   await page.locator("#downloadProjectorBtn").click();
   await expect.poll(() => lastProjectorDownloadModelId).toBe("default");
@@ -1765,7 +1774,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   await expect(page.locator("#modelsList")).toContainText("new-url-model.gguf");
 
   await page.locator('#modelsList .model-row[data-model-id="new-url-model"] button[data-action="download"]').click();
-  await expect(page.locator('#modelsList .model-row[data-model-id="new-url-model"]')).toContainText("downloading");
+  await expect(page.locator('#modelsList .model-row[data-model-id="new-url-model"]')).toContainText("Downloading");
   await expect(
     page.locator('#modelsList .model-row[data-model-id="new-url-model"] button[data-action="cancel-download"]')
   ).toHaveText("Stop download");
@@ -1774,10 +1783,12 @@ test("model-first settings save per model, yaml can be applied, and projector do
   ).toHaveText("Cancel + delete");
 
   await page.locator('#modelsList .model-row[data-model-id="new-url-model"] button[data-action="cancel-download"]').click();
-  await expect(page.locator('#modelsList .model-row[data-model-id="new-url-model"]')).toContainText("not downloaded");
+  await expect(page.locator('#modelsList .model-row[data-model-id="new-url-model"]')).toContainText("Not Downloaded");
 
   await page.locator('#modelsList .model-row[data-model-id="alt-model"]').click();
   await expect(page.locator("#systemPrompt")).toHaveValue("Alt instructions");
+  await expect(page.locator("#modelCapabilitiesChips")).toContainText("Inactive");
+  await expect(page.locator("#modelCapabilitiesChips")).toContainText("Text only");
   await expect(page.locator("#stream")).toHaveValue("false");
   await expect(page.locator("#generationMode")).toHaveValue("deterministic");
   await page.locator("#systemPrompt").fill("Saved per-model");

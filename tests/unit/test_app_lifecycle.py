@@ -151,9 +151,14 @@ def test_lifespan_shutdown_clean_exit_does_not_kill() -> None:
     assert proc.waited is True
 
 
-def test_terminate_process_returns_when_kill_also_times_out(monkeypatch) -> None:
+def test_terminate_process_raises_when_kill_also_times_out(monkeypatch) -> None:
     proc = _FakeProcess(hang_on_terminate=True, hang_on_kill=True)
     monkeypatch.setattr(main, "LLAMA_SHUTDOWN_TIMEOUT_SECONDS", 0.1)
-    asyncio.run(main._terminate_process(proc, timeout=0.1))
+    try:
+        asyncio.run(main._terminate_process(proc, timeout=0.1))
+        raised = False
+    except (TimeoutError, asyncio.TimeoutError):
+        raised = True
+    assert raised is True
     assert proc.terminated is True
     assert proc.killed is True

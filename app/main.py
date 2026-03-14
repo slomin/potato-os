@@ -399,10 +399,7 @@ async def _terminate_process(proc, *, timeout=None):
     except asyncio.TimeoutError:
         logger.warning("pid=%s did not exit after SIGTERM, sending SIGKILL", getattr(proc, "pid", "?"))
         proc.kill()
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=3.0)
-        except asyncio.TimeoutError:
-            logger.critical("pid=%s did not exit after SIGKILL, giving up", getattr(proc, "pid", "?"))
+        await asyncio.wait_for(proc.wait(), timeout=3.0)
 
 
 async def restart_managed_llama_process(app: FastAPI) -> tuple[bool, str]:
@@ -8827,7 +8824,10 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
 
             proc = app.state.llama_process
             if proc is not None and proc.returncode is None:
-                await _terminate_process(proc)
+                try:
+                    await _terminate_process(proc)
+                except (asyncio.TimeoutError, OSError):
+                    logger.critical("pid=%s did not exit after SIGKILL during shutdown, giving up", getattr(proc, "pid", "?"))
 
             download_task = app.state.model_download_task
             if is_download_task_active(download_task):

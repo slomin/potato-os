@@ -361,6 +361,7 @@ def test_settings_document_yaml_round_trip_updates_active_model_and_model_settin
         exported_body = exported.json()
         assert exported_body["format"] == "yaml"
         assert "active_model_id:" in exported_body["document"]
+        assert "stream:" not in exported_body["document"]
 
         document = f"""
 version: 1
@@ -378,7 +379,6 @@ models:
         repetition_penalty: 1.0
         presence_penalty: 1.5
         max_tokens: 16384
-        stream: true
         generation_mode: random
         seed: 42
         system_prompt: ""
@@ -395,7 +395,6 @@ models:
         repetition_penalty: 1.0
         presence_penalty: 0.0
         max_tokens: 1024
-        stream: false
         generation_mode: deterministic
         seed: 9
         system_prompt: Keep it short.
@@ -418,6 +417,7 @@ models:
     updated_model = next(item for item in status_body["models"] if item["id"] == model_id)
     assert updated_model["settings"]["chat"]["temperature"] == 0.15
     assert updated_model["settings"]["chat"]["system_prompt"] == "Keep it short."
+    assert updated_model["settings"]["chat"]["stream"] is True
     assert updated_model["settings"]["vision"]["projector_filename"] == "mmproj-F16.gguf"
 
 

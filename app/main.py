@@ -1526,10 +1526,18 @@ def build_settings_document_payload(runtime: RuntimeConfig) -> dict[str, Any]:
         if not isinstance(item, dict):
             continue
         filename = str(item.get("filename") or "")
+        settings = normalize_model_settings(item.get("settings"), filename=filename)
+        chat_settings = settings.get("chat")
+        if isinstance(chat_settings, dict):
+            chat_settings = {key: value for key, value in chat_settings.items() if key != "stream"}
+        settings_payload = {
+            **settings,
+            "chat": chat_settings,
+        }
         models_payload.append(
             {
                 "id": str(item.get("id") or ""),
-                "settings": normalize_model_settings(item.get("settings"), filename=filename),
+                "settings": settings_payload,
             }
         )
     return {
@@ -4145,14 +4153,6 @@ CHAT_HTML = """<!doctype html>
               </label>
               <div class="settings-field-grid">
                 <label>
-                  <span class="settings-field-label">Streaming</span>
-                  <div class="settings-segmented" data-target="stream" role="group" aria-label="Streaming">
-                    <button type="button" class="settings-segment-btn" data-target="stream" data-value="true">On</button>
-                    <button type="button" class="settings-segment-btn" data-target="stream" data-value="false">Off</button>
-                  </div>
-                  <input id="stream" type="hidden" value="true">
-                </label>
-                <label>
                   <span class="settings-field-label">Generation Mode</span>
                   <div class="settings-segmented" data-target="generationMode" role="group" aria-label="Generation Mode">
                     <button type="button" class="settings-segment-btn" data-target="generationMode" data-value="random">Random</button>
@@ -4673,7 +4673,7 @@ CHAT_HTML = """<!doctype html>
         repetition_penalty: Number.isFinite(Number(chat.repetition_penalty)) ? Number(chat.repetition_penalty) : defaultSettings.repetition_penalty,
         presence_penalty: Number.isFinite(Number(chat.presence_penalty)) ? Number(chat.presence_penalty) : defaultSettings.presence_penalty,
         max_tokens: Number.isFinite(Number(chat.max_tokens)) ? Number(chat.max_tokens) : defaultSettings.max_tokens,
-        stream: chat.stream !== false,
+        stream: true,
         generation_mode: generationMode,
         seed: normalizeSeedValue(chat.seed, defaultSettings.seed),
         system_prompt: String(chat.system_prompt || "").trim(),
@@ -4831,7 +4831,7 @@ CHAT_HTML = """<!doctype html>
           repetition_penalty: parseNumber("repetition_penalty", defaultSettings.repetition_penalty),
           presence_penalty: parseNumber("presence_penalty", defaultSettings.presence_penalty),
           max_tokens: parseNumber("max_tokens", defaultSettings.max_tokens),
-          stream: document.getElementById("stream").value === "true",
+          stream: true,
           generation_mode: generationMode,
           seed,
           system_prompt: document.getElementById("systemPrompt").value.trim(),
@@ -4920,7 +4920,6 @@ CHAT_HTML = """<!doctype html>
 
     function modelSettingsFormHasUnsavedValues(chat, vision) {
       const systemPromptEl = document.getElementById("systemPrompt");
-      const streamEl = document.getElementById("stream");
       const generationModeEl = document.getElementById("generationMode");
       const seedEl = document.getElementById("seed");
       const temperatureEl = document.getElementById("temperature");
@@ -4931,14 +4930,13 @@ CHAT_HTML = """<!doctype html>
       const maxTokensEl = document.getElementById("max_tokens");
       const visionEnabledEl = document.getElementById("visionEnabled");
       if (
-        !systemPromptEl || !streamEl || !generationModeEl || !seedEl || !temperatureEl
+        !systemPromptEl || !generationModeEl || !seedEl || !temperatureEl
         || !topPEl || !topKEl || !repetitionPenaltyEl || !presencePenaltyEl || !maxTokensEl
       ) {
         return false;
       }
       return (
         String(systemPromptEl.value || "") !== String(chat.system_prompt || "")
-        || String(streamEl.value || "") !== String(chat.stream)
         || String(generationModeEl.value || "") !== String(chat.generation_mode)
         || String(seedEl.value || "") !== String(chat.seed)
         || String(temperatureEl.value || "") !== String(chat.temperature)
@@ -5492,7 +5490,6 @@ CHAT_HTML = """<!doctype html>
 
       if (!preserveDraft) {
         document.getElementById("systemPrompt").value = chat.system_prompt;
-        document.getElementById("stream").value = String(chat.stream);
         document.getElementById("generationMode").value = chat.generation_mode;
         document.getElementById("seed").value = String(chat.seed);
         document.getElementById("temperature").value = String(chat.temperature);
@@ -5501,7 +5498,6 @@ CHAT_HTML = """<!doctype html>
         document.getElementById("repetition_penalty").value = String(chat.repetition_penalty);
         document.getElementById("presence_penalty").value = String(chat.presence_penalty);
         document.getElementById("max_tokens").value = String(chat.max_tokens);
-        syncSegmentedControl("stream");
         syncSegmentedControl("generationMode");
         updateSeedFieldState(chat.generation_mode);
         displayedSettingsModelId = selectedModelId;
@@ -6147,7 +6143,6 @@ CHAT_HTML = """<!doctype html>
       document.getElementById("generationMode").addEventListener("change", (event) => {
         updateSeedFieldState(normalizeGenerationMode(event.target?.value));
       });
-      syncSegmentedControl("stream");
       syncSegmentedControl("generationMode");
       document.getElementById("legacySettingsCloseBtn").addEventListener("click", closeLegacySettingsModal);
       document.getElementById("legacySettingsBackdrop").addEventListener("click", closeLegacySettingsModal);

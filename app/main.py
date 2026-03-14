@@ -9619,7 +9619,10 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
 
                 tmp_path.replace(final_path)
                 models = state.get("models", [])
-                assert isinstance(models, list)
+                if not isinstance(models, list):
+                    error_reason = "models_state_invalid"
+                    _cleanup_partial_upload()
+                    return JSONResponse(status_code=500, content={"uploaded": False, "reason": error_reason})
                 existing_ids = {
                     str(item.get("id"))
                     for item in models

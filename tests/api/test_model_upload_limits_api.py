@@ -61,5 +61,7 @@ def test_upload_returns_500_when_models_state_corrupted(runtime, monkeypatch):
             content=b"gguf",
         )
 
-    assert response.status_code == 500
-    assert response.json()["reason"] == "models_state_invalid"
+        assert response.status_code == 500
+        assert response.json()["reason"] == "models_state_invalid"
+        assert app.state.model_upload_state["error"] == "models_state_invalid"
+        assert app.state.model_upload_state["active"] is False

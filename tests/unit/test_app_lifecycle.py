@@ -31,12 +31,13 @@ class _FakeTask:
 
 
 class _FakeProcess:
-    def __init__(self, *, hang_on_terminate: bool = False) -> None:
+    def __init__(self, *, hang_on_terminate: bool = False, hang_on_kill: bool = False) -> None:
         self.returncode = None
         self.terminated = False
         self.waited = False
         self.killed = False
         self._hang_on_terminate = hang_on_terminate
+        self._hang_on_kill = hang_on_kill
         self._killed_event: asyncio.Event | None = None
         if hang_on_terminate:
             self._killed_event = asyncio.Event()
@@ -46,13 +47,15 @@ class _FakeProcess:
 
     def kill(self) -> None:
         self.killed = True
-        if self._killed_event is not None:
+        if self._killed_event is not None and not self._hang_on_kill:
             self._killed_event.set()
 
     async def wait(self) -> int:
         if self._hang_on_terminate and not self.killed:
             assert self._killed_event is not None
             await self._killed_event.wait()
+        if self._hang_on_kill and self.killed:
+            await asyncio.Event().wait()  # block forever
         self.waited = True
         self.returncode = 0
         return 0
@@ -146,3 +149,16 @@ def test_lifespan_shutdown_clean_exit_does_not_kill() -> None:
     assert proc.terminated is True
     assert proc.killed is False
     assert proc.waited is True
+
+
+def test_terminate_process_raises_when_kill_also_times_out(monkeypatch) -> None:
+    proc = _FakeProcess(hang_on_terminate=True, hang_on_kill=True)
+    monkeypatch.setattr(main, "LLAMA_SHUTDOWN_TIMEOUT_SECONDS", 0.1)
+    try:
+        asyncio.run(main._terminate_process(proc, timeout=0.1))
+        raised = False
+    except (TimeoutError, asyncio.TimeoutError):
+        raised = True
+    assert raised is True
+    assert proc.terminated is True
+    assert proc.killed is True

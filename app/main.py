@@ -1526,18 +1526,10 @@ def build_settings_document_payload(runtime: RuntimeConfig) -> dict[str, Any]:
         if not isinstance(item, dict):
             continue
         filename = str(item.get("filename") or "")
-        settings = normalize_model_settings(item.get("settings"), filename=filename)
-        chat_settings = settings.get("chat")
-        if isinstance(chat_settings, dict):
-            chat_settings = {key: value for key, value in chat_settings.items() if key != "stream"}
-        settings_payload = {
-            **settings,
-            "chat": chat_settings,
-        }
         models_payload.append(
             {
                 "id": str(item.get("id") or ""),
-                "settings": settings_payload,
+                "settings": normalize_model_settings(item.get("settings"), filename=filename),
             }
         )
     return {
@@ -4823,6 +4815,7 @@ CHAT_HTML = """<!doctype html>
       const supportsVision = Boolean(selectedModel?.capabilities?.vision);
       const generationMode = normalizeGenerationMode(document.getElementById("generationMode").value);
       const seed = normalizeSeedValue(document.getElementById("seed").value, defaultSettings.seed);
+      const persistedStream = selectedModel?.settings?.chat?.stream !== false;
       return {
         chat: {
           temperature: parseNumber("temperature", defaultSettings.temperature),
@@ -4831,7 +4824,7 @@ CHAT_HTML = """<!doctype html>
           repetition_penalty: parseNumber("repetition_penalty", defaultSettings.repetition_penalty),
           presence_penalty: parseNumber("presence_penalty", defaultSettings.presence_penalty),
           max_tokens: parseNumber("max_tokens", defaultSettings.max_tokens),
-          stream: true,
+          stream: persistedStream,
           generation_mode: generationMode,
           seed,
           system_prompt: document.getElementById("systemPrompt").value.trim(),

@@ -1669,6 +1669,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   let activeModelId = "default";
   let lastProjectorDownloadModelId = "";
   let lastSettingsDocument = "";
+  const savedPayloads = [];
   let statusHits = 0;
 
   const statusPayload = () => ({
@@ -1776,6 +1777,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
 
   await page.route("**/internal/models/settings", async (route) => {
     const body = JSON.parse(route.request().postData() || "{}");
+    savedPayloads.push(body);
     models = models.map((model) => (
       model.id === body.model_id
         ? { ...model, settings: body.settings }
@@ -1821,6 +1823,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
           "    settings:",
           "      chat:",
           `        system_prompt: ${JSON.stringify(model.settings.chat.system_prompt)}`,
+          `        stream: ${model.settings.chat.stream ? "true" : "false"}`,
           `        generation_mode: ${model.settings.chat.generation_mode}`,
           `        seed: ${model.settings.chat.seed}`,
           `        temperature: ${model.settings.chat.temperature}`,
@@ -1960,6 +1963,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   expect(statusHits - statusHitsBeforeWait).toBeLessThanOrEqual(1);
   await page.locator("#temperature").fill("0.4");
   await saveModelSettings(page);
+  expect(savedPayloads.at(-1)?.settings?.chat?.stream).toBe(false);
 
   await page.locator('#modelsList .model-row[data-model-id="alt-model"] button[data-action="activate"]').click();
   await expect(page.locator("#modelName")).toHaveText(/Alt-Funny-Model.gguf/);
@@ -1978,6 +1982,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
     "    settings:",
     "      chat:",
     "        system_prompt: Applied from yaml",
+    "        stream: false",
     "        generation_mode: deterministic",
     "        seed: 99",
     "        temperature: 0.4",
@@ -1994,7 +1999,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   await page.locator("#settingsYamlApplyBtn").click();
   await expect(page.locator("#settingsYamlStatus")).toContainText(/applied/i);
   expect(lastSettingsDocument).toContain("Applied from yaml");
-  expect(lastSettingsDocument).not.toContain("stream:");
+  expect(lastSettingsDocument).toContain("stream: false");
 
   await page.locator("#settingsWorkspaceTabModel").click();
   await expect(page.locator("#systemPrompt")).toHaveValue("Applied from yaml");

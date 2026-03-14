@@ -361,6 +361,7 @@ def test_settings_document_yaml_round_trip_updates_active_model_and_model_settin
         exported_body = exported.json()
         assert exported_body["format"] == "yaml"
         assert "active_model_id:" in exported_body["document"]
+        assert "stream: true" in exported_body["document"]
 
         document = f"""
 version: 1
@@ -418,6 +419,7 @@ models:
     updated_model = next(item for item in status_body["models"] if item["id"] == model_id)
     assert updated_model["settings"]["chat"]["temperature"] == 0.15
     assert updated_model["settings"]["chat"]["system_prompt"] == "Keep it short."
+    assert updated_model["settings"]["chat"]["stream"] is False
     assert updated_model["settings"]["vision"]["projector_filename"] == "mmproj-F16.gguf"
 
 

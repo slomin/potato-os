@@ -35,17 +35,35 @@ async function chooseModelSegment(page, fieldId, value) {
   await expect(page.locator(`#${fieldId}`)).toHaveValue(String(value));
 }
 
+async function fulfillStreamingChat(route, { content = "", timings = null, finishReason = "stop" } = {}) {
+  const events = [];
+  if (content) {
+    events.push({
+      choices: [{ delta: { content } }],
+    });
+  }
+  events.push({
+    choices: [{ delta: {}, finish_reason: finishReason }],
+    ...(timings ? { timings } : {}),
+  });
+  await route.fulfill({
+    status: 200,
+    contentType: "text/event-stream",
+    body: `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`,
+  });
+}
+
 test("seed mode defaults to random, toggles deterministic, persists, and controls request payload", async ({ page }) => {
   await waitUntilReady(page);
 
   const generationMode = page.locator("#generationMode");
   const seedField = page.locator("#seed");
-  const streamField = page.locator("#stream");
   const promptField = page.locator("#userPrompt");
   const sendBtn = page.locator("#sendBtn");
   await openSettingsModal(page);
 
-  await chooseModelSegment(page, "stream", "false");
+  await expect(page.locator("#stream")).toHaveCount(0);
+  await expect(page.locator("text=Streaming")).toHaveCount(0);
   await chooseModelSegment(page, "generationMode", "random");
   await expect(seedField).toBeDisabled();
   await saveModelSettings(page);
@@ -55,6 +73,7 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await promptField.press("Enter");
   const randomRequest = await randomRequestPromise;
   const randomPayload = JSON.parse(randomRequest.postData() || "{}");
+  expect(randomPayload.stream).toBe(true);
   expect(randomPayload.seed).toBeUndefined();
   await expect(sendBtn).toHaveText("Send");
 
@@ -70,6 +89,7 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await promptField.press("Enter");
   const deterministicRequest = await deterministicRequestPromise;
   const deterministicPayload = JSON.parse(deterministicRequest.postData() || "{}");
+  expect(deterministicPayload.stream).toBe(true);
   expect(deterministicPayload.seed).toBe(1337);
   await expect(sendBtn).toHaveText("Send");
 
@@ -85,6 +105,7 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await promptField.press("Enter");
   const randomRequestAfterToggle = await randomRequestAfterTogglePromise;
   const randomPayloadAfterToggle = JSON.parse(randomRequestAfterToggle.postData() || "{}");
+  expect(randomPayloadAfterToggle.stream).toBe(true);
   expect(randomPayloadAfterToggle.seed).toBeUndefined();
   await expect(sendBtn).toHaveText("Send");
 
@@ -100,6 +121,118 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await expect(page.locator("#generationMode")).toHaveValue("deterministic");
   await expect(page.locator("#seed")).toHaveValue("1337");
   await expect(page.locator("#seed")).toBeEnabled();
+});
+
+test("product chat requests still stream when saved model settings say stream false", async ({ page }) => {
+  const promptField = page.locator("#userPrompt");
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        state: "READY",
+        model_present: true,
+        model: {
+          filename: "stream-false.gguf",
+          active_model_id: "stream-false-model",
+          settings: {
+            chat: {
+              system_prompt: "",
+              stream: false,
+              generation_mode: "random",
+              seed: 42,
+              temperature: 0.7,
+              top_p: 0.8,
+              top_k: 20,
+              repetition_penalty: 1.0,
+              presence_penalty: 1.5,
+              max_tokens: 4096,
+            },
+            vision: {
+              enabled: false,
+              projector_mode: "default",
+              projector_filename: "",
+            },
+          },
+          capabilities: { vision: false },
+          projector: {
+            present: false,
+            filename: "",
+            default_candidates: [],
+          },
+        },
+        models: [
+          {
+            id: "stream-false-model",
+            filename: "stream-false.gguf",
+            source_url: null,
+            source_type: "local_file",
+            status: "ready",
+            is_active: true,
+            settings: {
+              chat: {
+                system_prompt: "",
+                stream: false,
+                generation_mode: "random",
+                seed: 42,
+                temperature: 0.7,
+                top_p: 0.8,
+                top_k: 20,
+                repetition_penalty: 1.0,
+                presence_penalty: 1.5,
+                max_tokens: 4096,
+              },
+              vision: {
+                enabled: false,
+                projector_mode: "default",
+                projector_filename: "",
+              },
+            },
+            capabilities: { vision: false },
+            projector: {
+              present: false,
+              filename: "",
+              default_candidates: [],
+            },
+            bytes_total: 0,
+            bytes_downloaded: 0,
+            percent: 0,
+            error: null,
+          },
+        ],
+        upload: { active: false, model_id: null, bytes_total: 0, bytes_received: 0, percent: 0, error: null },
+        download: {
+          bytes_total: 0,
+          bytes_downloaded: 0,
+          percent: 0,
+          speed_bps: 0,
+          eta_seconds: 0,
+          error: null,
+          active: false,
+          auto_start_seconds: 300,
+          auto_start_remaining_seconds: 0,
+          countdown_enabled: false,
+          auto_download_paused: true,
+          current_model_id: null,
+        },
+        llama_server: { healthy: true, running: true, url: "http://127.0.0.1:8080" },
+        backend: { mode: "llama", active: "llama", fallback_active: false },
+        system: { available: false, cpu_cores_percent: [] },
+      }),
+    });
+  });
+
+  await waitUntilReady(page);
+  await openSettingsModal(page);
+  await expect(page.locator("#stream")).toHaveCount(0);
+  await closeSettingsModal(page);
+
+  await promptField.fill("Always stream this.");
+  const requestPromise = page.waitForRequest("**/v1/chat/completions");
+  await promptField.press("Enter");
+  const request = await requestPromise;
+  const payload = JSON.parse(request.postData() || "{}");
+  expect(payload.stream).toBe(true);
 });
 
 test("shows staged prefill estimate before first token and clears after generation starts", async ({ page }) => {
@@ -156,43 +289,17 @@ test("renders assistant markdown as formatted html", async ({ page }) => {
 
   await page.route("**/v1/chat/completions", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 180));
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "chatcmpl-md",
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: "# Linus Torvalds\n\nHere are the key facts:\n\n- **Linux** kernel\n- Open source\n\n`uname -a`",
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 1200,
-          predicted_ms: 800,
-          predicted_n: 12,
-          predicted_per_second: 15,
-        },
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 12,
-          total_tokens: 22,
-        },
-      }),
+    await fulfillStreamingChat(route, {
+      content: "# Linus Torvalds\n\nHere are the key facts:\n\n- **Linux** kernel\n- Open source\n\n`uname -a`",
+      timings: {
+        prompt_ms: 1200,
+        predicted_ms: 800,
+        predicted_n: 12,
+        predicted_per_second: 15,
+      },
     });
   });
 
-  await openSettingsModal(page);
-  await chooseModelSegment(page, "stream", "false");
-  await saveModelSettings(page);
-  await closeSettingsModal(page);
   await page.locator("#userPrompt").fill("Format this nicely.");
   await page.locator("#userPrompt").press("Enter");
 
@@ -231,65 +338,6 @@ test("streaming cancel during finish animation does not render buffered assistan
   await expect(page.locator(".message-row.assistant .message-bubble")).toHaveCount(0);
 });
 
-test("non-stream cancel during finish animation does not render buffered assistant output", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 1200;
-    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 250;
-  });
-  await waitUntilReady(page);
-
-  await page.route("**/v1/chat/completions", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "chatcmpl-cancel",
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: "This should never appear after cancel.",
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 1200,
-          predicted_ms: 500,
-          predicted_n: 8,
-          predicted_per_second: 16,
-        },
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 8,
-          total_tokens: 18,
-        },
-      }),
-    });
-  });
-
-  await openSettingsModal(page);
-  await chooseModelSegment(page, "stream", "false");
-  await saveModelSettings(page);
-  await closeSettingsModal(page);
-  await page.locator("#userPrompt").fill("Give me a non-stream response.");
-  await page.locator("#userPrompt").press("Enter");
-
-  await page.waitForTimeout(350);
-
-  await page.locator("#cancelBtn").click();
-
-  await expect(page.locator(".message-row.assistant .message-bubble.processing")).toHaveCount(0);
-  await expect(page.locator("#composerStatusChip")).toBeHidden();
-  await expect(page.locator("#sendBtn")).toHaveText("Send");
-  await page.waitForTimeout(1500);
-  await expect(page.locator(".message-row.assistant .message-bubble")).toHaveCount(0);
-});
-
 test("assistant markdown strips remote resource tags while keeping safe formatting", async ({ page }) => {
   await waitUntilReady(page);
 
@@ -305,43 +353,17 @@ test("assistant markdown strips remote resource tags while keeping safe formatti
   });
 
   await page.route("**/v1/chat/completions", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "chatcmpl-md-safe",
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: "# Linus Torvalds\n\n- **Linux** kernel\n- Open source\n\n![tracker](https://example.com/tracker.png)\n<img src=\"https://example.com/raw.png\" alt=\"raw\">\n\n`uname -a`",
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 1200,
-          predicted_ms: 800,
-          predicted_n: 12,
-          predicted_per_second: 15,
-        },
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 12,
-          total_tokens: 22,
-        },
-      }),
+    await fulfillStreamingChat(route, {
+      content: "# Linus Torvalds\n\n- **Linux** kernel\n- Open source\n\n![tracker](https://example.com/tracker.png)\n<img src=\"https://example.com/raw.png\" alt=\"raw\">\n\n`uname -a`",
+      timings: {
+        prompt_ms: 1200,
+        predicted_ms: 800,
+        predicted_n: 12,
+        predicted_per_second: 15,
+      },
     });
   });
 
-  await openSettingsModal(page);
-  await chooseModelSegment(page, "stream", "false");
-  await saveModelSettings(page);
-  await closeSettingsModal(page);
   await page.locator("#userPrompt").fill("Format this safely.");
   await page.locator("#userPrompt").press("Enter");
 
@@ -633,6 +655,7 @@ test("image-send failures show friendly guidance and leave the composer ready fo
 
   await page.route("**/v1/chat/completions", async (route) => {
     const payload = JSON.parse(route.request().postData() || "{}");
+    expect(payload.stream).toBe(true);
     const lastMessage = payload.messages[payload.messages.length - 1];
     const hasImage = Array.isArray(lastMessage?.content)
       && lastMessage.content.some((part) => part?.type === "image_url");
@@ -651,37 +674,7 @@ test("image-send failures show friendly guidance and leave the composer ready fo
       return;
     }
 
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "chatcmpl-text-retry",
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: "Recovered with text only.",
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 400,
-          predicted_ms: 220,
-          predicted_n: 4,
-          predicted_per_second: 18,
-        },
-        usage: {
-          prompt_tokens: 6,
-          completion_tokens: 4,
-          total_tokens: 10,
-        },
-      }),
-    });
+    await route.continue();
   });
 
   await waitUntilReady(page);
@@ -706,7 +699,7 @@ test("image-send failures show friendly guidance and leave the composer ready fo
 
   await page.locator("#userPrompt").fill("Plain text follow-up.");
   await page.locator("#userPrompt").press("Enter");
-  await expect(page.locator(".message-row.assistant .message-bubble").last()).toContainText("Recovered with text only.");
+  await expect(page.locator(".message-row.assistant .message-bubble").last()).toContainText("[fake-llama.cpp]");
 });
 
 test("cancel image generation uses cancel endpoint and avoids restart endpoint", async ({ page }) => {
@@ -1344,43 +1337,16 @@ test("sending a new message forces the chat back to the latest turn", async ({ p
   });
 
   await page.route("**/v1/chat/completions", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "chatcmpl-force-follow",
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: "Here is the newest reply.",
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 420,
-          predicted_ms: 180,
-          predicted_n: 6,
-          predicted_per_second: 32,
-        },
-        usage: {
-          prompt_tokens: 8,
-          completion_tokens: 6,
-          total_tokens: 14,
-        },
-      }),
+    await fulfillStreamingChat(route, {
+      content: "Here is the newest reply.",
+      timings: {
+        prompt_ms: 420,
+        predicted_ms: 180,
+        predicted_n: 6,
+        predicted_per_second: 32,
+      },
     });
   });
-
-  await openSettingsModal(page);
-  await chooseModelSegment(page, "stream", "false");
-  await saveModelSettings(page);
-  await closeSettingsModal(page);
 
   await page.locator("#userPrompt").fill("Bring me back down.");
   await page.locator("#userPrompt").press("Enter");
@@ -1461,43 +1427,17 @@ test("message actions copy assistant text and open the edit modal for user text"
   });
   await waitUntilReady(page);
   await page.route("**/v1/chat/completions", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "chatcmpl-copy-edit",
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: "Here is a cleaner version of that draft.",
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 520,
-          predicted_ms: 280,
-          predicted_n: 8,
-          predicted_per_second: 28,
-        },
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 8,
-          total_tokens: 18,
-        },
-      }),
+    await fulfillStreamingChat(route, {
+      content: "Here is a cleaner version of that draft.",
+      timings: {
+        prompt_ms: 520,
+        predicted_ms: 280,
+        predicted_n: 8,
+        predicted_per_second: 28,
+      },
     });
   });
 
-  await openSettingsModal(page);
-  await chooseModelSegment(page, "stream", "false");
-  await saveModelSettings(page);
-  await closeSettingsModal(page);
   await page.locator("#userPrompt").fill("Please rewrite this draft.");
   await page.locator("#userPrompt").press("Enter");
   await expect(page.locator(".message-row.assistant .message-bubble").last()).toContainText("Here is a cleaner version of that draft.");
@@ -1524,43 +1464,16 @@ test("assistant actions stay hidden until the response is finished", async ({ pa
   await waitUntilReady(page);
   await page.route("**/v1/chat/completions", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "chatcmpl-actions",
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: "Here is one short fact.",
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 950,
-          predicted_ms: 250,
-          predicted_n: 6,
-          predicted_per_second: 24,
-        },
-        usage: {
-          prompt_tokens: 8,
-          completion_tokens: 6,
-          total_tokens: 14,
-        },
-      }),
+    await fulfillStreamingChat(route, {
+      content: "Here is one short fact.",
+      timings: {
+        prompt_ms: 950,
+        predicted_ms: 250,
+        predicted_n: 6,
+        predicted_per_second: 24,
+      },
     });
   });
-
-  await openSettingsModal(page);
-  await chooseModelSegment(page, "stream", "false");
-  await saveModelSettings(page);
-  await closeSettingsModal(page);
 
   await page.locator("#userPrompt").fill("Tell me one short fact.");
   await page.locator("#userPrompt").press("Enter");
@@ -1591,43 +1504,16 @@ test("editing a finished user turn resends from that point and removes later tur
       : Array.isArray(lastMessage?.content)
         ? lastMessage.content.map((part) => part?.text || "").join(" ")
         : "";
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: `chatcmpl-${requestPayloads.length}`,
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: `Reply for: ${content}`,
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 600,
-          predicted_ms: 300,
-          predicted_n: 8,
-          predicted_per_second: 26,
-        },
-        usage: {
-          prompt_tokens: 12,
-          completion_tokens: 8,
-          total_tokens: 20,
-        },
-      }),
+    await fulfillStreamingChat(route, {
+      content: `Reply for: ${content}`,
+      timings: {
+        prompt_ms: 600,
+        predicted_ms: 300,
+        predicted_n: 8,
+        predicted_per_second: 26,
+      },
     });
   });
-
-  await openSettingsModal(page);
-  await chooseModelSegment(page, "stream", "false");
-  await saveModelSettings(page);
-  await closeSettingsModal(page);
 
   await page.locator("#userPrompt").fill("Original first question");
   await page.locator("#userPrompt").press("Enter");
@@ -1670,43 +1556,16 @@ test("editing while a reply is generating cancels it and restarts from that turn
     if (requestCount === 2) {
       await new Promise((resolve) => setTimeout(resolve, 1200));
     }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: `chatcmpl-edit-${requestCount}`,
-        object: "chat.completion",
-        created: 1771778048,
-        model: "qwen-local",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: `Reply for: ${content}`,
-            },
-            finish_reason: "stop",
-          },
-        ],
-        timings: {
-          prompt_ms: 700,
-          predicted_ms: 320,
-          predicted_n: 8,
-          predicted_per_second: 25,
-        },
-        usage: {
-          prompt_tokens: 12,
-          completion_tokens: 8,
-          total_tokens: 20,
-        },
-      }),
+    await fulfillStreamingChat(route, {
+      content: `Reply for: ${content}`,
+      timings: {
+        prompt_ms: 700,
+        predicted_ms: 320,
+        predicted_n: 8,
+        predicted_per_second: 25,
+      },
     });
   });
-
-  await openSettingsModal(page);
-  await chooseModelSegment(page, "stream", "false");
-  await saveModelSettings(page);
-  await closeSettingsModal(page);
 
   await page.locator("#userPrompt").fill("Stable first turn");
   await page.locator("#userPrompt").press("Enter");
@@ -1810,6 +1669,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   let activeModelId = "default";
   let lastProjectorDownloadModelId = "";
   let lastSettingsDocument = "";
+  const savedPayloads = [];
   let statusHits = 0;
 
   const statusPayload = () => ({
@@ -1917,6 +1777,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
 
   await page.route("**/internal/models/settings", async (route) => {
     const body = JSON.parse(route.request().postData() || "{}");
+    savedPayloads.push(body);
     models = models.map((model) => (
       model.id === body.model_id
         ? { ...model, settings: body.settings }
@@ -2090,7 +1951,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   await expect(page.locator("#systemPrompt")).toHaveValue("Alt instructions");
   await expect(page.locator("#modelCapabilitiesChips")).toContainText("Inactive");
   await expect(page.locator("#modelCapabilitiesChips")).toContainText("Text only");
-  await expect(page.locator("#stream")).toHaveValue("false");
+  await expect(page.locator("#stream")).toHaveCount(0);
   await expect(page.locator("#generationMode")).toHaveValue("deterministic");
   await page.locator("#systemPrompt").evaluate((node) => {
     node.value = "Saved per-model";
@@ -2102,6 +1963,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   expect(statusHits - statusHitsBeforeWait).toBeLessThanOrEqual(1);
   await page.locator("#temperature").fill("0.4");
   await saveModelSettings(page);
+  expect(savedPayloads.at(-1)?.settings?.chat?.stream).toBe(false);
 
   await page.locator('#modelsList .model-row[data-model-id="alt-model"] button[data-action="activate"]').click();
   await expect(page.locator("#modelName")).toHaveText(/Alt-Funny-Model.gguf/);
@@ -2137,6 +1999,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   await page.locator("#settingsYamlApplyBtn").click();
   await expect(page.locator("#settingsYamlStatus")).toContainText(/applied/i);
   expect(lastSettingsDocument).toContain("Applied from yaml");
+  expect(lastSettingsDocument).toContain("stream: false");
 
   await page.locator("#settingsWorkspaceTabModel").click();
   await expect(page.locator("#systemPrompt")).toHaveValue("Applied from yaml");

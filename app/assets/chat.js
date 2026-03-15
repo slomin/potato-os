@@ -66,6 +66,7 @@
     let legacySettingsModalOpen = false;
     let settingsModalOpenedAtMs = 0;
     let editModalOpen = false;
+    let modelSwitcherOpen = false;
     let settingsWorkspaceTab = "model";
     let selectedSettingsModelId = "";
     let settingsYamlLoaded = false;
@@ -1759,6 +1760,10 @@
 
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
+          if (modelSwitcherOpen) {
+            closeModelSwitcher();
+            return;
+          }
           if (editModalOpen) {
             closeEditMessageModal();
             return;
@@ -2526,6 +2531,96 @@
         badge.classList.add("offline");
         dot.classList.add("offline");
         label.textContent = "DISCONNECTED:llama.cpp";
+      }
+    }
+
+    function truncateModelName(filename) {
+      const name = String(filename || "");
+      const base = name.replace(/\.gguf$/i, "");
+      return base.length > 32 ? base.slice(0, 29) + "..." : base;
+    }
+
+    function statusLabel(status) {
+      const s = String(status || "").toLowerCase();
+      if (s === "ready") return "Ready";
+      if (s === "downloading") return "Downloading";
+      if (s === "failed" || s === "error") return "Failed";
+      if (s === "not_downloaded") return "Not downloaded";
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+
+    function populateModelSwitcher() {
+      const list = document.getElementById("modelSwitcherList");
+      if (!list) return;
+      const models = Array.isArray(latestStatus?.models) ? latestStatus.models : [];
+      list.innerHTML = "";
+      if (models.length === 0) {
+        const li = document.createElement("li");
+        li.className = "model-switcher-item disabled";
+        li.textContent = "No models installed";
+        list.appendChild(li);
+        return;
+      }
+      for (const model of models) {
+        const li = document.createElement("li");
+        const isReady = String(model.status || "").toLowerCase() === "ready";
+        const isActive = model.is_active === true;
+        li.className = "model-switcher-item";
+        li.dataset.modelId = String(model.id || "");
+        li.setAttribute("role", "option");
+        li.setAttribute("aria-selected", String(isActive));
+        if (isActive) li.classList.add("active");
+        if (!isReady) li.classList.add("disabled");
+
+        const check = document.createElement("span");
+        check.className = "model-switcher-check";
+        check.textContent = isActive ? "✓" : "";
+        check.setAttribute("aria-hidden", "true");
+
+        const name = document.createElement("span");
+        name.className = "model-switcher-name";
+        name.textContent = truncateModelName(model.filename);
+        name.title = String(model.filename || "");
+
+        const statusChip = document.createElement("span");
+        statusChip.className = "model-switcher-status";
+        statusChip.textContent = isActive ? "" : statusLabel(model.status);
+
+        li.appendChild(check);
+        li.appendChild(name);
+        li.appendChild(statusChip);
+        list.appendChild(li);
+      }
+    }
+
+    function openModelSwitcher() {
+      const el = document.getElementById("modelSwitcher");
+      const badge = document.getElementById("statusBadge");
+      if (!el) return;
+      populateModelSwitcher();
+      el.hidden = false;
+      requestAnimationFrame(() => {
+        el.classList.add("open");
+      });
+      if (badge) badge.setAttribute("aria-expanded", "true");
+      modelSwitcherOpen = true;
+    }
+
+    function closeModelSwitcher() {
+      const el = document.getElementById("modelSwitcher");
+      const badge = document.getElementById("statusBadge");
+      if (!el) return;
+      el.classList.remove("open");
+      el.hidden = true;
+      if (badge) badge.setAttribute("aria-expanded", "false");
+      modelSwitcherOpen = false;
+    }
+
+    function toggleModelSwitcher() {
+      if (modelSwitcherOpen) {
+        closeModelSwitcher();
+      } else {
+        openModelSwitcher();
       }
     }
 
@@ -4394,6 +4489,31 @@ This will restart the local llama runtime process.`
     }, 2000);
     pollStatus();
 
+    document.getElementById("statusBadge").addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleModelSwitcher();
+    });
+    document.getElementById("modelSwitcherList").addEventListener("click", (event) => {
+      const item = event.target.closest(".model-switcher-item");
+      if (!item) return;
+      if (item.classList.contains("disabled")) return;
+      if (item.classList.contains("active")) {
+        closeModelSwitcher();
+        return;
+      }
+      const modelId = item.dataset.modelId;
+      if (modelId) {
+        closeModelSwitcher();
+        activateSelectedModel(modelId);
+      }
+    });
+    document.addEventListener("click", (event) => {
+      if (!modelSwitcherOpen) return;
+      const anchor = document.querySelector(".model-switcher-anchor");
+      if (anchor && !anchor.contains(event.target)) {
+        closeModelSwitcher();
+      }
+    });
     document.getElementById("themeToggle").addEventListener("click", toggleTheme);
     document.getElementById("sidebarToggle").addEventListener("click", () => {
       setSidebarOpen(!document.body.classList.contains("sidebar-open"));

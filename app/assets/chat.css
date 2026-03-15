@@ -552,6 +552,10 @@
       pointer-events: none;
     }
 
+    .model-switcher:focus {
+      outline: none;
+    }
+
     .model-switcher.open {
       opacity: 1;
       transform: translateY(0) scale(1);
@@ -578,7 +582,8 @@
       line-height: 1.35;
     }
 
-    .model-switcher-item:hover:not(.disabled) {
+    .model-switcher-item:hover:not(.disabled),
+    .model-switcher-item.focused:not(.disabled) {
       background: color-mix(in srgb, var(--focus) 10%, transparent);
     }
 

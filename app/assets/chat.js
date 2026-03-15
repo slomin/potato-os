@@ -2601,6 +2601,7 @@
       el.hidden = false;
       requestAnimationFrame(() => {
         el.classList.add("open");
+        el.focus();
       });
       if (badge) badge.setAttribute("aria-expanded", "true");
       modelSwitcherOpen = true;
@@ -3971,6 +3972,7 @@ This will restart the local llama runtime process.`
         countdownSelect.value = statusPayload?.download?.countdown_enabled === false ? "false" : "true";
       }
       updateLlamaIndicator(statusPayload);
+      if (modelSwitcherOpen) populateModelSwitcher();
       renderDownloadPrompt(statusPayload);
       renderCompatibilityWarnings(statusPayload);
       renderLlamaRuntimeStatus(statusPayload);
@@ -4493,8 +4495,14 @@ This will restart the local llama runtime process.`
       event.stopPropagation();
       toggleModelSwitcher();
     });
-    document.getElementById("modelSwitcherList").addEventListener("click", (event) => {
-      const item = event.target.closest(".model-switcher-item");
+    document.getElementById("statusBadge").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleModelSwitcher();
+      }
+    });
+    function activateSwitcherItem(item) {
       if (!item) return;
       if (item.classList.contains("disabled")) return;
       if (item.classList.contains("active")) {
@@ -4505,6 +4513,29 @@ This will restart the local llama runtime process.`
       if (modelId) {
         closeModelSwitcher();
         activateSelectedModel(modelId);
+      }
+    }
+    document.getElementById("modelSwitcherList").addEventListener("click", (event) => {
+      activateSwitcherItem(event.target.closest(".model-switcher-item"));
+    });
+    document.getElementById("modelSwitcher").addEventListener("keydown", (event) => {
+      const list = document.getElementById("modelSwitcherList");
+      if (!list) return;
+      const items = Array.from(list.querySelectorAll(".model-switcher-item"));
+      if (items.length === 0) return;
+      const focused = list.querySelector(".model-switcher-item.focused");
+      const idx = focused ? items.indexOf(focused) : -1;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const next = event.key === "ArrowDown"
+          ? (idx + 1) % items.length
+          : (idx - 1 + items.length) % items.length;
+        if (focused) focused.classList.remove("focused");
+        items[next].classList.add("focused");
+        items[next].scrollIntoView({ block: "nearest" });
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        if (focused) activateSwitcherItem(focused);
       }
     });
     document.addEventListener("click", (event) => {

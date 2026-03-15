@@ -2669,3 +2669,58 @@ test("quick model switcher closes on escape and outside click", async ({ page })
   await page.locator("#messages").click();
   await expect(switcher).toBeHidden();
 });
+
+test("quick model switcher supports keyboard navigation", async ({ page }) => {
+  const multiStatus = makeMultiModelStatusPayload();
+  await page.route("**/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(multiStatus) }));
+  await page.goto("/");
+  await expect(page.locator("#statusText")).toContainText("State: READY");
+
+  const badge = page.locator("#statusBadge");
+  const switcher = page.locator("#modelSwitcher");
+
+  // Enter opens the switcher
+  await badge.focus();
+  await page.keyboard.press("Enter");
+  await expect(switcher).toBeVisible();
+
+  // Arrow down highlights first item
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator('.model-switcher-item.focused')).toHaveCount(1);
+
+  // Arrow down again moves to second item
+  await page.keyboard.press("ArrowDown");
+  const secondItem = page.locator('.model-switcher-item[data-model-id="second-model"]');
+  await expect(secondItem).toHaveClass(/focused/);
+
+  // Escape closes
+  await page.keyboard.press("Escape");
+  await expect(switcher).toBeHidden();
+
+  // Space also opens
+  await badge.focus();
+  await page.keyboard.press("Space");
+  await expect(switcher).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(switcher).toBeHidden();
+});
+
+test("quick model switcher refreshes when status updates while open", async ({ page }) => {
+  // Start with a single-model status
+  const singleStatus = makeStatusPayload();
+  let statusResponse = singleStatus;
+  await page.route("**/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(statusResponse) }));
+  await page.goto("/");
+  await expect(page.locator("#statusText")).toContainText("State: READY");
+
+  // Open switcher — shows 1 model
+  await page.locator("#statusBadge").click();
+  await expect(page.locator("#modelSwitcher")).toBeVisible();
+  await expect(page.locator(".model-switcher-item")).toHaveCount(1);
+
+  // Update the response to return 2 models — next poll will pick it up
+  statusResponse = makeMultiModelStatusPayload();
+
+  // Wait for auto-poll (every 2s) to refresh the open switcher
+  await expect(page.locator(".model-switcher-item")).toHaveCount(2, { timeout: 5000 });
+});

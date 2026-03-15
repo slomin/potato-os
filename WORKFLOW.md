@@ -38,9 +38,13 @@ Before starting new implementation work, first check whether a relevant issue al
 6. Move issue to `In Progress` once branch is created.
 7. Open PR linked to the issue.
 8. Move to `QA` when implementation is complete and ready for Pi validation.
-9. Move to `In Review` after QA passes and PR is ready.
-10. Merge PR (squash preferred).
-11. Close issue and set project item to `Done`.
+9. Move to `In Review` only after:
+   - the PR is open,
+   - required QA is complete,
+   - required checks are green or expected to run.
+10. Merge PR (squash preferred) only after checks are green and review is complete.
+11. Let GitHub close the issue via the PR when possible, then set the project item to `Done`.
+12. Delete branch locally/remotely and return local checkout to `main`.
 
 ## Branching Rules (Required)
 
@@ -49,6 +53,17 @@ Before starting new implementation work, first check whether a relevant issue al
 - Before writing code, confirm branch: `git branch --show-current`.
 - Required branch naming: `feat/issue-<id>-<short-slug>`, `fix/issue-<id>-<short-slug>`, `chore/issue-<id>-<short-slug>`.
 - Start every ticket branch from latest `main`: `git checkout main && git pull --ff-only && git checkout -b <branch-name>`.
+
+## GitHub PR Linkage Rules (Required)
+
+- Every implementation PR must link to its primary issue in the PR body.
+- Use `Closes #<id>` only for issues that the PR fully resolves and should auto-close on merge.
+- Use `Refs #<id>` for related issues, partial work, follow-ups, or anything that should remain open after merge.
+- If one PR fully resolves multiple issues, include multiple `Closes #<id>` lines.
+- Do not manually close an issue while its closing PR is still open unless the issue is being abandoned or replaced; if that happens, leave a comment explaining why.
+- Do not move a project item to `Done` while its PR is still open.
+- Keep the issue open and the board item at `QA` or `In Review` until the PR is actually merged.
+- If an issue is closed outside the normal PR merge flow, update the board item immediately so closed issues never remain in `Todo`, `QA`, or `In Review`.
 
 ## Ticket Quality Standard (Required)
 
@@ -85,10 +100,16 @@ For all local development work on this computer, always use `uv`.
 
 Before moving `QA` -> `In Review`, PR description must include:
 - `Closes #<issue-id>` (or equivalent linked issue statement)
+- `Refs #<issue-id>` for any related issues that are not meant to auto-close
 - status/risk notes and rollback guidance
 - exact commands run
 - summarized test output for unit/API/UI layers touched
 - any workflow/runbook changes made from lessons learned
+
+PRs must also satisfy these GitHub process rules before `In Review`:
+- the PR must exist and target the correct base branch
+- required GitHub checks must be running or already green
+- the linked project item must not be moved to `Done` yet
 
 ## Real Pi QA (Required For Pi-Impacting Work)
 
@@ -105,8 +126,12 @@ If a ticket changes runtime behavior on device (API behavior, model orchestratio
 
 ## Post-Merge Closeout
 
+- verify the PR is actually `MERGED`
 - verify the project item moved to `Done`
-- verify issue is closed by merge
+- verify the issue is closed by merge, or close it manually with a note if the PR used `Refs` instead of `Closes`
+- verify closed issues are not still sitting in `Todo`, `QA`, or `In Review`
+- verify the remote branch is deleted
+- verify local repo is back on `main` and synced with `origin/main`
 - capture any process improvements in `WORKFLOW.md` in the same change set (when applicable)
 
 ## Starter Issue Template

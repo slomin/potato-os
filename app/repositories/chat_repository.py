@@ -63,6 +63,7 @@ class LlamaCppRepository:
         forward_headers: dict[str, str],
     ) -> BackendResponse:
         target_url = f"{self.base_url}/v1/chat/completions"
+        payload.pop("system_prompt", None)
 
         if bool(payload.get("stream")):
             stream_timeout = httpx.Timeout(connect=5.0, read=None, write=60.0, pool=60.0)

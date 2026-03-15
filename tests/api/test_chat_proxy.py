@@ -406,7 +406,7 @@ def _stream_response(status_code: int, payload: bytes):
     )
 
 
-def test_chat_sets_cache_prompt_false_by_default(client, runtime, monkeypatch):
+def test_chat_sets_cache_prompt_true_by_default(client, runtime, monkeypatch):
     monkeypatch.setattr("app.main.check_llama_health", _healthy_true)
     runtime.model_path.write_bytes(b"gguf")
 
@@ -432,17 +432,16 @@ def test_chat_sets_cache_prompt_false_by_default(client, runtime, monkeypatch):
     assert route.called
     assert response.status_code == 200
     forwarded = json.loads(route.calls[0].request.content.decode("utf-8"))
-    assert forwarded["cache_prompt"] is False
+    assert forwarded["cache_prompt"] is True
 
 
-def test_chat_preserves_explicit_cache_prompt_override(client, runtime, monkeypatch):
+def test_chat_does_not_forward_system_prompt_field(client, runtime, monkeypatch):
     monkeypatch.setattr("app.main.check_llama_health", _healthy_true)
     runtime.model_path.write_bytes(b"gguf")
 
     request_payload = {
         "model": "qwen",
         "messages": [{"role": "user", "content": "hello"}],
-        "cache_prompt": True,
     }
 
     with respx.mock(assert_all_called=True) as router:
@@ -450,7 +449,7 @@ def test_chat_preserves_explicit_cache_prompt_override(client, runtime, monkeypa
             return_value=_json_response(
                 200,
                 {
-                    "id": "chatcmpl-cp2",
+                    "id": "chatcmpl-sp1",
                     "object": "chat.completion",
                     "choices": [{"message": {"role": "assistant", "content": "ok"}}],
                 },
@@ -462,7 +461,7 @@ def test_chat_preserves_explicit_cache_prompt_override(client, runtime, monkeypa
     assert route.called
     assert response.status_code == 200
     forwarded = json.loads(route.calls[0].request.content.decode("utf-8"))
-    assert forwarded["cache_prompt"] is True
+    assert "system_prompt" not in forwarded
 
 
 def _set_active_model_ready(runtime, model_id: str, filename: str) -> None:

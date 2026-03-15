@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.main import CHAT_HTML
+from app.main import CHAT_HTML, WEB_ASSETS_DIR
 
 
 def test_start_llama_contains_required_flags():
@@ -825,3 +825,17 @@ def test_chat_ui_shows_processing_indicator_while_generating():
     assert 'document.getElementById("cancelBtn").addEventListener("click", cancelCurrentWork);' in CHAT_HTML
     assert "setComposerActivity(\"\")" in CHAT_HTML
     assert "TTFT " in CHAT_HTML
+
+
+def test_chat_html_is_loaded_from_external_file():
+    chat_html_path = WEB_ASSETS_DIR / "chat.html"
+    assert chat_html_path.exists(), f"Expected chat.html at {chat_html_path}"
+    file_content = chat_html_path.read_text(encoding="utf-8")
+    assert file_content == CHAT_HTML
+
+
+def test_root_endpoint_serves_chat_html(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "<!doctype html>" in response.text.lower()
+    assert "Potato Chat" in response.text

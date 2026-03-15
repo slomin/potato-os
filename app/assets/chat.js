@@ -198,6 +198,20 @@
       });
     }
 
+    function sanitizeRestoredMessages(messages) {
+      return messages.map((msg) => {
+        if (!Array.isArray(msg.content)) return { ...msg };
+        const filtered = msg.content.filter(
+          (part) => !(part?.type === "image_url" && part?.image_url?.url === "[stripped]")
+        );
+        if (filtered.length === 0) return { ...msg, content: "" };
+        if (filtered.length === 1 && filtered[0]?.type === "text") {
+          return { ...msg, content: filtered[0].text || "" };
+        }
+        return { ...msg, content: filtered };
+      });
+    }
+
     async function saveActiveSession() {
       if (chatHistory.length === 0) return;
       const now = Date.now();
@@ -237,10 +251,11 @@
 
     function restoreMessagesFromHistory(messages) {
       clearChatState();
+      const sanitized = sanitizeRestoredMessages(messages);
       let historyIndex = 0;
       for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
-        chatHistory.push(msg);
+        chatHistory.push(sanitized[i]);
         if (msg.role === "user") {
           const hasStrippedImage = Array.isArray(msg.content) &&
             msg.content.some((p) => p?.type === "image_url" && p?.image_url?.url === "[stripped]");
@@ -256,7 +271,7 @@
           let assistantView = null;
           if (i + 1 < messages.length && messages[i + 1].role === "assistant") {
             i++;
-            chatHistory.push(messages[i]);
+            chatHistory.push(sanitized[i]);
             assistantView = appendMessage("assistant", String(messages[i].content || ""));
             historyIndex++;
           }
@@ -272,7 +287,7 @@
     }
 
     async function loadSessionIntoView(sessionId) {
-      if (sessionSwitchInFlight) return;
+      if (sessionSwitchInFlight || requestInFlight) return;
       sessionSwitchInFlight = true;
       try {
         if (chatHistory.length > 0 && activeSessionId) {
@@ -292,6 +307,7 @@
     }
 
     async function startNewChat() {
+      if (requestInFlight) return;
       if (chatHistory.length > 0 && activeSessionId) {
         await saveActiveSession();
       }
@@ -304,6 +320,7 @@
     }
 
     async function deleteSession(sessionId) {
+      if (requestInFlight) return;
       await deleteSessionFromDb(sessionId);
       sessionIndex = sessionIndex.filter((s) => s.id !== sessionId);
       if (activeSessionId === sessionId) {
@@ -4599,7 +4616,7 @@ This will restart the local llama runtime process.`
         setCancelEnabled(false);
         focusPromptInput();
         if (chatHistory.length > 0) {
-          saveActiveSession().catch(() => {});
+          try { await saveActiveSession(); } catch (_e) { /* IndexedDB write failed — degrade gracefully */ }
         }
       }
     }

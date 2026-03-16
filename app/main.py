@@ -769,7 +769,11 @@ async def build_status(
     download_payload["active"] = bool(download_active)
     download_payload["auto_start_seconds"] = int(max(0, runtime.auto_download_idle_seconds))
     download_payload["auto_start_remaining_seconds"] = int(max(0, auto_start_remaining_seconds))
-    download_payload["countdown_enabled"] = bool(models_state.get("countdown_enabled", True)) and AUTO_DOWNLOAD_BOOTSTRAP_ENABLED
+    download_payload["countdown_enabled"] = (
+        bool(models_state.get("countdown_enabled", True))
+        and AUTO_DOWNLOAD_BOOTSTRAP_ENABLED
+        and not bool(models_state.get("default_model_downloaded_once", False))
+    )
     download_payload["auto_download_completed_once"] = bool(models_state.get("default_model_downloaded_once", False))
     download_payload["current_model_id"] = current_download_model_id
     download_payload["auto_download_paused"] = not AUTO_DOWNLOAD_BOOTSTRAP_ENABLED

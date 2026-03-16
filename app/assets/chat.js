@@ -3,6 +3,7 @@
 import { appState, defaultSettings, settingsKey, PREFILL_METRICS_KEY, PREFILL_PROGRESS_CAP, PREFILL_PROGRESS_TAIL_START, PREFILL_PROGRESS_FLOOR, PREFILL_TICK_MS, PREFILL_FINISH_DURATION_MS, PREFILL_FINISH_TICK_MS, PREFILL_FINISH_HOLD_MS, STATUS_CHIP_MIN_VISIBLE_MS, STATUS_POLL_TIMEOUT_MS, RUNTIME_RECONNECT_INTERVAL_MS, RUNTIME_RECONNECT_TIMEOUT_MS, RUNTIME_RECONNECT_MAX_ATTEMPTS, IMAGE_CANCEL_RECOVERY_DELAY_MS, IMAGE_CANCEL_RESTART_DELAY_MS, SESSIONS_DB_NAME, SESSIONS_DB_VERSION, SESSIONS_STORE, ACTIVE_SESSION_KEY, SESSION_TITLE_MAX_LENGTH, SESSION_LIST_MAX_VISIBLE, IMAGE_SAFE_MAX_BYTES, IMAGE_MAX_DIMENSION, IMAGE_MAX_PIXEL_COUNT, CPU_CLOCK_MAX_HZ_PI5, GPU_CLOCK_MAX_HZ_PI5, RUNTIME_METRIC_SEVERITY_CLASSES, DEFAULT_MODEL_VISION_SETTINGS } from "./state.js";
 import { formatBytes, formatPercent, formatClockMHz, normalizePercent, percentFromRatio, runtimeMetricSeverityClass, applyRuntimeMetricSeverity, formatCountdownSeconds, estimateDataUrlBytes, postJson } from "./utils.js";
 import { registerAppendMessage, saveActiveSession, clearChatState, startNewChat, deleteSession, loadSessionIntoView, initSessionManager, renderSessionList } from "./session-manager.js";
+import { populateModelSwitcher, openModelSwitcher, closeModelSwitcher, toggleModelSwitcher } from "./model-switcher.js";
 
     // ── Session manager — extracted to session-manager.js ──────────────
 
@@ -2373,96 +2374,7 @@ import { registerAppendMessage, saveActiveSession, clearChatState, startNewChat,
       }
     }
 
-    function truncateModelName(filename) {
-      const name = String(filename || "");
-      const base = name.replace(/\.gguf$/i, "");
-      return base.length > 32 ? base.slice(0, 29) + "..." : base;
-    }
-
-    function statusLabel(status) {
-      const s = String(status || "").toLowerCase();
-      if (s === "ready") return "Ready";
-      if (s === "downloading") return "Downloading";
-      if (s === "failed" || s === "error") return "Failed";
-      if (s === "not_downloaded") return "Not downloaded";
-      return s.charAt(0).toUpperCase() + s.slice(1);
-    }
-
-    function populateModelSwitcher() {
-      const list = document.getElementById("modelSwitcherList");
-      if (!list) return;
-      const models = Array.isArray(appState.latestStatus?.models) ? appState.latestStatus.models : [];
-      list.innerHTML = "";
-      if (models.length === 0) {
-        const li = document.createElement("li");
-        li.className = "model-switcher-item disabled";
-        li.textContent = "No models installed";
-        list.appendChild(li);
-        return;
-      }
-      for (const model of models) {
-        const li = document.createElement("li");
-        const isReady = String(model.status || "").toLowerCase() === "ready";
-        const isActive = model.is_active === true;
-        li.className = "model-switcher-item";
-        li.dataset.modelId = String(model.id || "");
-        li.setAttribute("role", "option");
-        li.setAttribute("aria-selected", String(isActive));
-        if (isActive) li.classList.add("active");
-        if (!isReady) li.classList.add("disabled");
-
-        const check = document.createElement("span");
-        check.className = "model-switcher-check";
-        check.textContent = isActive ? "✓" : "";
-        check.setAttribute("aria-hidden", "true");
-
-        const name = document.createElement("span");
-        name.className = "model-switcher-name";
-        name.textContent = truncateModelName(model.filename);
-        name.title = String(model.filename || "");
-
-        const statusChip = document.createElement("span");
-        statusChip.className = "model-switcher-status";
-        statusChip.textContent = isActive ? "" : statusLabel(model.status);
-
-        li.appendChild(check);
-        li.appendChild(name);
-        li.appendChild(statusChip);
-        list.appendChild(li);
-      }
-    }
-
-    function openModelSwitcher() {
-      const el = document.getElementById("modelSwitcher");
-      const badge = document.getElementById("statusBadge");
-      if (!el) return;
-      populateModelSwitcher();
-      el.hidden = false;
-      requestAnimationFrame(() => {
-        el.classList.add("open");
-        el.focus();
-      });
-      if (badge) badge.setAttribute("aria-expanded", "true");
-      appState.modelSwitcherOpen = true;
-    }
-
-    function closeModelSwitcher() {
-      const el = document.getElementById("modelSwitcher");
-      const badge = document.getElementById("statusBadge");
-      if (!el) return;
-      el.classList.remove("open");
-      el.hidden = true;
-      if (badge) badge.setAttribute("aria-expanded", "false");
-      appState.modelSwitcherOpen = false;
-    }
-
-    function toggleModelSwitcher() {
-      if (appState.modelSwitcherOpen) {
-        closeModelSwitcher();
-      } else {
-        openModelSwitcher();
-      }
-    }
+    // model switcher — extracted to model-switcher.js
 
     function renderDownloadPrompt(statusPayload) {
       const prompt = document.getElementById("downloadPrompt");

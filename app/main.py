@@ -68,6 +68,8 @@ try:
         _model_file_path,
         _sanitize_filename,
         _slugify_id,
+        default_projector_candidates_for_model,
+        download_default_projector_for_model,
         _unique_filename,
         _unique_model_id,
     )
@@ -173,6 +175,8 @@ except ModuleNotFoundError:
         _model_file_path,
         _sanitize_filename,
         _slugify_id,
+        default_projector_candidates_for_model,
+        download_default_projector_for_model,
         _unique_filename,
         _unique_model_id,
     )
@@ -579,52 +583,6 @@ def should_auto_start_download(
 
 def is_download_task_active(task: asyncio.Task[Any] | None) -> bool:
     return task is not None and not task.done()
-
-
-def default_projector_candidates_for_model(filename: str | None) -> list[str]:
-    model_name = str(filename or "").strip().lower()
-    if not model_name:
-        return []
-    if "qwen3" in model_name and "vl" in model_name:
-        if "2b" in model_name:
-            return [
-                "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3VL-2B-Instruct-F16.gguf",
-            ]
-        if "4b" in model_name:
-            return [
-                "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3-VL-4B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3VL-4B-Instruct-F16.gguf",
-                "mmproj-Qwen3-VL-4B-Instruct-F16.gguf",
-            ]
-    if "qwen" in model_name and "3.5" in model_name:
-        stem = Path(str(filename or "")).stem
-        stem_candidates = [stem]
-        trimmed_stem = stem
-        while True:
-            next_stem = re.sub(
-                r"-(?:\d+(?:\.\d+)?bpw|I?Q\d+(?:_[A-Za-z0-9]+)*)$",
-                "",
-                trimmed_stem,
-                flags=re.IGNORECASE,
-            )
-            if next_stem == trimmed_stem or not next_stem:
-                break
-            trimmed_stem = next_stem
-            if trimmed_stem not in stem_candidates:
-                stem_candidates.append(trimmed_stem)
-
-        candidates: list[str] = []
-        for candidate_stem in stem_candidates:
-            candidate_name = f"mmproj-{candidate_stem}-f16.gguf"
-            if candidate_name not in candidates:
-                candidates.append(candidate_name)
-        for fallback in ("mmproj-F16.gguf", "mmproj-BF16.gguf", "mmproj-F32.gguf"):
-            if fallback not in candidates:
-                candidates.append(fallback)
-        return candidates
-    return []
 
 
 def build_model_projector_status(runtime: RuntimeConfig, model: dict[str, Any]) -> dict[str, Any]:
@@ -1641,50 +1599,6 @@ def apply_settings_document_yaml(runtime: RuntimeConfig, document: str) -> tuple
         power_calibration=next_runtime_settings.get("power_calibration"),
     )
     return True, "updated", build_settings_document_payload(runtime)
-
-
-def curated_projector_repo_for_model(filename: str) -> str | None:
-    return projector_repo_for_model(filename)
-
-
-def download_default_projector_for_model(*, runtime: RuntimeConfig, model_id: str) -> tuple[bool, str, str | None]:
-    state = ensure_models_state(runtime)
-    model = get_model_by_id(state, model_id)
-    if model is None:
-        return False, "model_not_found", None
-    filename = str(model.get("filename") or "")
-    if not model_supports_vision_filename(filename):
-        return False, "vision_not_supported", None
-    repo = curated_projector_repo_for_model(filename)
-    candidates = default_projector_candidates_for_model(filename)
-    if not repo or not candidates:
-        return False, "projector_repo_unknown", None
-
-    models_dir = runtime.base_dir / "models"
-    models_dir.mkdir(parents=True, exist_ok=True)
-    client = httpx.Client(follow_redirects=True, timeout=120.0)
-    try:
-        for candidate in candidates:
-            target_path = models_dir / candidate
-            if target_path.exists():
-                return True, "downloaded", candidate
-            url = f"https://huggingface.co/{repo}/resolve/main/{candidate}"
-            part_path = target_path.with_suffix(target_path.suffix + ".part")
-            try:
-                with client.stream("GET", url) as response:
-                    response.raise_for_status()
-                    with part_path.open("wb") as handle:
-                        for chunk in response.iter_bytes():
-                            if chunk:
-                                handle.write(chunk)
-                part_path.replace(target_path)
-                return True, "downloaded", candidate
-            except Exception:
-                part_path.unlink(missing_ok=True)
-                continue
-    finally:
-        client.close()
-    return False, "download_failed", None
 
 
 def _forward_headers(request: Request) -> dict[str, str]:

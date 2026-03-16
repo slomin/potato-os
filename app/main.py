@@ -68,6 +68,7 @@ try:
         _model_file_path,
         _sanitize_filename,
         _slugify_id,
+        build_model_projector_status,
         default_projector_candidates_for_model,
         download_default_projector_for_model,
         _unique_filename,
@@ -175,6 +176,7 @@ except ModuleNotFoundError:
         _model_file_path,
         _sanitize_filename,
         _slugify_id,
+        build_model_projector_status,
         default_projector_candidates_for_model,
         download_default_projector_for_model,
         _unique_filename,
@@ -388,12 +390,10 @@ async def refresh_llama_readiness(
     return dict(next_state)
 
 
-def get_runtime(request: Request) -> RuntimeConfig:
-    return request.app.state.runtime
-
-
-def get_chat_repository(request: Request) -> ChatRepositoryManager:
-    return request.app.state.chat_repository
+try:
+    from app.deps import get_runtime, get_chat_repository  # noqa: F811
+except ModuleNotFoundError:
+    from deps import get_runtime, get_chat_repository  # type: ignore[no-redef]  # noqa: F811
 
 
 try:
@@ -522,42 +522,7 @@ def is_download_task_active(task: asyncio.Task[Any] | None) -> bool:
     return task is not None and not task.done()
 
 
-def build_model_projector_status(runtime: RuntimeConfig, model: dict[str, Any]) -> dict[str, Any]:
-    filename = str(model.get("filename") or "")
-    settings = normalize_model_settings(model.get("settings"), filename=filename)
-    vision = settings.get("vision", {})
-    projector_mode = str(vision.get("projector_mode") or "default").strip().lower()
-    configured_filename = str(vision.get("projector_filename") or "").strip() or None
-    default_candidates = default_projector_candidates_for_model(filename)
-    search_names: list[str] = []
-    if projector_mode == "custom":
-        if configured_filename:
-            search_names.append(configured_filename)
-    else:
-        for candidate in default_candidates:
-            if candidate not in search_names:
-                search_names.append(candidate)
-        if configured_filename and configured_filename not in search_names:
-            search_names.append(configured_filename)
-
-    resolved_name = configured_filename
-    present = False
-    resolved_path = None
-    for candidate in search_names:
-        candidate_path = runtime.base_dir / "models" / candidate
-        if candidate_path.exists():
-            present = True
-            resolved_name = candidate
-            resolved_path = candidate_path
-            break
-
-    return {
-        "configured_filename": configured_filename,
-        "filename": resolved_name,
-        "present": present,
-        "path": str(resolved_path) if resolved_path is not None else None,
-        "default_candidates": default_candidates,
-    }
+    # build_model_projector_status — extracted to model_state.py
 
 
 async def build_status(

@@ -713,3 +713,95 @@ def delete_model(runtime: RuntimeConfig, *, model_id: str) -> tuple[bool, str, b
         state["active_model_id"] = next_active_id
     save_models_state(runtime, state)
     return True, "deleted", deleted_file, freed_bytes, was_active
+
+
+def default_projector_candidates_for_model(filename: str | None) -> list[str]:
+    """Return ordered list of mmproj filename candidates for a given model."""
+    model_name = str(filename or "").strip().lower()
+    if not model_name:
+        return []
+    if "qwen3" in model_name and "vl" in model_name:
+        if "2b" in model_name:
+            return [
+                "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
+                "mmproj-Qwen3VL-2B-Instruct-F16.gguf",
+            ]
+        if "4b" in model_name:
+            return [
+                "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
+                "mmproj-Qwen3-VL-4B-Instruct-Q8_0.gguf",
+                "mmproj-Qwen3VL-4B-Instruct-F16.gguf",
+                "mmproj-Qwen3-VL-4B-Instruct-F16.gguf",
+            ]
+    if "qwen" in model_name and "3.5" in model_name:
+        import re as _re
+        stem = Path(str(filename or "")).stem
+        stem_candidates = [stem]
+        trimmed_stem = stem
+        while True:
+            next_stem = _re.sub(
+                r"-(?:\d+(?:\.\d+)?bpw|I?Q\d+(?:_[A-Za-z0-9]+)*)$",
+                "",
+                trimmed_stem,
+                flags=_re.IGNORECASE,
+            )
+            if next_stem == trimmed_stem or not next_stem:
+                break
+            trimmed_stem = next_stem
+            if trimmed_stem not in stem_candidates:
+                stem_candidates.append(trimmed_stem)
+
+        candidates: list[str] = []
+        for candidate_stem in stem_candidates:
+            candidate_name = f"mmproj-{candidate_stem}-f16.gguf"
+            if candidate_name not in candidates:
+                candidates.append(candidate_name)
+        if "mmproj-F16.gguf" not in candidates:
+            candidates.append("mmproj-F16.gguf")
+        return candidates
+    return []
+
+
+def download_default_projector_for_model(*, runtime: RuntimeConfig, model_id: str) -> tuple[bool, str, str | None]:
+    """Download the default vision projector for a model from HuggingFace."""
+    import httpx
+
+    from app.constants import projector_repo_for_model
+
+    state = ensure_models_state(runtime)
+    model = get_model_by_id(state, model_id)
+    if model is None:
+        return False, "model_not_found", None
+    filename = str(model.get("filename") or "")
+    if not model_supports_vision_filename(filename):
+        return False, "vision_not_supported", None
+    repo = projector_repo_for_model(filename)
+    candidates = default_projector_candidates_for_model(filename)
+    if not repo or not candidates:
+        return False, "projector_repo_unknown", None
+
+    models_dir = runtime.base_dir / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    client = httpx.Client(follow_redirects=True, timeout=120.0)
+    try:
+        for candidate in candidates:
+            target_path = models_dir / candidate
+            if target_path.exists():
+                return True, "downloaded", candidate
+            url = f"https://huggingface.co/{repo}/resolve/main/{candidate}"
+            part_path = target_path.with_suffix(target_path.suffix + ".part")
+            try:
+                with client.stream("GET", url) as response:
+                    response.raise_for_status()
+                    with part_path.open("wb") as handle:
+                        for chunk in response.iter_bytes():
+                            if chunk:
+                                handle.write(chunk)
+                part_path.replace(target_path)
+                return True, "downloaded", candidate
+            except Exception:
+                part_path.unlink(missing_ok=True)
+                continue
+    finally:
+        client.close()
+    return False, "download_failed", None

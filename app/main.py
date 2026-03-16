@@ -68,6 +68,8 @@ try:
         _model_file_path,
         _sanitize_filename,
         _slugify_id,
+        default_projector_candidates_for_model,
+        download_default_projector_for_model,
         _unique_filename,
         _unique_model_id,
     )
@@ -173,6 +175,8 @@ except ModuleNotFoundError:
         _model_file_path,
         _sanitize_filename,
         _slugify_id,
+        default_projector_candidates_for_model,
+        download_default_projector_for_model,
         _unique_filename,
         _unique_model_id,
     )
@@ -392,16 +396,16 @@ def get_chat_repository(request: Request) -> ChatRepositoryManager:
     return request.app.state.chat_repository
 
 
-async def _terminate_process(proc, *, timeout=None):
-    if timeout is None:
-        timeout = LLAMA_SHUTDOWN_TIMEOUT_SECONDS
-    proc.terminate()
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=timeout)
-    except asyncio.TimeoutError:
-        logger.warning("pid=%s did not exit after SIGTERM, sending SIGKILL", getattr(proc, "pid", "?"))
-        proc.kill()
-        await asyncio.wait_for(proc.wait(), timeout=3.0)
+try:
+    from app.process import (
+        terminate_process as _terminate_process,
+        terminate_stray_llama_processes,
+    )
+except ModuleNotFoundError:
+    from process import (  # type: ignore[no-redef]
+        terminate_process as _terminate_process,
+        terminate_stray_llama_processes,
+    )
 
 
 async def restart_managed_llama_process(app: FastAPI) -> tuple[bool, str]:
@@ -427,69 +431,6 @@ async def restart_managed_llama_process(app: FastAPI) -> tuple[bool, str]:
     if terminated_stale:
         return True, "terminated_stale_processes"
     return False, "no_running_process"
-
-
-async def _list_llama_server_pids(runtime: RuntimeConfig) -> list[int]:
-    llama_server_bin = str(runtime.base_dir / "llama" / "bin" / "llama-server")
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "pgrep",
-            "-f",
-            llama_server_bin,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except FileNotFoundError:
-        return []
-    except OSError:
-        logger.warning("Could not inspect running llama-server processes", exc_info=True)
-        return []
-
-    stdout, _stderr = await proc.communicate()
-    if proc.returncode not in {0, 1}:
-        return []
-
-    pids: list[int] = []
-    for line in stdout.decode("utf-8", errors="replace").splitlines():
-        value = line.strip()
-        if not value:
-            continue
-        try:
-            pids.append(int(value))
-        except ValueError:
-            continue
-    return pids
-
-
-async def terminate_stray_llama_processes(runtime: RuntimeConfig, *, exclude_pids: set[int] | None = None) -> int:
-    excluded = {int(pid) for pid in (exclude_pids or set())}
-    terminated = 0
-
-    async def _kill_matching(sig: signal.Signals) -> int:
-        count = 0
-        for pid in await _list_llama_server_pids(runtime):
-            if pid in excluded:
-                continue
-            try:
-                os.kill(pid, sig)
-                count += 1
-            except ProcessLookupError:
-                continue
-            except PermissionError:
-                logger.warning("Permission denied terminating stray llama-server pid=%s", pid)
-            except OSError:
-                logger.warning("Could not terminate stray llama-server pid=%s", pid, exc_info=True)
-        return count
-
-    terminated += await _kill_matching(signal.SIGTERM)
-    if terminated:
-        await asyncio.sleep(0.2)
-
-    remaining = [pid for pid in await _list_llama_server_pids(runtime) if pid not in excluded]
-    if remaining:
-        terminated += await _kill_matching(signal.SIGKILL)
-
-    return terminated
 
 
 def _resolve_backend_active(
@@ -579,52 +520,6 @@ def should_auto_start_download(
 
 def is_download_task_active(task: asyncio.Task[Any] | None) -> bool:
     return task is not None and not task.done()
-
-
-def default_projector_candidates_for_model(filename: str | None) -> list[str]:
-    model_name = str(filename or "").strip().lower()
-    if not model_name:
-        return []
-    if "qwen3" in model_name and "vl" in model_name:
-        if "2b" in model_name:
-            return [
-                "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3VL-2B-Instruct-F16.gguf",
-            ]
-        if "4b" in model_name:
-            return [
-                "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3-VL-4B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3VL-4B-Instruct-F16.gguf",
-                "mmproj-Qwen3-VL-4B-Instruct-F16.gguf",
-            ]
-    if "qwen" in model_name and "3.5" in model_name:
-        stem = Path(str(filename or "")).stem
-        stem_candidates = [stem]
-        trimmed_stem = stem
-        while True:
-            next_stem = re.sub(
-                r"-(?:\d+(?:\.\d+)?bpw|I?Q\d+(?:_[A-Za-z0-9]+)*)$",
-                "",
-                trimmed_stem,
-                flags=re.IGNORECASE,
-            )
-            if next_stem == trimmed_stem or not next_stem:
-                break
-            trimmed_stem = next_stem
-            if trimmed_stem not in stem_candidates:
-                stem_candidates.append(trimmed_stem)
-
-        candidates: list[str] = []
-        for candidate_stem in stem_candidates:
-            candidate_name = f"mmproj-{candidate_stem}-f16.gguf"
-            if candidate_name not in candidates:
-                candidates.append(candidate_name)
-        for fallback in ("mmproj-F16.gguf", "mmproj-BF16.gguf", "mmproj-F32.gguf"):
-            if fallback not in candidates:
-                candidates.append(fallback)
-        return candidates
-    return []
 
 
 def build_model_projector_status(runtime: RuntimeConfig, model: dict[str, Any]) -> dict[str, Any]:
@@ -1498,193 +1393,24 @@ def shutil_which(cmd: str) -> str | None:
     return None
 
 
-def _merge_defaults(payload: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(payload)
-    for key, value in DEFAULT_CHAT_SETTINGS.items():
-        if key == "seed" and "seed" not in merged:
-            continue
-        merged.setdefault(key, value)
-    merged.setdefault("cache_prompt", True)
-    return merged
-
-
-def _merge_active_model_chat_defaults(payload: dict[str, Any], *, runtime: RuntimeConfig) -> dict[str, Any]:
-    merged = dict(payload)
-    chat_settings = get_active_model_settings(runtime).get("chat", {})
-    if not isinstance(chat_settings, dict):
-        chat_settings = {}
-
-    for key in (
-        "temperature",
-        "top_p",
-        "top_k",
-        "repetition_penalty",
-        "presence_penalty",
-        "max_tokens",
-        "stream",
-        "generation_mode",
-        "cache_prompt",
-    ):
-        if key not in merged and key in chat_settings:
-            merged[key] = chat_settings[key]
-
-    if "seed" not in merged and str(chat_settings.get("generation_mode") or "").strip().lower() == "deterministic":
-        merged["seed"] = chat_settings.get("seed")
-
-    system_prompt = str(chat_settings.get("system_prompt") or "").strip()
-    messages = merged.get("messages")
-    if system_prompt and isinstance(messages, list):
-        has_system_message = any(
-            isinstance(message, dict) and str(message.get("role") or "").strip().lower() == "system"
-            for message in messages
-        )
-        if not has_system_message:
-            merged["messages"] = [{"role": "system", "content": system_prompt}, *messages]
-
-    return merged
-
-
-def get_active_model_settings(runtime: RuntimeConfig) -> dict[str, Any]:
-    state = ensure_models_state(runtime)
-    active_model = get_model_by_id(state, str(state.get("active_model_id") or ""))
-    if not isinstance(active_model, dict):
-        active_model = state["models"][0]
-    filename = str(active_model.get("filename") or "")
-    return normalize_model_settings(active_model.get("settings"), filename=filename)
-
-
-def build_settings_document_payload(runtime: RuntimeConfig) -> dict[str, Any]:
-    models_state = ensure_models_state(runtime)
-    runtime_settings = read_llama_runtime_settings(runtime)
-    models_payload: list[dict[str, Any]] = []
-    for item in models_state.get("models", []):
-        if not isinstance(item, dict):
-            continue
-        filename = str(item.get("filename") or "")
-        models_payload.append(
-            {
-                "id": str(item.get("id") or ""),
-                "settings": normalize_model_settings(item.get("settings"), filename=filename),
-            }
-        )
-    return {
-        "version": 1,
-        "active_model_id": str(models_state.get("active_model_id") or ""),
-        "runtime": {
-            "memory_loading_mode": str(runtime_settings.get("memory_loading_mode") or "auto"),
-            "allow_unsupported_large_models": bool(runtime_settings.get("allow_unsupported_large_models", False)),
-        },
-        "models": models_payload,
-    }
-
-
-def export_settings_document_yaml(runtime: RuntimeConfig) -> str:
-    return yaml.safe_dump(build_settings_document_payload(runtime), sort_keys=False, allow_unicode=True)
-
-
-def apply_settings_document_yaml(runtime: RuntimeConfig, document: str) -> tuple[bool, str, dict[str, Any]]:
-    try:
-        payload = yaml.safe_load(document) or {}
-    except yaml.YAMLError:
-        return False, "invalid_yaml", {}
-    if not isinstance(payload, dict):
-        return False, "invalid_document", {}
-
-    current_models_state = ensure_models_state(runtime)
-    next_models_state = json.loads(json.dumps(current_models_state))
-    next_runtime_settings = read_llama_runtime_settings(runtime)
-
-    active_model_id = str(payload.get("active_model_id") or next_models_state.get("active_model_id") or "").strip()
-    model_entries = payload.get("models")
-    if model_entries is not None and not isinstance(model_entries, list):
-        return False, "invalid_models", {}
-
-    if isinstance(model_entries, list):
-        for item in model_entries:
-            if not isinstance(item, dict):
-                return False, "invalid_models", {}
-            model_id = str(item.get("id") or "").strip()
-            if not model_id:
-                return False, "model_id_required", {}
-            model = get_model_by_id(next_models_state, model_id)
-            if model is None:
-                return False, "model_not_found", {"model_id": model_id}
-            filename = str(model.get("filename") or "")
-            try:
-                model["settings"] = normalize_model_settings(item.get("settings"), filename=filename)
-            except ModelSettingsValidationError as exc:
-                return False, "invalid_settings", {"field": exc.field, "model_id": model_id}
-
-    if active_model_id:
-        if get_model_by_id(next_models_state, active_model_id) is None:
-            return False, "active_model_not_found", {"active_model_id": active_model_id}
-        next_models_state["active_model_id"] = active_model_id
-
-    runtime_payload = payload.get("runtime")
-    if runtime_payload is not None:
-        if not isinstance(runtime_payload, dict):
-            return False, "invalid_runtime", {}
-        if "memory_loading_mode" in runtime_payload:
-            next_runtime_settings["memory_loading_mode"] = normalize_llama_memory_loading_mode(
-                runtime_payload.get("memory_loading_mode")
-            )
-        if "allow_unsupported_large_models" in runtime_payload:
-            next_runtime_settings["allow_unsupported_large_models"] = normalize_allow_unsupported_large_models(
-                runtime_payload.get("allow_unsupported_large_models")
-            )
-
-    save_models_state(runtime, next_models_state)
-    write_llama_runtime_settings(
-        runtime,
-        memory_loading_mode=str(next_runtime_settings.get("memory_loading_mode") or "auto"),
-        allow_unsupported_large_models=bool(next_runtime_settings.get("allow_unsupported_large_models", False)),
-        power_calibration=next_runtime_settings.get("power_calibration"),
+try:
+    from app.settings import (
+        apply_settings_document_yaml,
+        build_settings_document_payload,
+        export_settings_document_yaml,
+        get_active_model_settings,
+        merge_active_model_chat_defaults as _merge_active_model_chat_defaults,
+        merge_chat_defaults as _merge_defaults,
     )
-    return True, "updated", build_settings_document_payload(runtime)
-
-
-def curated_projector_repo_for_model(filename: str) -> str | None:
-    return projector_repo_for_model(filename)
-
-
-def download_default_projector_for_model(*, runtime: RuntimeConfig, model_id: str) -> tuple[bool, str, str | None]:
-    state = ensure_models_state(runtime)
-    model = get_model_by_id(state, model_id)
-    if model is None:
-        return False, "model_not_found", None
-    filename = str(model.get("filename") or "")
-    if not model_supports_vision_filename(filename):
-        return False, "vision_not_supported", None
-    repo = curated_projector_repo_for_model(filename)
-    candidates = default_projector_candidates_for_model(filename)
-    if not repo or not candidates:
-        return False, "projector_repo_unknown", None
-
-    models_dir = runtime.base_dir / "models"
-    models_dir.mkdir(parents=True, exist_ok=True)
-    client = httpx.Client(follow_redirects=True, timeout=120.0)
-    try:
-        for candidate in candidates:
-            target_path = models_dir / candidate
-            if target_path.exists():
-                return True, "downloaded", candidate
-            url = f"https://huggingface.co/{repo}/resolve/main/{candidate}"
-            part_path = target_path.with_suffix(target_path.suffix + ".part")
-            try:
-                with client.stream("GET", url) as response:
-                    response.raise_for_status()
-                    with part_path.open("wb") as handle:
-                        for chunk in response.iter_bytes():
-                            if chunk:
-                                handle.write(chunk)
-                part_path.replace(target_path)
-                return True, "downloaded", candidate
-            except Exception:
-                part_path.unlink(missing_ok=True)
-                continue
-    finally:
-        client.close()
-    return False, "download_failed", None
+except ModuleNotFoundError:
+    from settings import (  # type: ignore[no-redef]
+        apply_settings_document_yaml,
+        build_settings_document_payload,
+        export_settings_document_yaml,
+        get_active_model_settings,
+        merge_active_model_chat_defaults as _merge_active_model_chat_defaults,
+        merge_chat_defaults as _merge_defaults,
+    )
 
 
 def _forward_headers(request: Request) -> dict[str, str]:

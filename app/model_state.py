@@ -16,10 +16,10 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger("potato")
 
-MODEL_FILENAME = "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+MODEL_FILENAME = "Qwen3.5-2B-Q4_K_M.gguf"
 MODEL_URL = (
-    "https://huggingface.co/unsloth/Qwen3-VL-4B-Instruct-GGUF/resolve/main/"
-    "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+    "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/"
+    "Qwen3.5-2B-Q4_K_M.gguf"
 )
 MODELS_STATE_VERSION = 1
 

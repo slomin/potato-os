@@ -247,9 +247,9 @@ logging.basicConfig(level=logging.INFO)
 MAX_MODEL_UPLOAD_BYTES = MODEL_UPLOAD_LIMIT_16GB_BYTES
 MODEL_UPLOAD_PURGE_WAIT_TIMEOUT_SECONDS = 20.0
 MODEL_DOWNLOAD_CANCEL_WAIT_TIMEOUT_SECONDS = 20.0
-# Temporarily pause implicit bootstrap model downloads until the new model-first
-# settings flow is in place. Manual downloads remain supported.
-AUTO_DOWNLOAD_BOOTSTRAP_ENABLED = False
+# One-off auto-download: on first start with no model, downloads the default
+# starter model (Qwen3.5-2B-Q4_K_M) after a 5-minute idle countdown.
+AUTO_DOWNLOAD_BOOTSTRAP_ENABLED = True
 LLAMA_READY_HEALTH_POLLS_REQUIRED = 2
 LLAMA_SHUTDOWN_TIMEOUT_SECONDS = 5.0
 
@@ -1125,6 +1125,11 @@ async def _cancel_model_download_locked(
     else:
         state["current_download_model_id"] = None
         save_models_state(runtime, state)
+    # Mark bootstrap as consumed so the auto-download never retries
+    updated = ensure_models_state(runtime)
+    if not updated.get("default_model_downloaded_once"):
+        updated["default_model_downloaded_once"] = True
+        save_models_state(runtime, updated)
     return True, "cancelled"
 
 
@@ -2060,12 +2065,15 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
                 status_code=409,
                 content={"updated": False, "reason": "orchestrator_disabled"},
             )
+        payload = await request.json()
+        enabled = bool(payload.get("enabled", True))
+        updated_state = set_download_countdown_enabled(runtime_cfg, enabled)
         return JSONResponse(
             status_code=200,
             content={
-                "updated": False,
-                "reason": "temporarily_disabled",
-                "countdown_enabled": False,
+                "updated": True,
+                "reason": "countdown_updated",
+                "countdown_enabled": bool(updated_state.get("countdown_enabled", enabled)),
             },
         )
 

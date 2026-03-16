@@ -123,8 +123,9 @@ _rsync --delete \
   --exclude '.venv' \
   --exclude 'models/' \
   --exclude 'output/' \
-  --exclude 'references/old_reference_design/llama_cpp_binary/llama_server_bundle_*' \
-  --exclude 'references/old_reference_design/llama_cpp_binary/runtimes/' \
+  --exclude 'references/' \
+  --exclude '.cache/' \
+  --exclude 'test-results/' \
   "${REPO_ROOT}/" "${PI_USER}@${PI_HOST}:${REMOTE_REPO_DIR}/"
 
 log_info "Repo synced"

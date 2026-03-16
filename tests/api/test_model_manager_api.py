@@ -699,16 +699,20 @@ def test_upload_sets_uploaded_model_active(runtime):
     assert any(m["filename"] == "new-upload.gguf" and m["is_active"] for m in status_body["models"])
 
 
-def test_switch_llama_runtime_bundle_copies_selected_bundle_and_reports_status(runtime, monkeypatch):
+def test_switch_llama_runtime_by_family_installs_slot_and_reports_status(runtime, monkeypatch):
     runtime.enable_orchestrator = True
     app = create_app(runtime=runtime, enable_orchestrator=True)
     app.dependency_overrides[get_runtime] = lambda: runtime
 
-    bundle = runtime.base_dir / "bundle-root" / "llama_server_bundle_test_pi5-opt"
-    (bundle / "bin").mkdir(parents=True)
-    (bundle / "lib").mkdir(parents=True)
-    (bundle / "bin" / "llama-server").write_text("binary", encoding="utf-8")
-    (bundle / "README.txt").write_text("Profile: pi5-opt\n", encoding="utf-8")
+    # Create a runtime slot at runtimes/ik_llama/
+    slot = runtime.base_dir / "runtimes" / "ik_llama"
+    (slot / "bin").mkdir(parents=True)
+    (slot / "lib").mkdir(parents=True)
+    (slot / "bin" / "llama-server").write_text("binary", encoding="utf-8")
+    (slot / "runtime.json").write_text(
+        json.dumps({"family": "ik_llama", "commit": "abc123", "profile": "pi5-opt"}),
+        encoding="utf-8",
+    )
 
     install_calls: list[str] = []
 
@@ -726,25 +730,23 @@ def test_switch_llama_runtime_bundle_copies_selected_bundle_and_reports_status(r
 
     monkeypatch.setattr("app.main.install_llama_runtime_bundle", _fake_install)
     monkeypatch.setattr("app.main.restart_managed_llama_process", _fake_restart)
-    monkeypatch.setattr("app.runtime_state._default_llama_runtime_bundle_roots", lambda _runtime: [bundle.parent])
 
     with TestClient(app) as client:
-        response = client.post("/internal/llama-runtime/switch", json={"bundle_path": str(bundle)})
+        response = client.post("/internal/llama-runtime/switch", json={"family": "ik_llama"})
         status = client.get("/status")
 
     assert response.status_code == 200
     body = response.json()
     assert body["switched"] is True
-    assert body["bundle"]["path"] == str(bundle)
-    assert install_calls == [str(bundle)]
+    assert body["family"] == "ik_llama"
+    assert install_calls == [str(slot)]
 
     status_body = status.json()
     assert "llama_runtime" in status_body
-    assert status_body["llama_runtime"]["current"]["source_bundle_path"] == str(bundle)
     marker_path = runtime.base_dir / "llama" / ".potato-llama-runtime-bundle.json"
     assert marker_path.exists()
     marker = json.loads(marker_path.read_text(encoding="utf-8"))
-    assert marker["source_bundle_path"] == str(bundle)
+    assert marker["family"] == "ik_llama"
 
 
 def test_set_llama_memory_loading_mode_persists_and_restarts(runtime, monkeypatch):

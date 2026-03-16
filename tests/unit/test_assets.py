@@ -499,9 +499,9 @@ def test_chat_ui_runtime_details_hide_compact_and_apply_metric_threshold_classes
     assert "function_call" not in CHAT_UI
 
 
-def test_chat_ui_exposes_llama_runtime_bundle_switch_controls():
-    assert "Llama Runtime Bundle" in CHAT_UI
-    assert 'id="llamaRuntimeBundleSelect"' in CHAT_UI
+def test_chat_ui_exposes_llama_runtime_family_switch_controls():
+    assert "Llama Runtime" in CHAT_UI
+    assert 'id="llamaRuntimeFamilySelect"' in CHAT_UI
     assert 'id="switchLlamaRuntimeBtn"' in CHAT_UI
     assert 'id="llamaRuntimeCurrent"' in CHAT_UI
     assert 'id="llamaRuntimeSwitchStatus"' in CHAT_UI

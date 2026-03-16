@@ -2376,7 +2376,7 @@ import { appState, defaultSettings, settingsKey, PREFILL_METRICS_KEY, PREFILL_PR
       cancelBtn.disabled = !show;
     }
 
-    let appState.markdownRendererConfigured = false;
+    appState.markdownRendererConfigured = false;
 
     function renderAssistantMarkdownToHtml(text) {
       const source = String(text || "");

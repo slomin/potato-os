@@ -468,7 +468,7 @@ def test_chat_assets_are_loaded_from_external_files():
     assert (WEB_ASSETS_DIR / "chat.css").read_text(encoding="utf-8") == CHAT_CSS
     assert (WEB_ASSETS_DIR / "chat.js").read_text(encoding="utf-8") == CHAT_JS
     assert '<link rel="stylesheet" href="/assets/chat.css">' in CHAT_HTML
-    assert '<script src="/assets/chat.js"></script>' in CHAT_HTML
+    assert '<script type="module" src="/assets/chat.js"></script>' in CHAT_HTML
 
 
 def test_root_endpoint_serves_chat_html(client):

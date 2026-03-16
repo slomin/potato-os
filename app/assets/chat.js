@@ -1,3 +1,5 @@
+"use strict";
+
     const defaultSettings = {
       temperature: 0.7,
       top_p: 0.8,
@@ -4925,3 +4927,6 @@
         sendChat();
       }
     });
+
+    // Expose select functions for Playwright test access
+    window.appendMessage = appendMessage;

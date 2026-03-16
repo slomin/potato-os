@@ -129,10 +129,8 @@ def test_install_script_uses_reference_llama_bundle_sync():
 
     assert "references/old_reference_design/llama_cpp_binary" in script
     assert "POTATO_LLAMA_BUNDLE_SRC" in script
-    assert "POTATO_LLAMA_BUNDLE_SELECT" in script
-    assert 'LLAMA_BUNDLE_SELECT="${POTATO_LLAMA_BUNDLE_SELECT:-}"' in script
-    assert 'llama_server_bundle_*${LLAMA_BUNDLE_SELECT}*' in script
-    assert "llama_server_bundle_" in script
+    assert "POTATO_LLAMA_RUNTIME_FAMILY" in script
+    assert "runtimes/${LLAMA_RUNTIME_FAMILY}" in script
     assert "TARGET_ROOT}/llama" in script
     assert "apt-get install -y \\" in script
     assert "nginx \\" in script
@@ -287,9 +285,8 @@ def test_image_build_scripts_exist_for_lite_and_full_variants():
     assert "docker rm -f" in common
     assert "Git does not preserve directory modes" in common
     assert "chmod 0755 \"${files_root}/opt\"" in common
-    assert "${potato_root}/llama-bundles" in common
-    assert "llama-bundles/${bundle_name}/" in common
-    assert "find \"${bundle_root}\" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' | sort" in common
+    assert "${potato_root}/runtimes" in common
+    assert "runtimes/${slot_name}" in common
     assert "docker context use default" in uv_script
     assert "colima start" in uv_script
     assert "except RuntimeError as exc" in uv_script
@@ -499,9 +496,9 @@ def test_chat_ui_runtime_details_hide_compact_and_apply_metric_threshold_classes
     assert "function_call" not in CHAT_UI
 
 
-def test_chat_ui_exposes_llama_runtime_bundle_switch_controls():
-    assert "Llama Runtime Bundle" in CHAT_UI
-    assert 'id="llamaRuntimeBundleSelect"' in CHAT_UI
+def test_chat_ui_exposes_llama_runtime_family_switch_controls():
+    assert "Llama Runtime" in CHAT_UI
+    assert 'id="llamaRuntimeFamilySelect"' in CHAT_UI
     assert 'id="switchLlamaRuntimeBtn"' in CHAT_UI
     assert 'id="llamaRuntimeCurrent"' in CHAT_UI
     assert 'id="llamaRuntimeSwitchStatus"' in CHAT_UI

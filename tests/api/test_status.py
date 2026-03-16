@@ -164,8 +164,8 @@ def test_status_includes_llama_runtime_payload(client, monkeypatch):
     monkeypatch.setattr(
         "app.main.build_llama_runtime_status",
         lambda _runtime, app=None: {
-            "current": {"install_dir": "/opt/potato/llama"},
-            "available_bundles": [{"path": "/tmp/a", "name": "llama_server_bundle_x"}],
+            "current": {"install_dir": "/opt/potato/llama", "family": "ik_llama"},
+            "available_runtimes": [{"family": "ik_llama", "path": "/opt/potato/runtimes/ik_llama"}],
             "switch": {"active": False, "error": None},
         },
     )
@@ -176,7 +176,7 @@ def test_status_includes_llama_runtime_payload(client, monkeypatch):
     body = response.json()
     assert "llama_runtime" in body
     assert body["llama_runtime"]["current"]["install_dir"] == "/opt/potato/llama"
-    assert len(body["llama_runtime"]["available_bundles"]) == 1
+    assert len(body["llama_runtime"]["available_runtimes"]) == 1
 
 
 def test_status_includes_llama_memory_loading_setting(client):

@@ -11,7 +11,7 @@ POTATO_ENFORCE_HOSTNAME="${POTATO_ENFORCE_HOSTNAME:-1}"
 LLAMA_RUNTIME_DIR="${POTATO_LLAMA_RUNTIME_DIR:-${TARGET_ROOT}/llama}"
 LLAMA_BUNDLE_ROOT="${POTATO_LLAMA_BUNDLE_ROOT:-${REPO_ROOT}/references/old_reference_design/llama_cpp_binary}"
 LLAMA_BUNDLE_SRC="${POTATO_LLAMA_BUNDLE_SRC:-}"
-LLAMA_BUNDLE_SELECT="${POTATO_LLAMA_BUNDLE_SELECT:-}"
+LLAMA_RUNTIME_FAMILY="${POTATO_LLAMA_RUNTIME_FAMILY:-ik_llama}"
 REQUIRE_LLAMA_BUNDLE="${POTATO_REQUIRE_LLAMA_BUNDLE:-1}"
 
 run_sudo() {
@@ -44,23 +44,32 @@ resolve_llama_bundle_src() {
     printf '%s\n' "${LLAMA_BUNDLE_SRC}"
     return
   fi
-
-  if [ ! -d "${LLAMA_BUNDLE_ROOT}" ]; then
+  # Look for the runtime slot matching the selected family
+  local slot_dir="${LLAMA_BUNDLE_ROOT}/runtimes/${LLAMA_RUNTIME_FAMILY}"
+  if [ -d "${slot_dir}" ] && [ -x "${slot_dir}/bin/llama-server" ]; then
+    printf '%s\n' "${slot_dir}"
     return
   fi
-
-  if [ -n "${LLAMA_BUNDLE_SELECT}" ]; then
-    if [ -d "${LLAMA_BUNDLE_SELECT}" ]; then
-      printf '%s\n' "${LLAMA_BUNDLE_SELECT}"
-      return
+  # Legacy fallback: filter bundles by requested family
+  if [ -d "${LLAMA_BUNDLE_ROOT}" ]; then
+    local -a matched=()
+    local d name_lower
+    while IFS= read -r d; do
+      [ -n "${d}" ] || continue
+      name_lower="$(basename "${d}" | tr '[:upper:]' '[:lower:]')"
+      case "${LLAMA_RUNTIME_FAMILY}" in
+        ik_llama)
+          [[ "${name_lower}" == *ik* ]] && matched+=("${d}") ;;
+        llama_cpp)
+          [[ "${name_lower}" != *ik* ]] && matched+=("${d}") ;;
+      esac
+    done < <(find "${LLAMA_BUNDLE_ROOT}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' 2>/dev/null)
+    if [ "${#matched[@]}" -ge 1 ]; then
+      printf '%s\n' "${matched[@]}" | sort | tail -n 1
+    else
+      printf 'WARNING: no legacy bundle matching family=%s found.\n' "${LLAMA_RUNTIME_FAMILY}" >&2
     fi
-    find "${LLAMA_BUNDLE_ROOT}" \
-      -mindepth 1 -maxdepth 1 -type d \
-      -name "llama_server_bundle_*${LLAMA_BUNDLE_SELECT}*" | sort | tail -n 1
-    return
   fi
-
-  find "${LLAMA_BUNDLE_ROOT}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' | sort | tail -n 1
 }
 
 run_sudo apt-get update
@@ -145,12 +154,14 @@ if [ -n "${bundle_src}" ] && [ -x "${bundle_src}/bin/llama-server" ] && [ -d "${
   if [ -f "${LLAMA_RUNTIME_DIR}/run-llama-server.sh" ]; then
     run_sudo chmod +x "${LLAMA_RUNTIME_DIR}/run-llama-server.sh"
   fi
-  printf 'Installed llama bundle: %s -> %s\n' "${bundle_src}" "${LLAMA_RUNTIME_DIR}"
-  if [ -n "${LLAMA_BUNDLE_SELECT}" ]; then
-    printf 'Bundle selector: %s\n' "${LLAMA_BUNDLE_SELECT}"
-  fi
+  # Also populate the runtime slot so discover_runtime_slots() finds it
+  local slot_dir="${TARGET_ROOT}/runtimes/${LLAMA_RUNTIME_FAMILY}"
+  run_sudo mkdir -p "${slot_dir}"
+  run_sudo rsync -a --delete "${bundle_src}/" "${slot_dir}/"
+  run_sudo chmod +x "${slot_dir}/bin/llama-server"
+  printf 'Installed llama runtime: %s -> %s (family: %s, slot: %s)\n' "${bundle_src}" "${LLAMA_RUNTIME_DIR}" "${LLAMA_RUNTIME_FAMILY}" "${slot_dir}"
 else
-  msg="llama bundle not found. Expected under ${LLAMA_BUNDLE_ROOT}, set POTATO_LLAMA_BUNDLE_SRC, or use POTATO_LLAMA_BUNDLE_SELECT."
+  msg="llama runtime not found. Expected at ${LLAMA_BUNDLE_ROOT}/runtimes/${LLAMA_RUNTIME_FAMILY}/ or set POTATO_LLAMA_BUNDLE_SRC."
   if [ "${REQUIRE_LLAMA_BUNDLE}" = "1" ]; then
     printf 'ERROR: %s\n' "${msg}" >&2
     exit 1

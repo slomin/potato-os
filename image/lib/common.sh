@@ -43,14 +43,21 @@ resolve_llama_bundle_src() {
   local repo_root="$1"
   local bundle_src="${POTATO_LLAMA_BUNDLE_SRC:-}"
   local bundle_root="${POTATO_LLAMA_BUNDLE_ROOT:-${repo_root}/references/old_reference_design/llama_cpp_binary}"
+  local family="${POTATO_LLAMA_RUNTIME_FAMILY:-ik_llama}"
 
   if [ -n "${bundle_src}" ]; then
     printf '%s\n' "${bundle_src}"
     return
   fi
-
+  # Explicit runtime slot
+  local slot_dir="${bundle_root}/runtimes/${family}"
+  if [ -d "${slot_dir}" ] && [ -x "${slot_dir}/bin/llama-server" ]; then
+    printf '%s\n' "${slot_dir}"
+    return
+  fi
+  # Legacy fallback
   if [ -d "${bundle_root}" ]; then
-    find "${bundle_root}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' | sort | tail -n 1
+    find "${bundle_root}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' 2>/dev/null | sort | tail -n 1
   fi
 }
 
@@ -151,10 +158,10 @@ build_stage_payload() {
   local files_root="${stage_path}/00-potato/files"
   local potato_root="${files_root}/opt/potato"
   local bundle_root="${POTATO_LLAMA_BUNDLE_ROOT:-${repo_root}/references/old_reference_design/llama_cpp_binary}"
-  mkdir -p "${potato_root}/app" "${potato_root}/bin" "${potato_root}/systemd" "${potato_root}/nginx" "${potato_root}/models" "${potato_root}/state" "${potato_root}/config" "${potato_root}/llama" "${potato_root}/llama-bundles"
+  mkdir -p "${potato_root}/app" "${potato_root}/bin" "${potato_root}/systemd" "${potato_root}/nginx" "${potato_root}/models" "${potato_root}/state" "${potato_root}/config" "${potato_root}/llama" "${potato_root}/runtimes"
   # Git does not preserve directory modes, and local umask can make files/opt too restrictive.
   # Normalize stage payload directories so the flashed image keeps /opt traversable by service users.
-  chmod 0755 "${files_root}/opt" "${potato_root}" "${potato_root}/app" "${potato_root}/bin" "${potato_root}/systemd" "${potato_root}/nginx" "${potato_root}/models" "${potato_root}/state" "${potato_root}/config" "${potato_root}/llama" "${potato_root}/llama-bundles"
+  chmod 0755 "${files_root}/opt" "${potato_root}" "${potato_root}/app" "${potato_root}/bin" "${potato_root}/systemd" "${potato_root}/nginx" "${potato_root}/models" "${potato_root}/state" "${potato_root}/config" "${potato_root}/llama" "${potato_root}/runtimes"
 
   rsync -a "${repo_root}/app/" "${potato_root}/app/"
   rsync -a "${repo_root}/bin/" "${potato_root}/bin/"
@@ -170,19 +177,36 @@ build_stage_payload() {
   rsync -a --delete "${bundle_src}/" "${potato_root}/llama/"
   chmod +x "${potato_root}/llama/bin/llama-server"
 
+  # Populate runtime slots from explicit runtimes/ dirs first, then legacy bundles
+  local runtimes_src="${bundle_root}/runtimes"
+  local slot_name slot_src
+  for slot_name in ik_llama llama_cpp; do
+    slot_src="${runtimes_src}/${slot_name}"
+    if [ -d "${slot_src}" ] && [ -x "${slot_src}/bin/llama-server" ]; then
+      rsync -a --delete "${slot_src}/" "${potato_root}/runtimes/${slot_name}/"
+      chmod +x "${potato_root}/runtimes/${slot_name}/bin/llama-server"
+    fi
+  done
+
+  # Fill any empty slots from legacy llama_server_bundle_* directories
   if [ -d "${bundle_root}" ]; then
-    local bundle_dir bundle_name
-    find "${bundle_root}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' | sort | while IFS= read -r bundle_dir; do
-      [ -n "${bundle_dir}" ] || continue
-      [ -x "${bundle_dir}/bin/llama-server" ] || continue
-      [ -d "${bundle_dir}/lib" ] || continue
-      bundle_name="$(basename "${bundle_dir}")"
-      rsync -a --delete "${bundle_dir}/" "${potato_root}/llama-bundles/${bundle_name}/"
-      chmod +x "${potato_root}/llama-bundles/${bundle_name}/bin/llama-server"
-      if [ -f "${potato_root}/llama-bundles/${bundle_name}/run-llama-server.sh" ]; then
-        chmod +x "${potato_root}/llama-bundles/${bundle_name}/run-llama-server.sh"
+    local legacy_dir legacy_lower
+    while IFS= read -r legacy_dir; do
+      [ -n "${legacy_dir}" ] || continue
+      [ -x "${legacy_dir}/bin/llama-server" ] || continue
+      [ -d "${legacy_dir}/lib" ] || continue
+      legacy_lower="$(basename "${legacy_dir}" | tr '[:upper:]' '[:lower:]')"
+      if [[ "${legacy_lower}" == *ik* ]]; then
+        slot_name="ik_llama"
+      else
+        slot_name="llama_cpp"
       fi
-    done
+      if [ ! -d "${potato_root}/runtimes/${slot_name}/bin" ]; then
+        mkdir -p "${potato_root}/runtimes/${slot_name}"
+        rsync -a --delete "${legacy_dir}/" "${potato_root}/runtimes/${slot_name}/"
+        chmod +x "${potato_root}/runtimes/${slot_name}/bin/llama-server"
+      fi
+    done < <(find "${bundle_root}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' 2>/dev/null | sort)
   fi
 
   if [ "${variant}" = "full" ]; then

@@ -396,16 +396,10 @@ def get_chat_repository(request: Request) -> ChatRepositoryManager:
     return request.app.state.chat_repository
 
 
-async def _terminate_process(proc, *, timeout=None):
-    if timeout is None:
-        timeout = LLAMA_SHUTDOWN_TIMEOUT_SECONDS
-    proc.terminate()
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=timeout)
-    except asyncio.TimeoutError:
-        logger.warning("pid=%s did not exit after SIGTERM, sending SIGKILL", getattr(proc, "pid", "?"))
-        proc.kill()
-        await asyncio.wait_for(proc.wait(), timeout=3.0)
+from app.process import (  # noqa: E402
+    terminate_process as _terminate_process,
+    terminate_stray_llama_processes,
+)
 
 
 async def restart_managed_llama_process(app: FastAPI) -> tuple[bool, str]:
@@ -431,69 +425,6 @@ async def restart_managed_llama_process(app: FastAPI) -> tuple[bool, str]:
     if terminated_stale:
         return True, "terminated_stale_processes"
     return False, "no_running_process"
-
-
-async def _list_llama_server_pids(runtime: RuntimeConfig) -> list[int]:
-    llama_server_bin = str(runtime.base_dir / "llama" / "bin" / "llama-server")
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "pgrep",
-            "-f",
-            llama_server_bin,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except FileNotFoundError:
-        return []
-    except OSError:
-        logger.warning("Could not inspect running llama-server processes", exc_info=True)
-        return []
-
-    stdout, _stderr = await proc.communicate()
-    if proc.returncode not in {0, 1}:
-        return []
-
-    pids: list[int] = []
-    for line in stdout.decode("utf-8", errors="replace").splitlines():
-        value = line.strip()
-        if not value:
-            continue
-        try:
-            pids.append(int(value))
-        except ValueError:
-            continue
-    return pids
-
-
-async def terminate_stray_llama_processes(runtime: RuntimeConfig, *, exclude_pids: set[int] | None = None) -> int:
-    excluded = {int(pid) for pid in (exclude_pids or set())}
-    terminated = 0
-
-    async def _kill_matching(sig: signal.Signals) -> int:
-        count = 0
-        for pid in await _list_llama_server_pids(runtime):
-            if pid in excluded:
-                continue
-            try:
-                os.kill(pid, sig)
-                count += 1
-            except ProcessLookupError:
-                continue
-            except PermissionError:
-                logger.warning("Permission denied terminating stray llama-server pid=%s", pid)
-            except OSError:
-                logger.warning("Could not terminate stray llama-server pid=%s", pid, exc_info=True)
-        return count
-
-    terminated += await _kill_matching(signal.SIGTERM)
-    if terminated:
-        await asyncio.sleep(0.2)
-
-    remaining = [pid for pid in await _list_llama_server_pids(runtime) if pid not in excluded]
-    if remaining:
-        terminated += await _kill_matching(signal.SIGKILL)
-
-    return terminated
 
 
 def _resolve_backend_active(

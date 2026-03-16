@@ -50,20 +50,24 @@ resolve_llama_bundle_src() {
     printf '%s\n' "${slot_dir}"
     return
   fi
-  # Legacy fallback: find legacy bundle matching the requested family
+  # Legacy fallback: filter bundles by requested family
   if [ -d "${LLAMA_BUNDLE_ROOT}" ]; then
-    local -a found=()
-    local family_pattern=""
-    case "${LLAMA_RUNTIME_FAMILY}" in
-      ik_llama) family_pattern="*ik*" ;;
-      llama_cpp) family_pattern="*baseline*|*pi5-opt" ;;
-    esac
-    while IFS= read -r d; do found+=("$d"); done < <(find "${LLAMA_BUNDLE_ROOT}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' 2>/dev/null)
-    if [ "${#found[@]}" -eq 1 ]; then
-      printf '%s\n' "${found[0]}"
-    elif [ "${#found[@]}" -gt 1 ]; then
-      printf 'WARNING: multiple legacy bundles found — using latest matching family=%s.\n' "${LLAMA_RUNTIME_FAMILY}" >&2
-      printf '%s\n' "${found[@]}" | sort | tail -n 1
+    local -a matched=()
+    local d name_lower
+    while IFS= read -r d; do
+      [ -n "${d}" ] || continue
+      name_lower="$(basename "${d}" | tr '[:upper:]' '[:lower:]')"
+      case "${LLAMA_RUNTIME_FAMILY}" in
+        ik_llama)
+          [[ "${name_lower}" == *ik* ]] && matched+=("${d}") ;;
+        llama_cpp)
+          [[ "${name_lower}" != *ik* ]] && matched+=("${d}") ;;
+      esac
+    done < <(find "${LLAMA_BUNDLE_ROOT}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' 2>/dev/null)
+    if [ "${#matched[@]}" -ge 1 ]; then
+      printf '%s\n' "${matched[@]}" | sort | tail -n 1
+    else
+      printf 'WARNING: no legacy bundle matching family=%s found.\n' "${LLAMA_RUNTIME_FAMILY}" >&2
     fi
   fi
 }

@@ -177,26 +177,36 @@ build_stage_payload() {
   rsync -a --delete "${bundle_src}/" "${potato_root}/llama/"
   chmod +x "${potato_root}/llama/bin/llama-server"
 
-  # Copy explicit runtime slots (ik_llama, llama_cpp) if they exist
+  # Populate runtime slots from explicit runtimes/ dirs first, then legacy bundles
   local runtimes_src="${bundle_root}/runtimes"
-  if [ -d "${runtimes_src}" ]; then
-    local slot_name
-    for slot_name in ik_llama llama_cpp; do
-      local slot_src="${runtimes_src}/${slot_name}"
-      if [ -d "${slot_src}" ] && [ -x "${slot_src}/bin/llama-server" ]; then
-        rsync -a --delete "${slot_src}/" "${potato_root}/runtimes/${slot_name}/"
+  local slot_name slot_src
+  for slot_name in ik_llama llama_cpp; do
+    slot_src="${runtimes_src}/${slot_name}"
+    if [ -d "${slot_src}" ] && [ -x "${slot_src}/bin/llama-server" ]; then
+      rsync -a --delete "${slot_src}/" "${potato_root}/runtimes/${slot_name}/"
+      chmod +x "${potato_root}/runtimes/${slot_name}/bin/llama-server"
+    fi
+  done
+
+  # Fill any empty slots from legacy llama_server_bundle_* directories
+  if [ -d "${bundle_root}" ]; then
+    local legacy_dir legacy_lower
+    while IFS= read -r legacy_dir; do
+      [ -n "${legacy_dir}" ] || continue
+      [ -x "${legacy_dir}/bin/llama-server" ] || continue
+      [ -d "${legacy_dir}/lib" ] || continue
+      legacy_lower="$(basename "${legacy_dir}" | tr '[:upper:]' '[:lower:]')"
+      if [[ "${legacy_lower}" == *ik* ]]; then
+        slot_name="ik_llama"
+      else
+        slot_name="llama_cpp"
+      fi
+      if [ ! -d "${potato_root}/runtimes/${slot_name}/bin" ]; then
+        mkdir -p "${potato_root}/runtimes/${slot_name}"
+        rsync -a --delete "${legacy_dir}/" "${potato_root}/runtimes/${slot_name}/"
         chmod +x "${potato_root}/runtimes/${slot_name}/bin/llama-server"
       fi
-    done
-  fi
-
-  # Also populate the default family slot from the active bundle if no slot exists yet
-  local family="${POTATO_LLAMA_RUNTIME_FAMILY:-ik_llama}"
-  local active_slot="${potato_root}/runtimes/${family}"
-  if [ ! -d "${active_slot}/bin" ]; then
-    mkdir -p "${active_slot}"
-    rsync -a --delete "${bundle_src}/" "${active_slot}/"
-    chmod +x "${active_slot}/bin/llama-server"
+    done < <(find "${bundle_root}" -mindepth 1 -maxdepth 1 -type d -name 'llama_server_bundle_*' 2>/dev/null | sort)
   fi
 
   if [ "${variant}" = "full" ]; then

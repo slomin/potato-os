@@ -1873,40 +1873,7 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
             },
         )
 
-    @app.get("/internal/settings-document")
-    async def get_settings_document(runtime_cfg: RuntimeConfig = Depends(get_runtime)) -> JSONResponse:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "format": "yaml",
-                "document": export_settings_document_yaml(runtime_cfg),
-            },
-        )
-
-    @app.post("/internal/settings-document")
-    async def apply_settings_document_endpoint(
-        request: Request,
-        runtime_cfg: RuntimeConfig = Depends(get_runtime),
-    ) -> JSONResponse:
-        payload = await request.json()
-        document = str(payload.get("document") or "")
-        if not document.strip():
-            return JSONResponse(status_code=400, content={"updated": False, "reason": "document_required"})
-        updated, reason, settings_document = apply_settings_document_yaml(runtime_cfg, document)
-        if not updated:
-            return JSONResponse(status_code=400, content={"updated": False, "reason": reason, **settings_document})
-        restarted, restart_reason = await restart_managed_llama_process(app)
-        return JSONResponse(
-            status_code=200,
-            content={
-                "updated": True,
-                "reason": reason,
-                "active_model_id": settings_document.get("active_model_id"),
-                "document": yaml.safe_dump(settings_document, sort_keys=False, allow_unicode=True),
-                "restarted": restarted,
-                "restart_reason": restart_reason,
-            },
-        )
+    # Settings document routes — extracted to app/routes/settings.py
 
     @app.post("/internal/models/download-projector")
     async def download_projector_for_model_endpoint(
@@ -2339,15 +2306,21 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
     # Chat completions route — extracted to app/routes/chat.py
     try:
         from app.routes.chat import router as chat_router, register_chat_helpers
+        from app.routes.settings import router as settings_router, register_settings_helpers
     except ModuleNotFoundError:
         from routes.chat import router as chat_router, register_chat_helpers  # type: ignore[no-redef]
+        from routes.settings import router as settings_router, register_settings_helpers  # type: ignore[no-redef]
 
     register_chat_helpers(
         build_status=build_status,
         get_status_download_context=get_status_download_context,
         forward_headers=_forward_headers,
     )
+    register_settings_helpers(
+        restart_managed_llama_process=restart_managed_llama_process,
+    )
     app.include_router(chat_router)
+    app.include_router(settings_router)
 
     return app
 

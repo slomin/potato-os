@@ -17,6 +17,8 @@ Operational scripts are in `bin/`:
 - `build_llama_runtime.sh`: Builds ik_llama or upstream llama.cpp on Pi from source.
 - `prepare_imager_bundle.sh`: Packages SD card image payload.
 - `ensure_model.sh`: Bootstrap model download helper.
+- `publish_runtime.sh`: Packages, tags, and publishes a runtime slot to GitHub Releases.
+- `lib/runtime_release.sh`: Shared helpers for downloading runtimes from GitHub Releases.
 
 Service definitions in `systemd/`. Nginx config in `nginx/`. Image build in `image/`.
 

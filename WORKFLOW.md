@@ -250,6 +250,35 @@ When the bundled `llama-server` needs updating (new ik_llama features, bug fixes
 
 5. **Deploy** via `install_dev.sh` with `POTATO_LLAMA_BUNDLE_SRC=<bundle-path>`.
 
+## Publishing Runtime Binaries to GitHub Releases
+
+After building a runtime on Pi, publish it so fresh installs can auto-download:
+
+1. **Build the runtime** using `bin/build_llama_runtime.sh` (defaults to ik_llama).
+
+2. **Publish to GitHub Releases**:
+   ```bash
+   ./bin/publish_runtime.sh --family ik_llama
+   ```
+   This creates a tag `runtime/ik_llama-<commit>`, packages the slot as a tarball, and uploads it as a GitHub Release. Use `--dry-run` to create the tarball without publishing.
+
+3. **Verify**: Check the release at `https://github.com/slomin/potato-os/releases`.
+
+### Tag Convention
+
+- `runtime/ik_llama-<commit-hash>` — ik_llama runtime built from that commit
+- `runtime/llama_cpp-<commit-hash>` — upstream llama.cpp runtime built from that commit
+
+### Tarball Naming
+
+`<family>-<commit>-<profile>.tar.gz` (e.g., `ik_llama-666ea0e9-pi5-opt.tar.gz`)
+
+### Using Published Runtimes
+
+- **Explicit URL**: `POTATO_LLAMA_RELEASE_URL=<url> ./bin/install_dev.sh`
+- **Auto-detect latest**: `POTATO_LLAMA_RELEASE_AUTO=1 ./bin/install_dev.sh`
+- **Local build always wins** when `runtimes/<family>/` exists locally.
+
 ## Helpful CLI snippets
 
 ```bash

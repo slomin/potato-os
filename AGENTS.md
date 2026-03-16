@@ -13,9 +13,12 @@ Operational scripts are in `bin/` (`install_dev.sh`, `run.sh`, `start_llama.sh`,
 Reference material and image artifacts are in `references/` and `raspberry_os_clean_image/`.
 
 ## Build, Test, and Development Commands
-- `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`: create local dev env.
-- `.venv/bin/python -m pytest -q`: run all tests.
-- `POTATO_ENABLE_ORCHESTRATOR=0 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 1983`: run API locally.
+- `uv sync`: create/sync local dev environment.
+- `uv run python -m pytest tests/unit tests/api -q`: run Python tests (unit + API).
+- `npx playwright test --reporter=dot --timeout=15000 --workers=3`: run Playwright UI tests (fast, 3 workers, dot output).
+- `POTATO_ENABLE_ORCHESTRATOR=0 uv run uvicorn app.main:app --host 0.0.0.0 --port 1983`: run API locally.
+- Both test suites **must** pass locally before pushing. Run them together:
+  - `uv run python -m pytest tests/unit tests/api -q && npx playwright test --reporter=dot --timeout=15000 --workers=3`
 - `./bin/install_dev.sh`: install/update services on Pi (idempotent).
 - `./bin/build_local_image.sh --variant lite`: build local Pi image bundle and generate Imager manifest.
   - Script prompts before deleting previous `output/images` artifacts (`ask|yes|no` via `--clean-artifacts`).

@@ -17,7 +17,7 @@ def test_status_booting_when_model_missing(client, monkeypatch):
 
     assert body["state"] == "BOOTING"
     assert body["model_present"] is False
-    assert body["model"]["filename"] == "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+    assert body["model"]["filename"] == "Qwen3.5-2B-Q4_K_M.gguf"
     assert body["download"]["bytes_downloaded"] == 0
 
 
@@ -531,8 +531,8 @@ def test_status_disables_auto_start_when_default_model_was_downloaded_once(runti
                 "models": [
                     {
                         "id": "default",
-                        "filename": "Qwen3-VL-4B-Instruct-Q4_K_M.gguf",
-                        "source_url": "https://example.com/Qwen3-VL-4B-Instruct-Q4_K_M.gguf",
+                        "filename": "Qwen3.5-2B-Q4_K_M.gguf",
+                        "source_url": "https://example.com/Qwen3.5-2B-Q4_K_M.gguf",
                         "source_type": "url",
                         "status": "not_downloaded",
                         "error": None,

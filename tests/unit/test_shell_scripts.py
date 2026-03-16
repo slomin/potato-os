@@ -233,7 +233,7 @@ def test_start_llama_script_builds_expected_command(tmp_path: Path):
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir()
     args_out = tmp_path / "args.txt"
-    model_path = tmp_path / "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+    model_path = tmp_path / "Qwen3.5-2B-Q4_K_M.gguf"
     mmproj_path = tmp_path / "mmproj-Qwen3-VL-4B-Instruct-Q8_0.gguf"
     model_path.write_bytes(b"gguf")
     mmproj_path.write_bytes(b"mmproj")
@@ -786,7 +786,7 @@ def test_start_llama_script_uses_bundle_runtime_and_prefers_q8_mmproj(tmp_path: 
 
     model_dir = tmp_path / "models"
     model_dir.mkdir()
-    model_path = model_dir / "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+    model_path = model_dir / "Qwen3.5-2B-Q4_K_M.gguf"
     model_path.write_bytes(b"gguf")
     q8_mmproj = model_dir / "mmproj-Qwen3-VL-4B-Instruct-Q8_0.gguf"
     f16_mmproj = model_dir / "mmproj-Qwen3-VL-4B-Instruct-F16.gguf"

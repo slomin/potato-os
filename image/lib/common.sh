@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL_FILENAME="Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
-MODEL_URL_DEFAULT="https://huggingface.co/unsloth/Qwen3-VL-4B-Instruct-GGUF/resolve/main/Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+MODEL_FILENAME="Qwen3.5-2B-Q4_K_M.gguf"
+MODEL_URL_DEFAULT="https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf"
 MMPROJ_URL_Q8_DEFAULT="https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3-VL-4B-Instruct-Q8_0.gguf"
 MMPROJ_URL_F16_DEFAULT="https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3-VL-4B-Instruct-F16.gguf"
 # Output artifacts are named as potato-lite-<timestamp> and potato-full-<timestamp>.

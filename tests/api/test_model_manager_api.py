@@ -256,7 +256,7 @@ def test_runtime_env_uses_resolved_qwen35_default_projector(runtime):
 
 
 def test_runtime_env_disables_vl_projector_heuristic_when_vision_is_off(runtime):
-    model_filename = "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+    model_filename = "Qwen3.5-2B-Q4_K_M.gguf"
     model_path = runtime.base_dir / "models" / model_filename
     model_path.write_bytes(b"gguf")
     runtime.model_path = model_path
@@ -299,7 +299,7 @@ def test_runtime_env_disables_vl_projector_heuristic_when_vision_is_off(runtime)
 
 
 def test_runtime_env_enables_vl_projector_heuristic_when_vision_is_on(runtime):
-    model_filename = "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+    model_filename = "Qwen3.5-2B-Q4_K_M.gguf"
     model_path = runtime.base_dir / "models" / model_filename
     mmproj_path = runtime.base_dir / "models" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
     model_path.write_bytes(b"gguf")
@@ -996,8 +996,8 @@ def test_move_model_to_ssd_moves_ready_model_and_reports_storage(runtime, monkey
     assert body["moved"] is True
     assert body["model_id"] == "default"
     assert body["storage"]["location"] == "ssd"
-    assert runtime.model_path == ssd_dir / "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
-    managed_path = runtime.base_dir / "models" / "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+    assert runtime.model_path == ssd_dir / "Qwen3.5-2B-Q4_K_M.gguf"
+    managed_path = runtime.base_dir / "models" / "Qwen3.5-2B-Q4_K_M.gguf"
     assert managed_path.is_symlink()
     assert managed_path.resolve() == runtime.model_path
 
@@ -1032,7 +1032,7 @@ def test_move_model_to_ssd_restarts_when_moving_active_model(runtime, monkeypatc
     assert body["restarted"] is True
     assert body["restart_reason"] == "restarted"
     assert restart_calls == [True]
-    assert runtime.model_path == ssd_dir / "Qwen3-VL-4B-Instruct-Q4_K_M.gguf"
+    assert runtime.model_path == ssd_dir / "Qwen3.5-2B-Q4_K_M.gguf"
 
 
 def test_move_model_to_ssd_rejects_when_no_ssd_target(runtime, monkeypatch):
@@ -1061,7 +1061,7 @@ def test_move_model_to_ssd_uses_worker_thread(runtime, monkeypatch):
     calls: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
 
     def _fake_move(_runtime, *, model_id: str, ssd_dir):
-        return True, "moved", {"location": "ssd", "actual_path": str(ssd_dir / "Qwen3-VL-4B-Instruct-Q4_K_M.gguf")}
+        return True, "moved", {"location": "ssd", "actual_path": str(ssd_dir / "Qwen3.5-2B-Q4_K_M.gguf")}
 
     async def _fake_to_thread(func, *args, **kwargs):
         calls.append((func, args, kwargs))
@@ -1188,7 +1188,7 @@ def test_purge_models_clears_files_and_model_metadata(runtime):
         runtime.models_state_path.write_text(
             '{"version":1,"countdown_enabled":true,"default_model_downloaded_once":true,'
             '"active_model_id":"default","default_model_id":"default","current_download_model_id":null,'
-            '"models":[{"id":"default","filename":"Qwen3-VL-4B-Instruct-Q4_K_M.gguf","source_url":"https://example.com/default.gguf","source_type":"url","status":"ready","error":null},'
+            '"models":[{"id":"default","filename":"Qwen3.5-2B-Q4_K_M.gguf","source_url":"https://example.com/default.gguf","source_type":"url","status":"ready","error":null},'
             '{"id":"custom","filename":"custom.gguf","source_url":"https://example.com/custom.gguf","source_type":"url","status":"failed","error":"download_failed"}]}',
             encoding="utf-8",
         )

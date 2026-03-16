@@ -708,7 +708,7 @@ test("shows manual download prompt when model missing and starts download on cli
       body: JSON.stringify({
         state: downloading ? "DOWNLOADING" : "BOOTING",
         model_present: false,
-        model: { filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf" },
+        model: { filename: "Qwen3.5-2B-Q4_K_M.gguf" },
         llama_server: { healthy: false },
         backend: { mode: "llama", active: "llama", fallback_active: false },
         download: {
@@ -934,7 +934,7 @@ test("renders compact Pi runtime info and toggles details view", async ({ page }
       body: JSON.stringify({
         state: "READY",
         model_present: true,
-        model: { filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf" },
+        model: { filename: "Qwen3.5-2B-Q4_K_M.gguf" },
         llama_server: { healthy: true },
         backend: { mode: "llama", active: "llama", fallback_active: false },
         download: {
@@ -997,7 +997,7 @@ test("runtime details apply threshold colors for clock, memory, swap, and temper
       body: JSON.stringify({
         state: "READY",
         model_present: true,
-        model: { filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf" },
+        model: { filename: "Qwen3.5-2B-Q4_K_M.gguf" },
         llama_server: { healthy: true },
         backend: { mode: "llama", active: "llama", fallback_active: false },
         download: {
@@ -1100,7 +1100,7 @@ test("llama booting with model present shows loading badge", async ({ page }) =>
       body: JSON.stringify({
         state: "BOOTING",
         model_present: true,
-        model: { filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf" },
+        model: { filename: "Qwen3.5-2B-Q4_K_M.gguf" },
         llama_server: { healthy: false, running: false, url: "http://127.0.0.1:8080" },
         backend: { mode: "llama", active: "llama", fallback_active: false },
         download: {
@@ -1119,7 +1119,7 @@ test("llama booting with model present shows loading badge", async ({ page }) =>
   });
 
   await page.goto("/");
-  await expect(page.locator("#statusLabel")).toHaveText("LOADING:llama.cpp:Qwen3-VL-4B-Instruct-Q4_K_M.gguf");
+  await expect(page.locator("#statusLabel")).toHaveText("LOADING:llama.cpp:Qwen3.5-2B-Q4_K_M.gguf");
   await expect(page.locator("#statusBadge")).toHaveClass(/loading/);
 });
 
@@ -1131,7 +1131,7 @@ test("llama error state shows failed badge", async ({ page }) => {
       body: JSON.stringify({
         state: "ERROR",
         model_present: true,
-        model: { filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf" },
+        model: { filename: "Qwen3.5-2B-Q4_K_M.gguf" },
         llama_server: { healthy: false, running: false, url: "http://127.0.0.1:8080" },
         backend: { mode: "llama", active: "llama", fallback_active: false },
         download: {
@@ -1150,7 +1150,7 @@ test("llama error state shows failed badge", async ({ page }) => {
   });
 
   await page.goto("/");
-  await expect(page.locator("#statusLabel")).toHaveText("FAILED:llama.cpp:Qwen3-VL-4B-Instruct-Q4_K_M.gguf");
+  await expect(page.locator("#statusLabel")).toHaveText("FAILED:llama.cpp:Qwen3.5-2B-Q4_K_M.gguf");
   await expect(page.locator("#statusBadge")).toHaveClass(/failed/);
 });
 
@@ -1553,7 +1553,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   let models = [
     {
       id: "default",
-      filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf",
+      filename: "Qwen3.5-2B-Q4_K_M.gguf",
       source_url: "https://example.com/default.gguf",
       source_type: "url",
       status: "ready",
@@ -1636,7 +1636,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
     state: "READY",
     model_present: true,
     model: {
-      filename: models.find((m) => m.id === activeModelId)?.filename || "Qwen3-VL-4B-Instruct-Q4_K_M.gguf",
+      filename: models.find((m) => m.id === activeModelId)?.filename || "Qwen3.5-2B-Q4_K_M.gguf",
       active_model_id: activeModelId,
       settings: models.find((m) => m.id === activeModelId)?.settings,
       capabilities: models.find((m) => m.id === activeModelId)?.capabilities,
@@ -1881,7 +1881,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   await expect(page.locator("#purgeModelsBtn")).toBeHidden();
 
   await page.locator('#modelsList .model-row[data-model-id="default"]').click();
-  await expect(page.locator("#modelName")).toHaveText(/Qwen3-VL-4B-Instruct-Q4_K_M.gguf/);
+  await expect(page.locator("#modelName")).toHaveText(/Qwen3.5-2B-Q4_K_M.gguf/);
   await expect(page.locator("#modelCapabilitiesChips .settings-chip")).toHaveCount(3);
   await expect(page.locator("#modelCapabilitiesChips")).toContainText("Active");
   await expect(page.locator("#modelCapabilitiesChips")).toContainText("Ready");
@@ -1979,7 +1979,7 @@ test("model settings block cross-model actions until edits are saved or discarde
   let models = [
     {
       id: "default",
-      filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf",
+      filename: "Qwen3.5-2B-Q4_K_M.gguf",
       source_url: "https://example.com/default.gguf",
       source_type: "url",
       status: "ready",
@@ -2058,7 +2058,7 @@ test("model settings block cross-model actions until edits are saved or discarde
     state: "READY",
     model_present: true,
     model: {
-      filename: models.find((m) => m.id === activeModelId)?.filename || "Qwen3-VL-4B-Instruct-Q4_K_M.gguf",
+      filename: models.find((m) => m.id === activeModelId)?.filename || "Qwen3.5-2B-Q4_K_M.gguf",
       active_model_id: activeModelId,
       settings: models.find((m) => m.id === activeModelId)?.settings,
       capabilities: models.find((m) => m.id === activeModelId)?.capabilities,
@@ -2123,11 +2123,11 @@ test("model settings block cross-model actions until edits are saved or discarde
   await openSettingsModal(page);
 
   await page.locator('#modelsList .model-row[data-model-id="default"]').click();
-  await expect(page.locator("#modelName")).toHaveText(/Qwen3-VL-4B-Instruct-Q4_K_M.gguf/);
+  await expect(page.locator("#modelName")).toHaveText(/Qwen3.5-2B-Q4_K_M.gguf/);
   await page.locator("#systemPrompt").fill("Unsaved default draft");
 
   await page.locator('#modelsList .model-row[data-model-id="alt-model"]').click();
-  await expect(page.locator("#modelName")).toHaveText(/Qwen3-VL-4B-Instruct-Q4_K_M.gguf/);
+  await expect(page.locator("#modelName")).toHaveText(/Qwen3.5-2B-Q4_K_M.gguf/);
   await expect(page.locator("#systemPrompt")).toHaveValue("Unsaved default draft");
   await expect(page.locator("#modelSettingsStatus")).toContainText(/save or discard/i);
 
@@ -2261,7 +2261,7 @@ test("add model by URL shows inline validation feedback", async ({ page }) => {
       body: JSON.stringify({
         state: "READY",
         model_present: true,
-        model: { filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf", active_model_id: "default" },
+        model: { filename: "Qwen3.5-2B-Q4_K_M.gguf", active_model_id: "default" },
         models: [],
         upload: { active: false, model_id: null, bytes_total: 0, bytes_received: 0, percent: 0, error: null },
         download: {
@@ -2311,7 +2311,7 @@ test("sidebar status avoids stale completed download text when downloads are idl
       body: JSON.stringify({
         state: "READY",
         model_present: true,
-        model: { filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf", active_model_id: "default" },
+        model: { filename: "Qwen3.5-2B-Q4_K_M.gguf", active_model_id: "default" },
         models: [],
         upload: { active: false, model_id: null, bytes_total: 0, bytes_received: 0, percent: 0, error: null },
         download: {
@@ -2353,7 +2353,7 @@ test("model upload sends file with filename header", async ({ page }) => {
       body: JSON.stringify({
         state: "READY",
         model_present: true,
-        model: { filename: "Qwen3-VL-4B-Instruct-Q4_K_M.gguf", active_model_id: "default" },
+        model: { filename: "Qwen3.5-2B-Q4_K_M.gguf", active_model_id: "default" },
         models: [],
         upload: { active: false, model_id: null, bytes_total: 0, bytes_received: 0, percent: 0, error: null },
         download: {
@@ -2542,7 +2542,7 @@ test("quick model switcher opens on badge click and shows models", async ({ page
 
   const items = switcher.locator(".model-switcher-item");
   await expect(items).toHaveCount(2);
-  await expect(items.nth(0)).toContainText("Qwen3-VL-4B");
+  await expect(items.nth(0)).toContainText("Qwen3.5-2B");
   await expect(items.nth(1)).toContainText("Qwen3-Coder-30B");
 });
 

@@ -101,16 +101,15 @@ def test_resolve_llama_bundle_src_prefers_local_slot_over_release(tmp_path):
     _build_fake_runtime_slot(slot_dir)
 
     script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
-    # The local slot resolution must come before any release download logic
-    assert "runtimes/${LLAMA_RUNTIME_FAMILY}" in script
-    # If release download support exists, it must appear after the slot check
-    slot_line = script.index("runtimes/${LLAMA_RUNTIME_FAMILY}")
-    if "runtime_release.sh" in script or "POTATO_LLAMA_RELEASE_URL" in script:
-        release_line = max(
-            script.index("runtime_release.sh") if "runtime_release.sh" in script else 0,
-            script.index("POTATO_LLAMA_RELEASE_URL") if "POTATO_LLAMA_RELEASE_URL" in script else 0,
-        )
-        assert release_line > slot_line, "Release fallback must come after local slot check"
+    # Extract just the resolve_llama_bundle_src function body
+    func_start = script.index("resolve_llama_bundle_src()")
+    func_body = script[func_start:]
+    # The local slot check must come before the release download logic within the function
+    assert "runtimes/${LLAMA_RUNTIME_FAMILY}" in func_body
+    slot_offset = func_body.index("runtimes/${LLAMA_RUNTIME_FAMILY}")
+    if "try_resolve_runtime_from_release" in func_body:
+        release_offset = func_body.index("try_resolve_runtime_from_release")
+        assert release_offset > slot_offset, "Release fallback must come after local slot check"
 
 
 def test_resolve_llama_bundle_src_explicit_env_var_overrides_everything(tmp_path):

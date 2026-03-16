@@ -8,6 +8,12 @@ PAYLOAD_NAME="${POTATO_BUNDLE_NAME:-potato_bundle.tar.gz}"
 LLAMA_BUNDLE_ROOT="${POTATO_LLAMA_BUNDLE_ROOT:-${REPO_ROOT}/references/old_reference_design/llama_cpp_binary}"
 LLAMA_BUNDLE_SRC="${POTATO_LLAMA_BUNDLE_SRC:-}"
 
+# Source shared release download helpers
+if [ -f "${REPO_ROOT}/bin/lib/runtime_release.sh" ]; then
+  # shellcheck source=lib/runtime_release.sh
+  source "${REPO_ROOT}/bin/lib/runtime_release.sh"
+fi
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -67,6 +73,15 @@ resolve_llama_bundle_src() {
   if [ -d "${slot_dir}" ] && [ -x "${slot_dir}/bin/llama-server" ]; then
     printf '%s\n' "${slot_dir}"
     return
+  fi
+  # GitHub Release download fallback
+  if type try_resolve_runtime_from_release >/dev/null 2>&1; then
+    local release_result
+    release_result="$(try_resolve_runtime_from_release "${family}" "${LLAMA_BUNDLE_ROOT}/runtimes/${family}" || true)"
+    if [ -n "${release_result}" ] && [ -x "${release_result}/bin/llama-server" ]; then
+      printf '%s\n' "${release_result}"
+      return
+    fi
   fi
   # Legacy fallback
   if [ -d "${LLAMA_BUNDLE_ROOT}" ]; then

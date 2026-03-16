@@ -14,6 +14,12 @@ LLAMA_BUNDLE_SRC="${POTATO_LLAMA_BUNDLE_SRC:-}"
 LLAMA_RUNTIME_FAMILY="${POTATO_LLAMA_RUNTIME_FAMILY:-ik_llama}"
 REQUIRE_LLAMA_BUNDLE="${POTATO_REQUIRE_LLAMA_BUNDLE:-1}"
 
+# Source shared release download helpers
+if [ -f "${REPO_ROOT}/bin/lib/runtime_release.sh" ]; then
+  # shellcheck source=lib/runtime_release.sh
+  source "${REPO_ROOT}/bin/lib/runtime_release.sh"
+fi
+
 run_sudo() {
   if [ "${EUID}" -eq 0 ]; then
     "$@"
@@ -49,6 +55,15 @@ resolve_llama_bundle_src() {
   if [ -d "${slot_dir}" ] && [ -x "${slot_dir}/bin/llama-server" ]; then
     printf '%s\n' "${slot_dir}"
     return
+  fi
+  # GitHub Release download fallback
+  if type try_resolve_runtime_from_release >/dev/null 2>&1; then
+    local release_result
+    release_result="$(try_resolve_runtime_from_release "${LLAMA_RUNTIME_FAMILY}" "${LLAMA_BUNDLE_ROOT}/runtimes/${LLAMA_RUNTIME_FAMILY}" || true)"
+    if [ -n "${release_result}" ] && [ -x "${release_result}/bin/llama-server" ]; then
+      printf '%s\n' "${release_result}"
+      return
+    fi
   fi
   # Legacy fallback: filter bundles by requested family
   if [ -d "${LLAMA_BUNDLE_ROOT}" ]; then

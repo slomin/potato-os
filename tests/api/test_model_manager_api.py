@@ -80,12 +80,12 @@ def test_toggle_download_countdown_endpoint(runtime):
 
     assert off.status_code == 200
     assert off.json()["countdown_enabled"] is False
-    assert off.json()["updated"] is False
-    assert off.json()["reason"] == "temporarily_disabled"
+    assert off.json()["updated"] is True
+    assert off.json()["reason"] == "countdown_updated"
     assert on.status_code == 200
-    assert on.json()["countdown_enabled"] is False
-    assert on.json()["updated"] is False
-    assert on.json()["reason"] == "temporarily_disabled"
+    assert on.json()["countdown_enabled"] is True
+    assert on.json()["updated"] is True
+    assert on.json()["reason"] == "countdown_updated"
 
 
 def test_update_model_settings_persists_per_model_chat_and_vision(runtime):
@@ -301,7 +301,7 @@ def test_runtime_env_disables_vl_projector_heuristic_when_vision_is_off(runtime)
 def test_runtime_env_enables_vl_projector_heuristic_when_vision_is_on(runtime):
     model_filename = "Qwen3.5-2B-Q4_K_M.gguf"
     model_path = runtime.base_dir / "models" / model_filename
-    mmproj_path = runtime.base_dir / "models" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+    mmproj_path = runtime.base_dir / "models" / "mmproj-F16.gguf"
     model_path.write_bytes(b"gguf")
     mmproj_path.write_bytes(b"mmproj")
     runtime.model_path = model_path
@@ -338,7 +338,7 @@ def test_runtime_env_enables_vl_projector_heuristic_when_vision_is_on(runtime):
 
     env = _runtime_env(runtime)
 
-    assert env["POTATO_VISION_MODEL_NAME_PATTERN_VL"] == "1"
+    assert env["POTATO_VISION_MODEL_NAME_PATTERN_QWEN35"] == "1"
     assert env["POTATO_MMPROJ_PATH"] == str(mmproj_path)
 
 
@@ -569,13 +569,13 @@ def test_download_default_projector_for_builtin_qwen3_vl_model(runtime, monkeypa
     assert response.status_code == 200
     body = response.json()
     assert body["downloaded"] is True
-    assert body["projector_filename"] == "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+    assert body["projector_filename"] == "mmproj-Qwen3.5-2B-Q4_K_M-f16.gguf"
     assert requested_urls == [
-        "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+        "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/mmproj-Qwen3.5-2B-Q4_K_M-f16.gguf"
     ]
-    assert (runtime.base_dir / "models" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf").exists()
+    assert (runtime.base_dir / "models" / "mmproj-Qwen3.5-2B-Q4_K_M-f16.gguf").exists()
     default_model = next(item for item in status.json()["models"] if item["id"] == "default")
-    assert default_model["settings"]["vision"]["projector_filename"] == "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+    assert default_model["settings"]["vision"]["projector_filename"] == "mmproj-Qwen3.5-2B-Q4_K_M-f16.gguf"
 
 
 def test_register_model_url_rejects_invalid(runtime):

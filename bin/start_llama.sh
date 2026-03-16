@@ -237,7 +237,8 @@ resolve_mmproj_repo() {
     return 0
   fi
 
-  printf 'Qwen/Qwen3-VL-4B-Instruct-GGUF'
+  # Default fallback for unrecognized vision models
+  printf 'unsloth/Qwen3.5-2B-GGUF'
 }
 
 qwen35_mmproj_name_candidates() {
@@ -425,16 +426,24 @@ pick_mmproj() {
     return 0
   fi
 
-  q8_candidate="$(printf '%s\n' "${mmproj_candidates[@]}" | grep -i 'Q8_0' | head -n 1 || true)"
-  if [ -n "${q8_candidate}" ]; then
-    MMPROJ_PATH="${q8_candidate}"
-    return 0
-  fi
-
+  # Qwen3.5 models: prefer F16 projectors only
+  # Qwen3-VL models: prefer Q8_0, then F16
   f16_candidate="$(printf '%s\n' "${mmproj_candidates[@]}" | grep -i 'F16' | head -n 1 || true)"
-  if [ -n "${f16_candidate}" ]; then
-    MMPROJ_PATH="${f16_candidate}"
-    return 0
+  if model_is_qwen35_vision; then
+    if [ -n "${f16_candidate}" ]; then
+      MMPROJ_PATH="${f16_candidate}"
+      return 0
+    fi
+  else
+    q8_candidate="$(printf '%s\n' "${mmproj_candidates[@]}" | grep -i 'Q8_0' | head -n 1 || true)"
+    if [ -n "${q8_candidate}" ]; then
+      MMPROJ_PATH="${q8_candidate}"
+      return 0
+    fi
+    if [ -n "${f16_candidate}" ]; then
+      MMPROJ_PATH="${f16_candidate}"
+      return 0
+    fi
   fi
 
   MMPROJ_PATH="${mmproj_candidates[0]}"

@@ -113,8 +113,10 @@ if git tag -l "${TAG_NAME}" | grep -q "${TAG_NAME}"; then
   exit 1
 fi
 
-# Resolve the git remote that matches the target GitHub repo
-PUSH_REMOTE="origin"
+# Resolve the git remote that matches the target GitHub repo.
+# If no remote matches, skip git push — gh release create will
+# create the tag on the target repo automatically.
+PUSH_REMOTE=""
 for _remote in $(git remote 2>/dev/null); do
   _remote_url="$(git remote get-url "${_remote}" 2>/dev/null || true)"
   if printf '%s' "${_remote_url}" | grep -q "${GITHUB_REPO}"; then
@@ -123,9 +125,13 @@ for _remote in $(git remote 2>/dev/null); do
   fi
 done
 
-printf 'Creating git tag: %s (pushing to remote %s)\n' "${TAG_NAME}" "${PUSH_REMOTE}"
-git tag "${TAG_NAME}"
-git push "${PUSH_REMOTE}" "${TAG_NAME}"
+git tag "${TAG_NAME}" 2>/dev/null || true
+if [ -n "${PUSH_REMOTE}" ]; then
+  printf 'Pushing tag %s to remote %s\n' "${TAG_NAME}" "${PUSH_REMOTE}"
+  git push "${PUSH_REMOTE}" "${TAG_NAME}"
+else
+  printf 'No git remote matches %s — skipping tag push (gh will create it on the target repo)\n' "${GITHUB_REPO}"
+fi
 
 RELEASE_NOTES="$(cat <<NOTES
 ## ${FAMILY} runtime (${COMMIT})

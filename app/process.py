@@ -8,7 +8,10 @@ import os
 import signal
 from typing import Any
 
-from app.runtime_state import RuntimeConfig
+try:
+    from app.runtime_state import RuntimeConfig
+except ModuleNotFoundError:
+    from runtime_state import RuntimeConfig  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 

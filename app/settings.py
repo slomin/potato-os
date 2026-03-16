@@ -7,21 +7,38 @@ from typing import Any
 
 import yaml
 
-from app.model_state import (
-    DEFAULT_MODEL_CHAT_SETTINGS,
-    ModelSettingsValidationError,
-    ensure_models_state,
-    get_model_by_id,
-    normalize_model_settings,
-    save_models_state,
-)
-from app.runtime_state import (
-    RuntimeConfig,
-    normalize_allow_unsupported_large_models,
-    normalize_llama_memory_loading_mode,
-    read_llama_runtime_settings,
-    write_llama_runtime_settings,
-)
+try:
+    from app.model_state import (
+        DEFAULT_MODEL_CHAT_SETTINGS,
+        ModelSettingsValidationError,
+        ensure_models_state,
+        get_model_by_id,
+        normalize_model_settings,
+        save_models_state,
+    )
+    from app.runtime_state import (
+        RuntimeConfig,
+        normalize_allow_unsupported_large_models,
+        normalize_llama_memory_loading_mode,
+        read_llama_runtime_settings,
+        write_llama_runtime_settings,
+    )
+except ModuleNotFoundError:
+    from model_state import (  # type: ignore[no-redef]
+        DEFAULT_MODEL_CHAT_SETTINGS,
+        ModelSettingsValidationError,
+        ensure_models_state,
+        get_model_by_id,
+        normalize_model_settings,
+        save_models_state,
+    )
+    from runtime_state import (  # type: ignore[no-redef]
+        RuntimeConfig,
+        normalize_allow_unsupported_large_models,
+        normalize_llama_memory_loading_mode,
+        read_llama_runtime_settings,
+        write_llama_runtime_settings,
+    )
 
 
 DEFAULT_CHAT_SETTINGS = DEFAULT_MODEL_CHAT_SETTINGS

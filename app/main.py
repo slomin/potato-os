@@ -396,10 +396,16 @@ def get_chat_repository(request: Request) -> ChatRepositoryManager:
     return request.app.state.chat_repository
 
 
-from app.process import (  # noqa: E402
-    terminate_process as _terminate_process,
-    terminate_stray_llama_processes,
-)
+try:
+    from app.process import (
+        terminate_process as _terminate_process,
+        terminate_stray_llama_processes,
+    )
+except ModuleNotFoundError:
+    from process import (  # type: ignore[no-redef]
+        terminate_process as _terminate_process,
+        terminate_stray_llama_processes,
+    )
 
 
 async def restart_managed_llama_process(app: FastAPI) -> tuple[bool, str]:
@@ -1387,14 +1393,24 @@ def shutil_which(cmd: str) -> str | None:
     return None
 
 
-from app.settings import (  # noqa: E402
-    apply_settings_document_yaml,
-    build_settings_document_payload,
-    export_settings_document_yaml,
-    get_active_model_settings,
-    merge_active_model_chat_defaults as _merge_active_model_chat_defaults,
-    merge_chat_defaults as _merge_defaults,
-)
+try:
+    from app.settings import (
+        apply_settings_document_yaml,
+        build_settings_document_payload,
+        export_settings_document_yaml,
+        get_active_model_settings,
+        merge_active_model_chat_defaults as _merge_active_model_chat_defaults,
+        merge_chat_defaults as _merge_defaults,
+    )
+except ModuleNotFoundError:
+    from settings import (  # type: ignore[no-redef]
+        apply_settings_document_yaml,
+        build_settings_document_payload,
+        export_settings_document_yaml,
+        get_active_model_settings,
+        merge_active_model_chat_defaults as _merge_active_model_chat_defaults,
+        merge_chat_defaults as _merge_defaults,
+    )
 
 
 def _forward_headers(request: Request) -> dict[str, str]:

@@ -1,8 +1,12 @@
 # Potato OS
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 Experimental Raspberry Pi 5 Linux mod with optimised local LLM inference. Runs quantised models on-device with a browser chat UI — no cloud, no GPU, just a Pi.
 
 **Hardware:** Raspberry Pi 5 (8GB / 16GB) | **Runtime:** [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) (IQK-optimised) + upstream [llama.cpp](https://github.com/ggerganov/llama.cpp) | **Default model:** Qwen3.5-2B
+
+> **Experimental software.** Potato OS is provided "as is" without warranty of any kind. Back up your SD card and data before flashing images or running install scripts. The authors and contributors are not liable for damage, data loss, or other issues arising from use. See [LICENSE](LICENSE) for the full terms.
 
 ## Install (recommended)
 
@@ -97,3 +101,7 @@ POTATO_LLAMA_RELEASE_AUTO=1 ./bin/install_dev.sh
 - Process: [`WORKFLOW.md`](WORKFLOW.md)
 - Conventions: [`AGENTS.md`](AGENTS.md)
 - Defaults: hostname `potato`, SSH `pi`/`raspberry`
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) for details.

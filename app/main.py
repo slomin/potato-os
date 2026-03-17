@@ -679,7 +679,10 @@ async def build_status(
         raw_system_snapshot.get("power_estimate") if isinstance(raw_system_snapshot, dict) else None,
     )
 
+    from app.__version__ import __version__ as _app_version
+
     return {
+        "version": _app_version,
         "state": state,
         "model_present": has_model,
         "model": {
@@ -773,6 +776,10 @@ def _runtime_env(runtime: RuntimeConfig) -> dict[str, str]:
         active_settings = normalize_model_settings(active_model.get("settings"), filename=active_filename)
         vision_settings = active_settings.get("vision", {})
         if model_supports_vision_filename(active_filename) and bool(vision_settings.get("enabled", False)):
+            mmproj_repo = projector_repo_for_model(active_filename)
+            if mmproj_repo:
+                env["POTATO_AUTO_DOWNLOAD_MMPROJ"] = "1"
+                env["POTATO_HF_MMPROJ_REPO"] = mmproj_repo
             if is_qwen3_vl_filename(active_filename):
                 env["POTATO_VISION_MODEL_NAME_PATTERN_VL"] = "1"
             if is_qwen35_filename(active_filename):
@@ -1441,7 +1448,9 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
                 except asyncio.CancelledError:
                     pass
 
-    app = FastAPI(title="Potato Web", version="0.3-pre-alpha", lifespan=_lifespan)
+    from app.__version__ import __version__ as _app_version
+
+    app = FastAPI(title="Potato Web", version=_app_version, lifespan=_lifespan)
     app.mount("/assets", StaticFiles(directory=str(WEB_ASSETS_DIR)), name="assets")
     app.state.runtime = runtime or RuntimeConfig.from_env()
     app.state.llama_process = None

@@ -75,11 +75,13 @@ def test_chat_ui_keeps_theme_toggle_clear_of_status_badge():
 
 def test_chat_ui_copy_and_stats_footnote_contract():
     assert 'id="sidebarNote"' in CHAT_UI
-    assert "Pre-Alpha" in CHAT_UI
     assert "function classifyPi5MemoryTier(" in CHAT_UI
     assert "function setSidebarNote(" in CHAT_UI
-    assert "statusPayload?.system" in CHAT_UI
-    assert "Pre-Alpha · ${piModelName} · ${memoryTier}" in CHAT_UI
+    # Version must come from status payload, not be hardcoded
+    assert "statusPayload?.version" in CHAT_UI
+    assert "V0.3 Pre-Alpha" not in CHAT_UI
+    assert "V0.3" not in CHAT_JS
+    assert "Pre-Alpha" not in CHAT_JS
     assert "Potato OS is online. Ask anything to get started." not in CHAT_UI
     assert "Local-first chat frontend on your Pi." not in CHAT_UI
     assert "Local-first chat front end on your Pi." not in CHAT_UI
@@ -397,6 +399,11 @@ def test_chat_ui_compresses_large_images_before_send():
     assert "setComposerActivity(\"Optimizing image...\")" in CHAT_UI
     assert "await maybeCompressImage(result, file);" in CHAT_UI
     assert "optimized from" in CHAT_UI
+    # Images in unsupported formats (HEIC, WebP, etc.) must be re-encoded
+    # to JPEG/PNG so llama-server's stb_image decoder can handle them.
+    assert "needsReencode" in CHAT_IMAGE_HANDLER_JS
+    assert "image/jpeg" in CHAT_IMAGE_HANDLER_JS
+    assert "image/png" in CHAT_IMAGE_HANDLER_JS
 
 
 def test_chat_ui_model_manager_supports_model_delete_action():
@@ -420,6 +427,24 @@ def test_chat_ui_model_manager_supports_model_delete_action():
     assert "async function purgeAllModels(" in CHAT_UI
     assert "/internal/models/purge" in CHAT_UI
     assert "reset_bootstrap_flag: false" in CHAT_UI
+
+
+def test_chat_ui_insufficient_storage_shows_visible_error():
+    assert 'body?.reason === "insufficient_storage"' in CHAT_JS
+    # Must call appendMessage for a visible chat bubble, not just setComposerActivity
+    # Find the insufficient_storage block in startModelDownloadForModel and verify appendMessage
+    idx = CHAT_JS.index("startModelDownloadForModel")
+    block = CHAT_JS[idx:idx + 600]
+    assert "appendMessage(" in block
+    assert "storage" in block.lower()
+    # Same for startModelDownload
+    idx2 = CHAT_JS.index("async function startModelDownload()")
+    block2 = CHAT_JS[idx2:idx2 + 2000]
+    assert "appendMessage(" in block2
+    assert "insufficient_storage" in block2
+    # Settings UI should format insufficient_storage as human-readable text
+    assert "insufficient_storage" in CHAT_SETTINGS_UI_JS
+    assert "Insufficient storage" in CHAT_SETTINGS_UI_JS
 
 
 def test_chat_ui_shows_processing_indicator_while_generating():

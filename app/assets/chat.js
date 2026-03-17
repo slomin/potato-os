@@ -596,6 +596,9 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
           return;
         }
         if (!body?.started && body?.reason === "insufficient_storage") {
+          const dl = appState.latestStatus?.download;
+          const freeInfo = dl?.free_bytes != null ? ` (${formatBytes(dl.free_bytes)} free, ${formatBytes(dl.required_bytes || dl.bytes_total)} needed)` : "";
+          appendMessage("assistant", `Not enough free storage to download this model${freeInfo}. Free up space or delete unused models and try again.`);
           setComposerActivity("Model likely too large for free storage. Delete files and retry.");
         }
       } catch (err) {
@@ -818,6 +821,9 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
         } else if (!body?.started && body?.reason === "model_present") {
           setComposerActivity("Model already present.");
         } else if (!body?.started && body?.reason === "insufficient_storage") {
+          const dl = appState.latestStatus?.download;
+          const freeInfo = dl?.free_bytes != null ? ` (${formatBytes(dl.free_bytes)} free, ${formatBytes(dl.required_bytes || dl.bytes_total)} needed)` : "";
+          appendMessage("assistant", `Not enough free storage to download this model${freeInfo}. Free up space or delete unused models and try again.`);
           setComposerActivity("Model likely too large for free storage. Delete files and retry.");
         } else if (body?.started) {
           setComposerActivity(resumableFailedModel && failedDownload ? "Model download resumed." : "Model download started.");
@@ -953,18 +959,18 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
       return `${bestTier}GB`;
     }
 
-    function setSidebarNote(systemPayload) {
+    function setSidebarNote(statusPayload) {
       const noteEl = document.getElementById("sidebarNote");
       if (!noteEl) return;
+      const version = String(statusPayload?.version || "").trim();
+      const systemPayload = statusPayload?.system;
       const piModelName = String(systemPayload?.pi_model_name || "").trim();
       const memoryTier = classifyPi5MemoryTier(systemPayload?.memory_total_bytes);
-      if (piModelName && memoryTier) {
-        noteEl.textContent = `V0.3 Pre-Alpha · ${piModelName} · ${memoryTier}`;
-        return;
-      }
-      noteEl.textContent = piModelName
-        ? `V0.3 Pre-Alpha · ${piModelName}`
-        : "V0.3 Pre-Alpha";
+      const parts = [];
+      if (version) parts.push(version);
+      if (piModelName) parts.push(piModelName);
+      if (memoryTier) parts.push(memoryTier);
+      noteEl.textContent = parts.length > 0 ? parts.join(" · ") : "";
     }
 
     function setStatus(statusPayload) {
@@ -973,7 +979,7 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
       const text = `State: ${statusPayload.state} | ${downloadText}`;
       document.getElementById("statusText").textContent = text;
       renderStatusActions(statusPayload);
-      setSidebarNote(statusPayload?.system);
+      setSidebarNote(statusPayload);
       const modelNameField = document.getElementById("modelName");
       if (modelNameField) {
         const modelName = statusPayload?.model?.filename || "Unknown model";

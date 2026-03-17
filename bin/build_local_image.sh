@@ -246,10 +246,12 @@ collect_variant_bundle() {
   printf '%s  %s\n' "${actual_sha}" "${image_name}" > "${bundle_dir}/SHA256SUMS"
 
   local imager_manifest="${bundle_dir}/potato-${target_variant}.rpi-imager-manifest"
+  echo "[potato-local-build] Generating Raspberry Pi Imager manifest (this may take a minute)..."
   python3 "${REPO_ROOT}/bin/generate_imager_manifest.py" \
     --image "${bundle_dir}/${image_name}" \
     --output "${imager_manifest}" \
-    --name "Potato OS (${target_variant}, Raspberry Pi 5)"
+    --name "Potato OS (${target_variant}, Raspberry Pi 5)" \
+    || die "Manifest generation failed for ${bundle_dir}/${image_name}"
 
   local image_size_bytes
   image_size_bytes="$(wc -c < "${image_path}" | tr -d ' ')"
@@ -289,7 +291,7 @@ Generated at: ${timestamp}
 6. Select \`Potato OS (${target_variant}, Raspberry Pi 5)\` and flash.
 
 ## Important
-- This bundle is Pi 5-only (`pi5-64bit`).
+- This bundle is Pi 5-only (\`pi5-64bit\`).
 - Do not use \`METADATA.json\` or \`potato-${target_variant}-build-info.json\` in Imager.
 
 ## Files

@@ -766,7 +766,10 @@ def download_default_projector_for_model(*, runtime: RuntimeConfig, model_id: st
     """Download the default vision projector for a model from HuggingFace."""
     import httpx
 
-    from app.constants import projector_repo_for_model
+    try:
+        from app.constants import projector_repo_for_model
+    except ModuleNotFoundError:
+        from constants import projector_repo_for_model  # type: ignore[no-redef]
 
     state = ensure_models_state(runtime)
     model = get_model_by_id(state, model_id)

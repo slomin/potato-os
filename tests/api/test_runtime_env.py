@@ -165,6 +165,7 @@ def test_runtime_env_disables_vl_projector_heuristic_when_vision_is_off(runtime)
 
     assert env["POTATO_VISION_MODEL_NAME_PATTERN_VL"] == "0"
     assert env["POTATO_VISION_MODEL_NAME_PATTERN_QWEN35"] == "0"
+    assert env["POTATO_AUTO_DOWNLOAD_MMPROJ"] == "0"
     assert "POTATO_MMPROJ_PATH" not in env
 
 
@@ -209,7 +210,56 @@ def test_runtime_env_enables_vl_projector_heuristic_when_vision_is_on(runtime):
     env = _runtime_env(runtime)
 
     assert env["POTATO_VISION_MODEL_NAME_PATTERN_QWEN35"] == "1"
+    assert env["POTATO_AUTO_DOWNLOAD_MMPROJ"] == "1"
     assert env["POTATO_MMPROJ_PATH"] == str(mmproj_path)
+
+
+def test_runtime_env_enables_mmproj_auto_download_when_vision_on_and_no_mmproj(runtime):
+    """When vision is enabled but no mmproj is present, AUTO_DOWNLOAD_MMPROJ must be 1
+    so start_llama.sh can download it instead of crash-looping."""
+    model_filename = "Qwen3.5-2B-Q4_K_M.gguf"
+    model_path = runtime.base_dir / "models" / model_filename
+    model_path.write_bytes(b"gguf")
+    runtime.model_path = model_path
+    runtime.models_state_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "countdown_enabled": True,
+                "default_model_downloaded_once": True,
+                "active_model_id": "default",
+                "default_model_id": "default",
+                "current_download_model_id": None,
+                "models": [
+                    {
+                        "id": "default",
+                        "filename": model_filename,
+                        "source_url": "https://example.com/qwen35.gguf",
+                        "source_type": "url",
+                        "status": "ready",
+                        "error": None,
+                        "settings": {
+                            "vision": {
+                                "enabled": True,
+                                "projector_mode": "default",
+                                "projector_filename": None,
+                            }
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    env = _runtime_env(runtime)
+
+    assert env["POTATO_VISION_MODEL_NAME_PATTERN_QWEN35"] == "1"
+    assert env["POTATO_AUTO_DOWNLOAD_MMPROJ"] == "1"
+    assert "POTATO_MMPROJ_PATH" not in env
+    # Must pass the curated HF repo so start_llama.sh downloads the right projector
+    assert "POTATO_HF_MMPROJ_REPO" in env
+    assert "unsloth" in env["POTATO_HF_MMPROJ_REPO"] or "huggingface" in env["POTATO_HF_MMPROJ_REPO"].lower()
 
 
 

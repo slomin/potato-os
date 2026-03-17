@@ -773,6 +773,10 @@ def _runtime_env(runtime: RuntimeConfig) -> dict[str, str]:
         active_settings = normalize_model_settings(active_model.get("settings"), filename=active_filename)
         vision_settings = active_settings.get("vision", {})
         if model_supports_vision_filename(active_filename) and bool(vision_settings.get("enabled", False)):
+            mmproj_repo = projector_repo_for_model(active_filename)
+            if mmproj_repo:
+                env["POTATO_AUTO_DOWNLOAD_MMPROJ"] = "1"
+                env["POTATO_HF_MMPROJ_REPO"] = mmproj_repo
             if is_qwen3_vl_filename(active_filename):
                 env["POTATO_VISION_MODEL_NAME_PATTERN_VL"] = "1"
             if is_qwen35_filename(active_filename):

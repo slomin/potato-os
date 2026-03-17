@@ -28,6 +28,31 @@ Before you start, back up any SD card or Pi data you may want to keep. Potato OS
 - Power supply (27W USB-C recommended)
 - Ethernet or Wi-Fi connection (for first-boot model download)
 
+## MVP status
+
+Potato OS is an early release meant for testing and tinkering, not production use.
+
+### What works
+
+- Chat with streaming responses
+- Vision — attach a photo and ask about it
+- Multi-chat sessions (persisted in your browser)
+- Model management — download by URL, upload, delete, switch active model
+- SSD-backed model storage (USB SSD auto-detected)
+- System monitoring — CPU, GPU, temperature, memory, storage, power draw
+- Dual inference runtime — ik_llama (default) and upstream llama.cpp
+
+### Known limitations
+
+- **Pi 5 only** — no Pi 4, Pi Zero, or other boards
+- **8 GB RAM minimum** — runs 2B models; 16 GB recommended for larger
+- **No OTA updates** — reflash the SD card to upgrade
+- **No user accounts or auth** — anyone on the local network can access the UI
+- **First boot downloads ~1.8 GB** — needs an internet connection the first time
+- **~8–15 tokens/sec** on 2B models — inference is CPU-bound on the Pi
+- **Chat history lives in browser IndexedDB** — clearing browser data loses sessions
+- **HTTP only** — no HTTPS; designed for trusted local networks
+
 ## Recovery and rollback
 
 Need to back out or recover from a failed setup? See [docs/recovery.md](docs/recovery.md) for the practical rollback paths for:

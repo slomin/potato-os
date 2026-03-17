@@ -51,8 +51,6 @@ Potato OS is an early release meant for testing and tinkering, not production us
 - **First boot downloads ~1.8 GB** — needs an internet connection the first time
 - **~8–15 tokens/sec** on 2B models — inference is CPU-bound on the Pi
 - **Chat history lives in browser IndexedDB** — clearing browser data loses sessions
-- **HTTP only** — no HTTPS; designed for trusted local networks
-
 ## Recovery and rollback
 
 Need to back out or recover from a failed setup? See [docs/recovery.md](docs/recovery.md) for the practical rollback paths for:

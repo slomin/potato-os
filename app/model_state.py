@@ -721,17 +721,20 @@ def default_projector_candidates_for_model(filename: str | None) -> list[str]:
     if not model_name:
         return []
     if "qwen3" in model_name and "vl" in model_name:
+        is_thinking = "thinking" in model_name
         if "2b" in model_name:
+            variant = "Thinking" if is_thinking else "Instruct"
             return [
-                "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3VL-2B-Instruct-F16.gguf",
+                f"mmproj-Qwen3VL-2B-{variant}-Q8_0.gguf",
+                f"mmproj-Qwen3VL-2B-{variant}-F16.gguf",
             ]
         if "4b" in model_name:
+            variant = "Thinking" if is_thinking else "Instruct"
             return [
-                "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3-VL-4B-Instruct-Q8_0.gguf",
-                "mmproj-Qwen3VL-4B-Instruct-F16.gguf",
-                "mmproj-Qwen3-VL-4B-Instruct-F16.gguf",
+                f"mmproj-Qwen3VL-4B-{variant}-Q8_0.gguf",
+                f"mmproj-Qwen3-VL-4B-{variant}-Q8_0.gguf",
+                f"mmproj-Qwen3VL-4B-{variant}-F16.gguf",
+                f"mmproj-Qwen3-VL-4B-{variant}-F16.gguf",
             ]
     if "qwen" in model_name and "3.5" in model_name:
         import re as _re

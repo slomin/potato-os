@@ -693,7 +693,9 @@ import { formatModelStatusLabel } from "./status.js";
         name.textContent = String(model?.filename || "unknown.gguf");
         const status = document.createElement("span");
         status.className = "model-status-pill";
-        status.textContent = formatModelStatusLabel(model?.status);
+        status.textContent = model?.status === "failed" && model?.error === "insufficient_storage"
+          ? "Insufficient storage"
+          : formatModelStatusLabel(model?.status);
         head.appendChild(name);
         head.appendChild(status);
 

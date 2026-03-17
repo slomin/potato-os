@@ -596,6 +596,9 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
           return;
         }
         if (!body?.started && body?.reason === "insufficient_storage") {
+          const dl = appState.latestStatus?.download;
+          const freeInfo = dl?.free_bytes != null ? ` (${formatBytes(dl.free_bytes)} free, ${formatBytes(dl.required_bytes || dl.bytes_total)} needed)` : "";
+          appendMessage("assistant", `Not enough free storage to download this model${freeInfo}. Free up space or delete unused models and try again.`);
           setComposerActivity("Model likely too large for free storage. Delete files and retry.");
         }
       } catch (err) {
@@ -818,6 +821,9 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
         } else if (!body?.started && body?.reason === "model_present") {
           setComposerActivity("Model already present.");
         } else if (!body?.started && body?.reason === "insufficient_storage") {
+          const dl = appState.latestStatus?.download;
+          const freeInfo = dl?.free_bytes != null ? ` (${formatBytes(dl.free_bytes)} free, ${formatBytes(dl.required_bytes || dl.bytes_total)} needed)` : "";
+          appendMessage("assistant", `Not enough free storage to download this model${freeInfo}. Free up space or delete unused models and try again.`);
           setComposerActivity("Model likely too large for free storage. Delete files and retry.");
         } else if (body?.started) {
           setComposerActivity(resumableFailedModel && failedDownload ? "Model download resumed." : "Model download started.");

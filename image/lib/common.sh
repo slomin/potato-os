@@ -38,6 +38,13 @@ resolve_repo_root() {
   cd "${script_dir}/../.." && pwd
 }
 
+# Source shared release download helpers
+_common_repo_root="$(resolve_repo_root)"
+if [ -f "${_common_repo_root}/bin/lib/runtime_release.sh" ]; then
+  # shellcheck source=../../bin/lib/runtime_release.sh
+  source "${_common_repo_root}/bin/lib/runtime_release.sh"
+fi
+
 resolve_llama_bundle_src() {
   local repo_root="$1"
   local bundle_src="${POTATO_LLAMA_BUNDLE_SRC:-}"
@@ -53,6 +60,15 @@ resolve_llama_bundle_src() {
   if [ -d "${slot_dir}" ] && [ -x "${slot_dir}/bin/llama-server" ]; then
     printf '%s\n' "${slot_dir}"
     return
+  fi
+  # GitHub Release download fallback
+  if type try_resolve_runtime_from_release >/dev/null 2>&1; then
+    local release_result
+    release_result="$(try_resolve_runtime_from_release "${family}" "${bundle_root}/runtimes/${family}" || true)"
+    if [ -n "${release_result}" ] && [ -x "${release_result}/bin/llama-server" ]; then
+      printf '%s\n' "${release_result}"
+      return
+    fi
   fi
   # Legacy fallback
   if [ -d "${bundle_root}" ]; then

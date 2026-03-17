@@ -25,6 +25,8 @@ def test_shell_scripts_have_valid_bash_syntax():
         REPO_ROOT / "bin" / "firstboot.sh",
         REPO_ROOT / "bin" / "install_dev.sh",
         REPO_ROOT / "bin" / "uninstall_dev.sh",
+        REPO_ROOT / "bin" / "publish_runtime.sh",
+        REPO_ROOT / "bin" / "lib" / "runtime_release.sh",
         REPO_ROOT / "image" / "build-lite.sh",
         REPO_ROOT / "image" / "build-full.sh",
         REPO_ROOT / "image" / "build-all.sh",

@@ -42,15 +42,8 @@ Potato OS is an early release meant for testing and tinkering, not production us
 - System monitoring — CPU, GPU, temperature, memory, storage, power draw
 - Dual inference runtime — ik_llama (default) and upstream llama.cpp
 
-### Known limitations
+Updates are reflash-only for now — there is no OTA or in-place upgrade path yet.
 
-- **Pi 5 only** — no Pi 4, Pi Zero, or other boards
-- **8 GB RAM minimum** — runs 2B models; 16 GB recommended for larger
-- **No OTA updates** — reflash the SD card to upgrade
-- **No user accounts or auth** — anyone on the local network can access the UI
-- **First boot downloads ~1.8 GB** — needs an internet connection the first time
-- **~8–15 tokens/sec** on 2B models — inference is CPU-bound on the Pi
-- **Chat history lives in browser IndexedDB** — clearing browser data loses sessions
 ## Recovery and rollback
 
 Need to back out or recover from a failed setup? See [docs/recovery.md](docs/recovery.md) for the practical rollback paths for:

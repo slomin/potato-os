@@ -61,7 +61,6 @@ done
 [ "${VARIANT}" = "lite" ] || [ "${VARIANT}" = "full" ] || die "--variant must be lite or full"
 
 # ── Check dependencies ─────────────────────────────────────────────────
-command -v gh >/dev/null 2>&1 || die "gh CLI is required. Install from https://cli.github.com"
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
 
 # ── Locate bundle ──────────────────────────────────────────────────────
@@ -140,6 +139,9 @@ if [ "${DRY_RUN}" = "1" ]; then
   exit 0
 fi
 
+# ── Check dependencies (publish-only) ─────────────────────────────────
+command -v gh >/dev/null 2>&1 || die "gh CLI is required. Install from https://cli.github.com"
+
 # ── Check tag does not already exist ───────────────────────────────────
 if git tag -l "${VERSION}" | grep -q "${VERSION}"; then
   die "Tag ${VERSION} already exists. Delete it first or use a different version."
@@ -148,9 +150,7 @@ if gh release view "${VERSION}" --repo "${GITHUB_REPO}" >/dev/null 2>&1; then
   die "Release ${VERSION} already exists on GitHub."
 fi
 
-# ── Create tag + release ───────────────────────────────────────────────
-git tag "${VERSION}"
-
+# ── Resolve push remote ────────────────────────────────────────────────
 PUSH_REMOTE=""
 for _remote in $(git remote 2>/dev/null); do
   _remote_url="$(git remote get-url "${_remote}" 2>/dev/null || true)"
@@ -159,11 +159,6 @@ for _remote in $(git remote 2>/dev/null); do
     break
   fi
 done
-
-if [ -n "${PUSH_REMOTE}" ]; then
-  printf 'Pushing tag %s to %s\n' "${VERSION}" "${PUSH_REMOTE}"
-  git push "${PUSH_REMOTE}" "${VERSION}"
-fi
 
 RELEASE_NOTES="$(cat <<NOTES
 ## Potato OS ${VERSION}
@@ -201,15 +196,27 @@ sha256sum -c SHA256SUMS
 NOTES
 )"
 
+# ── Create release (tag created locally, pushed only after success) ────
+git tag "${VERSION}"
+
 printf 'Creating GitHub release: %s\n' "${VERSION}"
-gh release create "${VERSION}" \
+if ! gh release create "${VERSION}" \
   "${IMAGE_FILE}" \
   "${MANIFEST_PATH}" \
   "${ICON_FILE}" \
   "${CHECKSUMS_FILE}" \
   --repo "${GITHUB_REPO}" \
   --title "Potato OS ${VERSION}" \
-  --notes "${RELEASE_NOTES}"
+  --notes "${RELEASE_NOTES}"; then
+  printf 'Release creation failed — cleaning up local tag %s\n' "${VERSION}" >&2
+  git tag -d "${VERSION}" 2>/dev/null || true
+  die "gh release create failed. No tag was pushed — safe to retry."
+fi
+
+if [ -n "${PUSH_REMOTE}" ]; then
+  printf 'Pushing tag %s to %s\n' "${VERSION}" "${PUSH_REMOTE}"
+  git push "${PUSH_REMOTE}" "${VERSION}"
+fi
 
 printf '\nPublished: https://github.com/%s/releases/tag/%s\n' "${GITHUB_REPO}" "${VERSION}"
 printf '\nRaspberry Pi Imager URL:\n  %s/%s\n' "${DOWNLOAD_BASE}" "${MANIFEST_NAME}"

@@ -11,7 +11,7 @@ from datetime import date
 from pathlib import Path
 
 
-DEFAULT_ICON_PATH = Path(__file__).resolve().parent / "assets" / "potato-imager-icon.svg"
+DEFAULT_ICON = "potato-imager-icon.svg"
 DEFAULT_DISPLAY_NAME = "Potato OS (Raspberry Pi 5)"
 DEFAULT_DESCRIPTION = "Local-first Potato OS chat stack for Raspberry Pi 5."
 
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Output .rpi-imager-manifest path.")
     parser.add_argument("--name", default=DEFAULT_DISPLAY_NAME, help="Display name shown in Imager.")
     parser.add_argument("--description", default=DEFAULT_DESCRIPTION, help="Description shown in Imager.")
-    parser.add_argument("--icon", default=str(DEFAULT_ICON_PATH), help="OS icon URL/path.")
+    parser.add_argument("--icon", default=DEFAULT_ICON, help="OS icon URL/path.")
     parser.add_argument("--website", default="", help="Optional website URL.")
     parser.add_argument(
         "--download-url",

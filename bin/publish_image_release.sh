@@ -259,9 +259,8 @@ fi
 
 # Upload/replace only this variant's manifest, icon, and checksums.
 # Other variant manifests already on the release are left untouched.
-for _asset in "${MANIFEST_NAME}" "potato-imager-icon.svg" "SHA256SUMS"; do
-  gh release delete-asset "${STABLE_TAG}" "${_asset}" --repo "${GITHUB_REPO}" --yes 2>/dev/null || true
-done
+# --clobber handles delete+upload per asset; no separate delete-asset
+# pass so a transient upload failure doesn't leave assets missing.
 gh release upload "${STABLE_TAG}" \
   "${STABLE_MANIFEST}#${MANIFEST_NAME}" \
   "${ICON_FILE}" \

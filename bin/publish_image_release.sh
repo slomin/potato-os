@@ -222,13 +222,16 @@ printf '\nPublished: https://github.com/%s/releases/tag/%s\n' "${GITHUB_REPO}" "
 printf '\nRaspberry Pi Imager URL:\n  %s/%s\n' "${DOWNLOAD_BASE}" "${MANIFEST_NAME}"
 
 # ── Update stable pointer release ─────────────────────────────────────
-# Maintains a "stable" release with a copy of the manifest, icon, and
-# checksums so docs can link to a version-independent URL:
+# Maintains a "stable" release with manifests for each variant so docs
+# can link to a version-independent URL:
 #   https://github.com/<repo>/releases/download/stable/potato-lite.rpi-imager-manifest
+# Assets are uploaded/replaced individually — the release is never
+# deleted and recreated, so a transient failure cannot break the
+# existing public URL.
 STABLE_TAG="stable"
 STABLE_BASE="https://github.com/${GITHUB_REPO}/releases/download/${STABLE_TAG}"
 
-# Regenerate manifest with stable download URLs pointing at the versioned release assets
+# Regenerate manifest with download URLs pointing at the versioned release assets
 STABLE_MANIFEST="${STAGING}/stable-${MANIFEST_NAME}"
 python3 "${REPO_ROOT}/bin/generate_imager_manifest.py" \
   --image "${IMAGE_FILE}" \
@@ -239,21 +242,38 @@ python3 "${REPO_ROOT}/bin/generate_imager_manifest.py" \
   || die "Stable manifest generation failed"
 
 printf '\nUpdating stable pointer release...\n'
-if gh release view "${STABLE_TAG}" --repo "${GITHUB_REPO}" >/dev/null 2>&1; then
-  gh release delete "${STABLE_TAG}" --repo "${GITHUB_REPO}" --yes 2>/dev/null || true
+
+# Create the stable release if it does not exist yet
+if ! gh release view "${STABLE_TAG}" --repo "${GITHUB_REPO}" >/dev/null 2>&1; then
+  git tag -f "${STABLE_TAG}" >/dev/null 2>&1
+  if [ -n "${PUSH_REMOTE}" ]; then
+    git push "${PUSH_REMOTE}" "${STABLE_TAG}" --force 2>/dev/null || true
+  fi
+  gh release create "${STABLE_TAG}" \
+    --repo "${GITHUB_REPO}" \
+    --title "Potato OS (latest stable)" \
+    --notes "Pointer release — always tracks the latest stable image." \
+    --prerelease \
+    || { printf 'WARNING: stable release creation failed (non-fatal)\n' >&2; true; }
 fi
-git tag -f "${STABLE_TAG}" >/dev/null 2>&1
-if [ -n "${PUSH_REMOTE}" ]; then
-  git push "${PUSH_REMOTE}" "${STABLE_TAG}" --force 2>/dev/null || true
-fi
-gh release create "${STABLE_TAG}" \
+
+# Upload/replace only this variant's manifest, icon, and checksums.
+# Other variant manifests already on the release are left untouched.
+for _asset in "${MANIFEST_NAME}" "potato-imager-icon.svg" "SHA256SUMS"; do
+  gh release delete-asset "${STABLE_TAG}" "${_asset}" --repo "${GITHUB_REPO}" --yes 2>/dev/null || true
+done
+gh release upload "${STABLE_TAG}" \
   "${STABLE_MANIFEST}#${MANIFEST_NAME}" \
   "${ICON_FILE}" \
   "${CHECKSUMS_FILE}" \
   --repo "${GITHUB_REPO}" \
-  --title "Potato OS (latest stable)" \
-  --notes "Pointer release — always tracks the latest stable image. Current: ${VERSION}. Use this URL in Raspberry Pi Imager: \`${STABLE_BASE}/${MANIFEST_NAME}\`" \
-  --prerelease \
-  || printf 'WARNING: stable pointer update failed (non-fatal)\n' >&2
+  --clobber \
+  || printf 'WARNING: stable asset upload failed (non-fatal)\n' >&2
+
+# Update release notes to reflect the current version
+gh release edit "${STABLE_TAG}" \
+  --repo "${GITHUB_REPO}" \
+  --notes "Pointer release — always tracks the latest stable image. Current: ${VERSION} (${VARIANT}). Use this URL in Raspberry Pi Imager: \`${STABLE_BASE}/potato-${VARIANT}.rpi-imager-manifest\`" \
+  2>/dev/null || true
 
 printf '\nStable Imager URL:\n  %s/%s\n' "${STABLE_BASE}" "${MANIFEST_NAME}"

@@ -14,7 +14,7 @@ This is the single source of truth for how we plan, execute, and close work.
 
 ## Labels
 
-- Type: `type:feature`, `type:bug`, `type:chore`
+- Type: `type:feature`, `type:bug`, `type:chore`, `type:spike`
 - Area: `area:ui`, `area:backend`, `area:pi-image`, `area:ops`
 - State: `blocked` (use when waiting on an external dependency)
 
@@ -35,6 +35,8 @@ Before starting new implementation work, first check whether a relevant issue al
 5. Create branch from `main` using:
    - `feat/issue-<id>-<short-slug>` for features
    - `fix/issue-<id>-<short-slug>` for bugs
+   - `chore/issue-<id>-<short-slug>` for maintenance
+   - `spike/issue-<id>-<short-slug>` for exploratory work
 6. Move issue to `In Progress` once branch is created.
 7. Open PR linked to the issue.
 8. Move to `In Review` when implementation is complete:
@@ -48,9 +50,9 @@ Before starting new implementation work, first check whether a relevant issue al
 ## Branching Rules (Required)
 
 - Never implement ticket work on `main`.
-- `main` is merge-only; no direct commits for feature/bug/chore work.
+- `main` is merge-only; no direct commits for feature/bug/chore/spike work.
 - Before writing code, confirm branch: `git branch --show-current`.
-- Required branch naming: `feat/issue-<id>-<short-slug>`, `fix/issue-<id>-<short-slug>`, `chore/issue-<id>-<short-slug>`.
+- Required branch naming: `feat/issue-<id>-<short-slug>`, `fix/issue-<id>-<short-slug>`, `chore/issue-<id>-<short-slug>`, `spike/issue-<id>-<short-slug>`.
 - Start every ticket branch from latest `main`: `git checkout main && git pull --ff-only && git checkout -b <branch-name>`.
 
 ## GitHub PR Linkage Rules (Required)
@@ -74,6 +76,13 @@ Every implementation ticket must include:
 - TDD-first requirement
 - Test expectations by layer (unit/API/UI as applicable)
 - general, readable language focused on the product outcome
+
+Spike tickets use the same structure, but the expected outcome is a decision:
+- clear research question
+- explicit experiment scope
+- measurable success thresholds
+- required evidence or measurements
+- a clear concluding recommendation, even if the answer is "do not pursue"
 
 ## TDD Rule
 
@@ -207,6 +216,11 @@ This ticket must be developed **TDD-first**.
 ```
 
 Keep ticket text general and readable. Capture the outcome and boundaries clearly, but avoid turning the issue body into a temporary debugging log or implementation transcript.
+
+For spike tickets, add:
+- success thresholds
+- evidence/measurement expectations
+- the exact decision or recommendation the spike must leave behind
 
 ## Building ik_llama.cpp on Raspberry Pi 5
 

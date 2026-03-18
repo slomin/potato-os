@@ -710,7 +710,6 @@ import { saveActiveSession } from "./session-manager.js";
               delete activeAssistantView.bubble.dataset.phase;
               activeAssistantView.copyText = rawPartial;
               setMessageActionsVisible(activeAssistantView, true);
-              appState.chatHistory.push({ role: "assistant", content: rawPartial });
               streamStats.finish_reason = "disconnected";
               const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
               setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs));

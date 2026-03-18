@@ -82,6 +82,28 @@ def test_local_image_build_script_collects_artifacts_for_flash_test():
     assert "CLEAN_ARTIFACTS_MODE" in script
 
 
+def test_publish_image_release_script_validates_bundle_and_creates_release():
+    script = Path("bin/publish_image_release.sh").read_text(encoding="utf-8")
+
+    assert "set -euo pipefail" in script
+    assert "--version" in script
+    assert "--bundle-dir" in script
+    assert "--variant" in script
+    assert "--dry-run" in script
+    assert "gh release create" in script
+    assert "generate_imager_manifest.py" in script
+    assert "--download-url" in script
+    assert "--icon" in script
+    assert "github.com/${GITHUB_REPO}/releases/download/${VERSION}" in script
+    assert "potato-imager-icon.svg" in script
+    assert "SHA256SUMS" in script
+    assert ".rpi-imager-manifest" in script
+    assert "Raspberry Pi Imager" in script
+    assert "Content Repository" in script
+    assert "Use custom URL" in script
+    assert "app.__version__" in script
+
+
 def test_clean_image_build_artifacts_script_cleans_outputs_and_optional_caches():
     script = Path("bin/clean_image_build_artifacts.sh").read_text(encoding="utf-8")
 

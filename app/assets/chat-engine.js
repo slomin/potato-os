@@ -2,7 +2,7 @@
 
 import { appState, PREFILL_METRICS_KEY, PREFILL_PROGRESS_CAP, PREFILL_PROGRESS_TAIL_START, PREFILL_PROGRESS_FLOOR, PREFILL_TICK_MS, PREFILL_FINISH_DURATION_MS, PREFILL_FINISH_TICK_MS, PREFILL_FINISH_HOLD_MS, STATUS_CHIP_MIN_VISIBLE_MS, IMAGE_CANCEL_RECOVERY_DELAY_MS, IMAGE_CANCEL_RESTART_DELAY_MS } from "./state.js";
 import { postJson } from "./utils.js";
-import { appendMessage, updateMessage, setMessageProcessingState, setMessageMeta, removeMessage } from "./messages.js";
+import { appendMessage, updateMessage, setMessageProcessingState, setMessageMeta, setMessageActionsVisible, removeMessage } from "./messages.js";
 import { clearPendingImage, buildUserMessageContent, buildUserBubblePayload, cancelPendingImageWork } from "./image-handler.js";
 import { collectSettings, resolveSeedForRequest, activeRuntimeVisionCapability, showTextOnlyImageBlockedState, renderComposerCapabilities, formatImageRejectedNotice } from "./settings-ui.js";
 import { saveActiveSession } from "./session-manager.js";
@@ -416,6 +416,8 @@ import { saveActiveSession } from "./session-manager.js";
           return "Tool calls emitted";
         case "cancelled":
           return "Stopped by user";
+        case "disconnected":
+          return "Connection lost";
         case null:
         case undefined:
         case "":
@@ -700,7 +702,19 @@ import { saveActiveSession } from "./session-manager.js";
           }
         } else {
           if (activeAssistantView) {
-            updateMessage(activeAssistantView, `Request error: ${err}`, { showActions: true });
+            const partial = activeAssistantView.bubble.textContent.trim();
+            if (partial && requestCtx.generationStarted) {
+              activeAssistantView.bubble.classList.remove("processing");
+              delete activeAssistantView.bubble.dataset.phase;
+              activeAssistantView.copyText = partial;
+              setMessageActionsVisible(activeAssistantView, true);
+              appState.chatHistory.push({ role: "assistant", content: partial });
+              streamStats.finish_reason = "disconnected";
+              const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
+              setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs));
+            } else {
+              updateMessage(activeAssistantView, `Request error: ${err}`, { showActions: true });
+            }
           } else {
             appendMessage("assistant", `Request error: ${err}`);
           }

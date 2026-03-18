@@ -501,5 +501,90 @@ test("chat request sends stream true and messages array to the backend", async (
   expect(payload.messages[payload.messages.length - 1].content).toContain("Verify chat payload.");
 });
 
+// ── Stream disconnect recovery (#102) ─────────────────────────────────
+
+test("mid-stream disconnect preserves partial content and shows connection lost stats", async ({ page }) => {
+  const partialText = "Partial response from the model before disconnect";
+  await page.addInitScript((content) => {
+    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 100;
+    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 100;
+    const originalFetch = window.fetch;
+    window.fetch = async function (url, opts) {
+      if (typeof url === "string" && url.includes("/v1/chat/completions")) {
+        const sseChunk = `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
+        const encoder = new TextEncoder();
+        let sent = 0;
+        const stream = new ReadableStream({
+          pull(controller) {
+            if (sent === 0) {
+              controller.enqueue(encoder.encode(sseChunk));
+              sent++;
+            } else {
+              controller.error(new TypeError("network error"));
+            }
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      }
+      return originalFetch.call(this, url, opts);
+    };
+  }, partialText);
+
+  await waitUntilReady(page);
+
+  await page.locator("#userPrompt").fill("Tell me something long.");
+  await page.locator("#userPrompt").press("Enter");
+  await expect(page.locator("#sendBtn")).toHaveText("Send", { timeout: 5000 });
+
+  const bubble = page.locator(".message-row.assistant .message-bubble").last();
+  await expect(bubble).toContainText(partialText);
+  await expect(bubble).not.toContainText("Request error");
+
+  const meta = page.locator(".message-row.assistant .message-meta").last();
+  await expect(meta).toBeVisible();
+  await expect(meta).toContainText("Connection lost");
+  await expect(meta).toContainText("TTFT");
+
+  await page.locator(".message-row.assistant .message-stack").last().hover();
+  await expect(page.locator(".message-row.assistant .message-action-btn[data-action='copy']").last()).toBeVisible();
+});
+
+test("stream error before any tokens shows standard error message", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__POTATO_PREFILL_FINISH_DURATION_MS__ = 100;
+    window.__POTATO_PREFILL_FINISH_HOLD_MS__ = 100;
+    const originalFetch = window.fetch;
+    window.fetch = async function (url, opts) {
+      if (typeof url === "string" && url.includes("/v1/chat/completions")) {
+        const stream = new ReadableStream({
+          pull(controller) {
+            controller.error(new TypeError("network error"));
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      }
+      return originalFetch.call(this, url, opts);
+    };
+  });
+
+  await waitUntilReady(page);
+
+  await page.locator("#userPrompt").fill("Tell me something.");
+  await page.locator("#userPrompt").press("Enter");
+  await expect(page.locator("#sendBtn")).toHaveText("Send", { timeout: 5000 });
+
+  const bubble = page.locator(".message-row.assistant .message-bubble").last();
+  await expect(bubble).toContainText("Request error");
+
+  const meta = page.locator(".message-row.assistant .message-meta").last();
+  await expect(meta).toBeHidden();
+});
+
 // ── Quick model switcher (#52) ──────────────────────────────────────
 

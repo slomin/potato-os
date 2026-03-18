@@ -19,13 +19,13 @@ Experimental Raspberry Pi 5 Linux mod with optimised local LLM inference. Runs q
 
 A starter model (~1.8 GB) downloads automatically on first boot. Chat is ready once the download finishes and the status shows CONNECTED.
 
-Before you start, back up any SD card or Pi data you may want to keep. Potato OS is currently a reflash-first MVP: there is no OTA update flow, no one-click rollback, and the safest way to recover or move to a newer version is to reflash the card.
+See [Flashing Guide](docs/flashing.md) for detailed step-by-step instructions, including how to flash directly from Raspberry Pi Imager without a manual download.
 
 ### What you need
 
 - Raspberry Pi 5 (8 GB or 16 GB)
-- microSD card (16 GB minimum, 32 GB recommended)
-- Power supply (27W USB-C recommended)
+- microSD card (16 GB minimum)
+- Power supply (20W USB-C minimum, 27W recommended if using a USB SSD)
 - Ethernet or Wi-Fi connection (for first-boot model download)
 
 ## MVP status
@@ -108,7 +108,7 @@ Build a flashable Potato OS image from macOS:
 ./bin/build_local_image.sh --setup-docker
 ```
 
-See [Building Images](docs/building-images.md) for prerequisites, variants, and flashing instructions.
+See [Building Images](docs/building-images.md) for prerequisites, variants, flashing, and publishing releases.
 
 ### Project
 

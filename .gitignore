@@ -16,4 +16,3 @@ output/
 .cache/potato-image-cache/
 .cache/pi-gen-arm64/
 .tmp-*.png
-docs/assets/install_steps/raw_files/

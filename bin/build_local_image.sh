@@ -246,11 +246,13 @@ collect_variant_bundle() {
   printf '%s  %s\n' "${actual_sha}" "${image_name}" > "${bundle_dir}/SHA256SUMS"
 
   local imager_manifest="${bundle_dir}/potato-${target_variant}.rpi-imager-manifest"
+  cp -f "${REPO_ROOT}/bin/assets/potato-imager-icon.svg" "${bundle_dir}/potato-imager-icon.svg"
   echo "[potato-local-build] Generating Raspberry Pi Imager manifest (this may take a minute)..."
   python3 "${REPO_ROOT}/bin/generate_imager_manifest.py" \
     --image "${bundle_dir}/${image_name}" \
     --output "${imager_manifest}" \
     --name "Potato OS (${target_variant}, Raspberry Pi 5)" \
+    --icon "${bundle_dir}/potato-imager-icon.svg" \
     || die "Manifest generation failed for ${bundle_dir}/${image_name}"
 
   local image_size_bytes

@@ -11,7 +11,7 @@ from datetime import date
 from pathlib import Path
 
 
-DEFAULT_ICON_URL = "https://downloads.raspberrypi.com/imager/icons/RPi_5.png"
+DEFAULT_ICON_PATH = Path(__file__).resolve().parent / "assets" / "potato-imager-icon.svg"
 DEFAULT_DISPLAY_NAME = "Potato OS (Raspberry Pi 5)"
 DEFAULT_DESCRIPTION = "Local-first Potato OS chat stack for Raspberry Pi 5."
 
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Output .rpi-imager-manifest path.")
     parser.add_argument("--name", default=DEFAULT_DISPLAY_NAME, help="Display name shown in Imager.")
     parser.add_argument("--description", default=DEFAULT_DESCRIPTION, help="Description shown in Imager.")
-    parser.add_argument("--icon", default=DEFAULT_ICON_URL, help="OS icon URL/path.")
+    parser.add_argument("--icon", default=str(DEFAULT_ICON_PATH), help="OS icon URL/path.")
     parser.add_argument("--website", default="", help="Optional website URL.")
     parser.add_argument(
         "--download-url",
@@ -105,13 +105,17 @@ def main() -> int:
         extract_size = image_download_size
 
     image_url = args.download_url.strip() or image_path.as_uri()
+    icon_value = args.icon
+    icon_path = Path(icon_value)
+    if icon_path.is_file():
+        icon_value = icon_path.resolve().as_uri()
     if output_path.suffix not in {".json", ".rpi-imager-manifest"}:
         raise SystemExit("Output must end with .json or .rpi-imager-manifest")
 
     os_entry: dict[str, object] = {
         "name": args.name,
         "description": args.description,
-        "icon": args.icon,
+        "icon": icon_value,
         "url": image_url,
         "extract_size": extract_size,
         "extract_sha256": extract_sha256,

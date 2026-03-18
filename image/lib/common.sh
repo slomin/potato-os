@@ -372,6 +372,7 @@ run_build() {
         --image "${out_image}" \
         --output "${output_dir}/potato-${variant}.rpi-imager-manifest" \
         --name "Potato OS (${variant}, Raspberry Pi 5)" \
+        --icon "${repo_root}/bin/assets/potato-imager-icon.svg" \
         || die "Manifest generation failed for ${out_image}"
       info "Manifest generated: ${output_dir}/potato-${variant}.rpi-imager-manifest"
       ;;

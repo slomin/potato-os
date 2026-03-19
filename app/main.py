@@ -943,10 +943,13 @@ async def start_model_download(
                 ):
                     updated_state["default_model_downloaded_once"] = True
                     save_models_state(runtime, updated_state)
-                # Auto-download projector for vision-capable bootstrap model
+                # Auto-download projector for vision-capable bootstrap model.
+                # Runs in a thread pool to avoid blocking the async event loop
+                # during the ~638 MB download (which would freeze /status and the UI).
                 if model_supports_vision_filename(target_filename):
                     try:
-                        downloaded, reason, proj_name = download_default_projector_for_model(
+                        downloaded, reason, proj_name = await asyncio.to_thread(
+                            download_default_projector_for_model,
                             runtime=runtime, model_id=selected_model_id,
                         )
                         if downloaded:

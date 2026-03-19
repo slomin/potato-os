@@ -163,3 +163,29 @@ def test_ensure_model_validates_size_before_mv():
     mv_pos = script.index('mv -f "${TMP_PATH}" "${MODEL_PATH}"')
     assert size_check_pos < mv_pos, "Size validation must occur before mv"
 
+
+def test_ensure_model_runs_curl_at_idle_io_priority():
+    script = Path("bin/ensure_model.sh").read_text(encoding="utf-8")
+
+    assert "ionice -c3 nice -n 19 curl" in script
+
+
+def test_start_llama_runs_projector_curl_at_idle_io_priority():
+    script = Path("bin/start_llama.sh").read_text(encoding="utf-8")
+
+    assert "ionice -c3 nice -n 19 curl" in script
+
+
+def test_projector_download_does_not_block_event_loop():
+    """The projector download in start_model_download must run in a thread pool,
+    not directly on the event loop, to avoid blocking /status and all other requests."""
+    import inspect
+
+    from app.main import start_model_download
+
+    source = inspect.getsource(start_model_download)
+    assert "to_thread" in source, (
+        "download_default_projector_for_model must be called via asyncio.to_thread "
+        "to avoid blocking the event loop during the 638MB projector download"
+    )
+

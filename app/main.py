@@ -1305,8 +1305,17 @@ async def orchestrator_loop(app: FastAPI, runtime: RuntimeConfig) -> None:
 
                 llama_process = app.state.llama_process
                 if llama_process is None or llama_process.returncode is not None:
+                    # Count the previous process's failure BEFORE starting a new one.
+                    if llama_process is not None and llama_process.returncode is not None and llama_process.returncode != 0:
+                        app.state.llama_consecutive_failures += 1
+                        if app.state.llama_consecutive_failures >= LLAMA_MAX_CONSECUTIVE_FAILURES:
+                            logger.error(
+                                "llama-server failed %d times in a row — stopping restart attempts (model may be corrupt)",
+                                app.state.llama_consecutive_failures,
+                            )
+
                     if app.state.llama_consecutive_failures >= LLAMA_MAX_CONSECUTIVE_FAILURES:
-                        pass  # Already logged on the Nth failure — don't spam or restart.
+                        pass  # Limit reached — don't restart.
                     elif runtime.start_llama_script.exists():
                         await terminate_stray_llama_processes(runtime)
                         app.state.llama_process = await asyncio.create_subprocess_exec(
@@ -1320,14 +1329,6 @@ async def orchestrator_loop(app: FastAPI, runtime: RuntimeConfig) -> None:
                 readiness = await refresh_llama_readiness(app, runtime, active_model_path=active_model_path)
                 if readiness.get("ready"):
                     app.state.llama_consecutive_failures = 0
-                elif app.state.llama_process is not None and app.state.llama_process.returncode is not None and app.state.llama_process.returncode != 0:
-                    # Count only after a fresh start attempt that actually crashed.
-                    app.state.llama_consecutive_failures += 1
-                    if app.state.llama_consecutive_failures >= LLAMA_MAX_CONSECUTIVE_FAILURES:
-                        logger.error(
-                            "llama-server failed %d times in a row — stopping restart attempts (model may be corrupt)",
-                            app.state.llama_consecutive_failures,
-                        )
             else:
                 reset_llama_readiness_state(app, reason="model_missing")
                 app.state.llama_consecutive_failures = 0

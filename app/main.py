@@ -1307,9 +1307,11 @@ async def orchestrator_loop(app: FastAPI, runtime: RuntimeConfig) -> None:
                 llama_process = app.state.llama_process
                 if llama_process is None or llama_process.returncode is not None:
                     # Count the previous process's failure BEFORE starting a new one.
+                    # Null out the reference so the same dead process isn't re-counted.
                     if llama_process is not None and llama_process.returncode is not None and llama_process.returncode != 0:
                         app.state.llama_consecutive_failures += 1
-                        if app.state.llama_consecutive_failures >= LLAMA_MAX_CONSECUTIVE_FAILURES:
+                        app.state.llama_process = None
+                        if app.state.llama_consecutive_failures == LLAMA_MAX_CONSECUTIVE_FAILURES:
                             logger.error(
                                 "llama-server failed %d times in a row — stopping restart attempts (model may be corrupt)",
                                 app.state.llama_consecutive_failures,

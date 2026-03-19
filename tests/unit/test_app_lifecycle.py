@@ -270,6 +270,7 @@ def test_crash_loop_counter_stops_restarts_for_fast_crashing_process(
                 if llama_process is None or llama_process.returncode is not None:
                     if llama_process is not None and llama_process.returncode is not None and llama_process.returncode != 0:
                         app.state.llama_consecutive_failures += 1
+                        app.state.llama_process = None
 
                     if app.state.llama_consecutive_failures >= main.LLAMA_MAX_CONSECUTIVE_FAILURES:
                         pass
@@ -283,7 +284,9 @@ def test_crash_loop_counter_stops_restarts_for_fast_crashing_process(
 
     asyncio.run(_run_iterations(20))
 
-    assert app.state.llama_consecutive_failures >= main.LLAMA_MAX_CONSECUTIVE_FAILURES
+    assert app.state.llama_consecutive_failures == main.LLAMA_MAX_CONSECUTIVE_FAILURES, (
+        f"Counter should be exactly {main.LLAMA_MAX_CONSECUTIVE_FAILURES}, got {app.state.llama_consecutive_failures}"
+    )
     # Must be capped — NOT 20 starts
     assert start_count == main.LLAMA_MAX_CONSECUTIVE_FAILURES, (
         f"Expected {main.LLAMA_MAX_CONSECUTIVE_FAILURES} start attempts, got {start_count}"

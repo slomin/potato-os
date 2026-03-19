@@ -190,3 +190,28 @@ def test_model_download_does_not_inline_projector_download():
         "let start_llama.sh handle it sequentially to avoid I/O starvation"
     )
 
+
+def test_build_status_offloads_filesystem_io_to_thread():
+    """build_status must use asyncio.to_thread to keep the event loop free."""
+    import inspect
+
+    from app.main import build_status
+
+    source = inspect.getsource(build_status)
+    assert "to_thread" in source, (
+        "build_status must use asyncio.to_thread for filesystem I/O — "
+        "sync reads block the event loop and freeze HTTP responses during downloads"
+    )
+
+
+def test_get_status_download_context_is_async():
+    """get_status_download_context must be async to use to_thread."""
+    import inspect
+
+    from app.main import get_status_download_context
+
+    assert inspect.iscoroutinefunction(get_status_download_context), (
+        "get_status_download_context must be async — "
+        "sync filesystem reads block the event loop during downloads"
+    )
+

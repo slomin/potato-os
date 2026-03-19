@@ -540,7 +540,7 @@ def _detect_projector_download(runtime: RuntimeConfig) -> dict[str, Any]:
     return {"active": False}
 
 
-async def build_status(
+def _build_status_fs(
     runtime: RuntimeConfig,
     *,
     app: FastAPI | None = None,
@@ -548,6 +548,7 @@ async def build_status(
     auto_start_remaining_seconds: int = 0,
     system_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """All sync filesystem I/O for build_status. Runs in a worker thread."""
     models_state = ensure_models_state(runtime)
     active_model, active_model_path = resolve_active_model(models_state, runtime)
     has_model = model_file_present(runtime, str(active_model["filename"]))
@@ -555,6 +556,7 @@ async def build_status(
     llama_running = False
     llama_transport_healthy = False
     llama_ready = False
+    needs_health_check = False
     storage_targets = build_model_storage_target_status(runtime)
     ssd_models_dir_raw = storage_targets.get("ssd", {}).get("models_dir")
     ssd_models_dir = Path(str(ssd_models_dir_raw)) if ssd_models_dir_raw else None
@@ -569,9 +571,8 @@ async def build_status(
             llama_transport_healthy = bool(readiness_state.get("transport_healthy", False))
             llama_ready = bool(readiness_state.get("ready", False))
         else:
-            llama_ready = await check_llama_health(runtime)
-            llama_transport_healthy = llama_ready
-            llama_running = llama_ready
+            # check_llama_health is async — caller handles this path
+            needs_health_check = True
 
     active_backend, fallback_active = _resolve_backend_active(runtime, has_model, llama_ready)
     effective_mode = runtime.chat_backend_mode
@@ -732,7 +733,42 @@ async def build_status(
         "compatibility": compatibility,
         "llama_runtime": build_llama_runtime_status(runtime, app=app),
         "system": system_payload,
+        "_needs_health_check": needs_health_check,
     }
+
+
+async def build_status(
+    runtime: RuntimeConfig,
+    *,
+    app: FastAPI | None = None,
+    download_active: bool = False,
+    auto_start_remaining_seconds: int = 0,
+    system_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    result = await asyncio.to_thread(
+        _build_status_fs,
+        runtime,
+        app=app,
+        download_active=download_active,
+        auto_start_remaining_seconds=auto_start_remaining_seconds,
+        system_snapshot=system_snapshot,
+    )
+    if result.pop("_needs_health_check", False):
+        llama_ready = await check_llama_health(runtime)
+        if llama_ready:
+            active_backend, fallback_active = _resolve_backend_active(
+                runtime, result["model_present"], True
+            )
+            result["state"] = "READY"
+            result["llama_server"].update({
+                "running": True,
+                "healthy": True,
+                "ready": True,
+                "transport_healthy": True,
+            })
+            result["backend"]["active"] = active_backend
+            result["backend"]["fallback_active"] = fallback_active
+    return result
 
 
 async def _run_script(path: Path, runtime: RuntimeConfig) -> int:
@@ -1079,7 +1115,10 @@ async def start_runtime_reset(runtime: RuntimeConfig) -> tuple[bool, str]:
     return False, "start_failed"
 
 
-def get_status_download_context(app: FastAPI, runtime: RuntimeConfig) -> tuple[bool, int]:
+def _get_status_download_context_sync(
+    app: FastAPI, runtime: RuntimeConfig, now_monotonic: float,
+) -> tuple[bool, int]:
+    """Sync filesystem I/O for get_status_download_context. Runs in a worker thread."""
     models_state = ensure_models_state(runtime)
     resolve_active_model(models_state, runtime)
     default_model_id = str(models_state.get("default_model_id") or "default")
@@ -1097,12 +1136,17 @@ def get_status_download_context(app: FastAPI, runtime: RuntimeConfig) -> tuple[b
         model_present=default_model_present,
         download_active=download_active,
         startup_monotonic=app.state.startup_monotonic,
-        now_monotonic=get_monotonic_time(),
+        now_monotonic=now_monotonic,
         countdown_enabled=bool(models_state.get("countdown_enabled", True)),
         default_model_downloaded_once=bool(models_state.get("default_model_downloaded_once", False))
         or not default_model_is_bootstrap_target,
     )
     return download_active, remaining
+
+
+async def get_status_download_context(app: FastAPI, runtime: RuntimeConfig) -> tuple[bool, int]:
+    now = get_monotonic_time()
+    return await asyncio.to_thread(_get_status_download_context_sync, app, runtime, now)
 
 
 async def activate_model(

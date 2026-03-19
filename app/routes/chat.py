@@ -45,7 +45,7 @@ async def chat_completions(
     runtime_cfg: RuntimeConfig = Depends(get_runtime),
     chat_repository: ChatRepositoryManager = Depends(get_chat_repository),
 ) -> Response:
-    download_active, auto_start_remaining = _get_status_download_context(request.app, runtime_cfg)
+    download_active, auto_start_remaining = await _get_status_download_context(request.app, runtime_cfg)
     status_payload = await _build_status(
         runtime_cfg,
         app=request.app,

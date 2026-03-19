@@ -36,7 +36,7 @@ async def root() -> HTMLResponse:
 
 @router.get("/status")
 async def status(request: Request, runtime_cfg: RuntimeConfig = Depends(get_runtime)) -> JSONResponse:
-    download_active, auto_start_remaining = _main.get_status_download_context(request.app, runtime_cfg)
+    download_active, auto_start_remaining = await _main.get_status_download_context(request.app, runtime_cfg)
     return JSONResponse(
         await _main.build_status(
             runtime_cfg,

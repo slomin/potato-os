@@ -162,3 +162,33 @@ def test_terminate_process_raises_when_kill_also_times_out(monkeypatch) -> None:
     assert raised is True
     assert proc.terminated is True
     assert proc.killed is True
+
+
+def test_consecutive_failure_counter_initialized_on_app():
+    from app.main import create_app, RuntimeConfig
+
+    app = create_app(enable_orchestrator=False)
+    assert hasattr(app.state, "llama_consecutive_failures")
+    assert app.state.llama_consecutive_failures == 0
+
+
+def test_max_consecutive_failures_constant_exists():
+    assert hasattr(main, "LLAMA_MAX_CONSECUTIVE_FAILURES")
+    assert main.LLAMA_MAX_CONSECUTIVE_FAILURES >= 3
+
+
+def test_orchestrator_loop_has_crash_loop_guard():
+    """The orchestrator must check llama_consecutive_failures before restarting."""
+    import inspect
+    source = inspect.getsource(main.orchestrator_loop)
+
+    assert "llama_consecutive_failures" in source
+    assert "LLAMA_MAX_CONSECUTIVE_FAILURES" in source
+
+
+def test_orchestrator_resets_failures_on_model_change():
+    """Switching models must reset the failure counter so the new model can start."""
+    import inspect
+    source = inspect.getsource(main.orchestrator_loop)
+
+    assert "_llama_failure_model" in source

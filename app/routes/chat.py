@@ -60,6 +60,10 @@ async def chat_completions(
         payload = await request.json()
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
+    except Exception as exc:
+        if type(exc).__name__ == "ClientDisconnect":
+            return Response(status_code=499)
+        raise
 
     payload = merge_active_model_chat_defaults(payload, runtime=runtime_cfg)
     payload = merge_chat_defaults(payload)

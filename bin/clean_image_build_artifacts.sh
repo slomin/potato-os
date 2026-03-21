@@ -27,7 +27,7 @@ Options:
   --include-download-cache       Also clear cached downloads (slower next build).
   --include-pi-gen-checkout      Also delete local pi-gen checkout (re-cloned next build).
   --deep                         Equivalent to both cache options above.
-  --docker-prune                 Prune unused Docker images, build cache, and volumes (>24h old).
+  --docker-prune                 Prune unused Docker images (>24h), build cache (>24h), and volumes.
   --yes                          Skip confirmation prompt.
   -h, --help                     Show help.
 

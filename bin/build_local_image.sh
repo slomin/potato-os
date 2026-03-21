@@ -319,7 +319,7 @@ else
 fi
 
 if [ "${POST_CLEANUP}" = "1" ] && has_cmd docker; then
-  echo "[potato-local-build] Pruning stale Docker artifacts (older than 24h)..."
+  echo "[potato-local-build] Pruning stale Docker artifacts..."
   docker image prune --force --filter "until=24h" 2>/dev/null || true
   docker builder prune --force --filter "until=24h" 2>/dev/null || true
   docker volume prune --force 2>/dev/null || true

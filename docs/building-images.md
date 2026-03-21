@@ -160,7 +160,7 @@ colima stop && colima delete && colima start --disk 100
 ./bin/build_local_image.sh --setup-docker --post-cleanup
 ```
 
-This removes unused Docker images, build cache, and volumes older than 24 hours after the build completes. Active containers and in-use images are never removed.
+This prunes unused Docker images and build cache older than 24 hours, plus any unused volumes, after the build completes. Active containers and in-use images are never removed.
 
 ### Skipping the preflight check
 

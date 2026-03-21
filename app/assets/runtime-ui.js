@@ -184,15 +184,21 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
       const powerEstimate = systemPayload?.power_estimate || {};
       const rawPowerWatts = Number(powerEstimate?.raw_total_watts ?? powerEstimate?.total_watts);
       const adjustedPowerWatts = Number(powerEstimate?.adjusted_total_watts);
+      const isCpuLoadMethod = powerEstimate?.method === "cpu_load_estimate";
       if (powerDetail) {
+        const powerLabel = isCpuLoadMethod ? "Power (CPU load est.)" : "Power (estimated total)";
         powerDetail.textContent = Number.isFinite(adjustedPowerWatts) && powerEstimate?.available === true
-          ? `Power (estimated total): ${adjustedPowerWatts.toFixed(3)} W`
-          : "Power (estimated total): --";
+          ? `${powerLabel}: ${adjustedPowerWatts.toFixed(3)} W`
+          : `${powerLabel}: --`;
       }
       if (powerRawDetail) {
-        powerRawDetail.textContent = Number.isFinite(rawPowerWatts) && powerEstimate?.available === true
-          ? `Power (PMIC raw): ${rawPowerWatts.toFixed(3)} W`
-          : "Power (PMIC raw): --";
+        if (isCpuLoadMethod) {
+          powerRawDetail.textContent = "";
+        } else {
+          powerRawDetail.textContent = Number.isFinite(rawPowerWatts) && powerEstimate?.available === true
+            ? `Power (PMIC raw): ${rawPowerWatts.toFixed(3)} W`
+            : "Power (PMIC raw): --";
+        }
       }
 
       if (gpuDetail) gpuDetail.textContent = `core ${gpuCore}, v3d ${gpuV3d}`;

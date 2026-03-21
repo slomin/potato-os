@@ -1358,9 +1358,10 @@ def build_power_estimate_status(runtime: RuntimeConfig, power_snapshot: Any) -> 
     payload["calibration"] = calibration
 
     if is_cpu_load_method:
-        payload["confidence"] = "cpu-load-model"
-        payload["adjusted_total_watts"] = raw_watts
-        payload["adjusted_label"] = "CPU load estimate" if raw_watts is not None else None
+        payload["confidence"] = "meter-calibrated" if calibration.get("mode") == "custom" else "cpu-load-model"
+        adjusted = _apply_power_calibration(raw_watts, a=calibration.get("a"), b=calibration.get("b"))
+        payload["adjusted_total_watts"] = round(adjusted, 3) if adjusted is not None else None
+        payload["adjusted_label"] = "CPU load estimate" if payload["adjusted_total_watts"] is not None else None
         payload["estimated_total_disclaimer"] = PI4_POWER_CPU_LOAD_DISCLAIMER
     else:
         payload["confidence"] = "meter-calibrated" if calibration.get("mode") == "custom" else "experimental-default"

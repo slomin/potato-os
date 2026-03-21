@@ -1,0 +1,394 @@
+"""Unit tests for OTA update state module."""
+
+from __future__ import annotations
+
+import json
+import time
+
+import httpx
+import pytest
+import respx
+
+from app.update_state import (
+    GITHUB_RELEASES_LATEST_URL,
+    build_update_status,
+    check_for_update,
+    is_newer,
+    is_update_safe,
+    parse_version,
+    read_update_state,
+)
+
+
+# ---------------------------------------------------------------------------
+# parse_version
+# ---------------------------------------------------------------------------
+
+
+def test_parse_version_simple():
+    assert parse_version("0.4.0") == ((0, 4, 0), "")
+
+
+def test_parse_version_with_pre_release():
+    assert parse_version("0.3.6-pre-alpha") == ((0, 3, 6), "pre-alpha")
+
+
+def test_parse_version_strips_v_prefix():
+    assert parse_version("v1.2.3") == ((1, 2, 3), "")
+
+
+def test_parse_version_rc_suffix():
+    assert parse_version("1.0.0-rc1") == ((1, 0, 0), "rc1")
+
+
+def test_parse_version_malformed():
+    nums, suffix = parse_version("not-a-version")
+    assert nums == (0,)
+
+
+def test_parse_version_empty():
+    nums, suffix = parse_version("")
+    assert nums == (0,)
+
+
+# ---------------------------------------------------------------------------
+# is_newer
+# ---------------------------------------------------------------------------
+
+
+def test_newer_release_beats_pre_alpha():
+    assert is_newer("0.4.0", "0.3.6-pre-alpha") is True
+
+
+def test_same_version_is_not_newer():
+    assert is_newer("0.4.0", "0.4.0") is False
+
+
+def test_higher_minor_is_newer():
+    assert is_newer("0.5.0", "0.4.0") is True
+
+
+def test_release_beats_rc_of_same_base():
+    assert is_newer("1.0.0", "1.0.0-rc1") is True
+
+
+def test_rc_is_not_newer_than_release():
+    assert is_newer("1.0.0-rc1", "1.0.0") is False
+
+
+def test_lower_version_is_not_newer():
+    assert is_newer("0.2.0", "0.3.6-pre-alpha") is False
+
+
+def test_v_prefix_stripped_in_comparison():
+    assert is_newer("v0.5.0", "0.4.0") is True
+
+
+def test_malformed_tag_not_newer():
+    assert is_newer("not-a-version", "0.4.0") is False
+
+
+def test_empty_string_not_newer():
+    assert is_newer("", "0.4.0") is False
+
+
+def test_pre_alpha_not_newer_than_same_base_release():
+    assert is_newer("0.4.0-pre-alpha", "0.4.0") is False
+
+
+def test_higher_major_is_newer():
+    assert is_newer("2.0.0", "1.99.99") is True
+
+
+def test_higher_patch_is_newer():
+    assert is_newer("0.4.1", "0.4.0") is True
+
+
+# ---------------------------------------------------------------------------
+# read_update_state
+# ---------------------------------------------------------------------------
+
+
+def test_read_update_state_none_when_missing(runtime):
+    assert read_update_state(runtime) is None
+
+
+def test_read_update_state_returns_dict_on_valid(runtime):
+    state = {
+        "available": True,
+        "current_version": "0.3.6-pre-alpha",
+        "latest_version": "0.5.0",
+        "checked_at_unix": int(time.time()),
+        "error": None,
+    }
+    runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
+    result = read_update_state(runtime)
+    assert isinstance(result, dict)
+    assert result["available"] is True
+    assert result["latest_version"] == "0.5.0"
+
+
+def test_read_update_state_none_on_corrupt_json(runtime):
+    runtime.update_state_path.write_text("not json{{{", encoding="utf-8")
+    assert read_update_state(runtime) is None
+
+
+# ---------------------------------------------------------------------------
+# build_update_status
+# ---------------------------------------------------------------------------
+
+
+def test_build_update_status_default_shape_no_state(runtime):
+    result = build_update_status(runtime)
+    assert result["available"] is False
+    assert isinstance(result["current_version"], str)
+    assert result["latest_version"] is None
+    assert result["release_notes"] is None
+    assert result["checked_at_unix"] is None
+    assert result["state"] == "idle"
+    assert result["deferred"] is False
+    assert result["defer_reason"] is None
+    assert result["progress"] == {"phase": None, "percent": 0, "error": None}
+
+
+def test_build_update_status_populated_from_state(runtime):
+    state = {
+        "available": True,
+        "current_version": "0.3.6-pre-alpha",
+        "latest_version": "0.5.0",
+        "release_notes": "Bug fixes",
+        "release_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+        "tarball_url": None,
+        "checked_at_unix": 1711000000,
+        "error": None,
+    }
+    runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
+    result = build_update_status(runtime)
+    assert result["available"] is True
+    assert result["latest_version"] == "0.5.0"
+    assert result["release_notes"] == "Bug fixes"
+    assert result["checked_at_unix"] == 1711000000
+
+
+def test_build_update_status_with_error_in_state(runtime):
+    state = {
+        "available": False,
+        "current_version": "0.3.6-pre-alpha",
+        "latest_version": None,
+        "release_notes": None,
+        "release_url": None,
+        "tarball_url": None,
+        "checked_at_unix": 1711000000,
+        "error": "rate_limited",
+    }
+    runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
+    result = build_update_status(runtime)
+    assert result["available"] is False
+    assert result["progress"]["error"] == "rate_limited"
+
+
+def test_build_update_status_deferred_when_download_active(runtime):
+    runtime.download_state_path.write_text(
+        json.dumps({"bytes_total": 1000, "bytes_downloaded": 500, "percent": 50}),
+        encoding="utf-8",
+    )
+    result = build_update_status(runtime)
+    assert result["deferred"] is True
+    assert result["defer_reason"] == "download_active"
+
+
+def test_build_update_status_not_deferred_when_download_complete(runtime):
+    runtime.download_state_path.write_text(
+        json.dumps({"bytes_total": 1000, "bytes_downloaded": 1000, "percent": 100}),
+        encoding="utf-8",
+    )
+    result = build_update_status(runtime)
+    assert result["deferred"] is False
+
+
+def test_build_update_status_not_deferred_when_download_errored(runtime):
+    runtime.download_state_path.write_text(
+        json.dumps({"bytes_total": 1000, "bytes_downloaded": 500, "percent": 50, "error": "network"}),
+        encoding="utf-8",
+    )
+    result = build_update_status(runtime)
+    assert result["deferred"] is False
+
+
+# ---------------------------------------------------------------------------
+# check_for_update (async — mocked via respx)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_check_for_update_writes_state_on_success(runtime):
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "tag_name": "v0.5.0",
+                    "body": "Release notes here",
+                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+                    "assets": [
+                        {
+                            "name": "potato-os-0.5.0.tar.gz",
+                            "browser_download_url": "https://github.com/slomin/potato-os/releases/download/v0.5.0/potato-os-0.5.0.tar.gz",
+                        }
+                    ],
+                },
+            )
+        )
+        result = await check_for_update(runtime)
+
+    assert result["available"] is True
+    assert result["latest_version"] == "0.5.0"
+    assert result["release_notes"] == "Release notes here"
+    assert result["error"] is None
+    assert result["checked_at_unix"] > 0
+    assert runtime.update_state_path.exists()
+
+
+@pytest.mark.anyio
+async def test_check_for_update_not_available_when_same_version(runtime, monkeypatch):
+    monkeypatch.setattr("app.update_state.__version__", "0.5.0")
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "tag_name": "v0.5.0",
+                    "body": "",
+                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+                    "assets": [],
+                },
+            )
+        )
+        result = await check_for_update(runtime)
+
+    assert result["available"] is False
+
+
+@pytest.mark.anyio
+async def test_check_for_update_handles_rate_limit(runtime):
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(
+            return_value=httpx.Response(403, json={"message": "rate limit exceeded"})
+        )
+        result = await check_for_update(runtime)
+
+    assert result["error"] == "rate_limited"
+    assert result["available"] is False
+
+
+@pytest.mark.anyio
+async def test_check_for_update_handles_non_200(runtime):
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(
+            return_value=httpx.Response(500, text="Internal Server Error")
+        )
+        result = await check_for_update(runtime)
+
+    assert result["error"] == "http_500"
+    assert result["available"] is False
+
+
+@pytest.mark.anyio
+async def test_check_for_update_handles_network_error(runtime):
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(side_effect=httpx.ConnectError("DNS failure"))
+        result = await check_for_update(runtime)
+
+    assert result["error"] == "network_error"
+    assert result["available"] is False
+    assert runtime.update_state_path.exists()
+
+
+@pytest.mark.anyio
+async def test_check_for_update_handles_malformed_json(runtime):
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(
+            return_value=httpx.Response(200, text="<html>not json</html>")
+        )
+        result = await check_for_update(runtime)
+
+    assert result["error"] == "parse_error"
+    assert result["available"] is False
+
+
+@pytest.mark.anyio
+async def test_check_for_update_handles_missing_tag_name(runtime):
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(
+            return_value=httpx.Response(200, json={"body": "notes", "html_url": "url", "assets": []})
+        )
+        result = await check_for_update(runtime)
+
+    assert result["available"] is False
+    assert result["latest_version"] is None
+    assert result["error"] is None
+
+
+@pytest.mark.anyio
+async def test_check_for_update_extracts_tarball_url(runtime):
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "tag_name": "v0.5.0",
+                    "body": "",
+                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+                    "assets": [
+                        {
+                            "name": "potato-os-0.5.0.tar.gz",
+                            "browser_download_url": "https://example.com/tarball.tar.gz",
+                        }
+                    ],
+                },
+            )
+        )
+        result = await check_for_update(runtime)
+
+    assert result["tarball_url"] == "https://example.com/tarball.tar.gz"
+
+
+# ---------------------------------------------------------------------------
+# is_update_safe
+# ---------------------------------------------------------------------------
+
+
+def test_is_update_safe_blocked_by_active_download(runtime):
+    runtime.download_state_path.write_text(
+        json.dumps({"bytes_total": 1000, "bytes_downloaded": 500, "percent": 50}),
+        encoding="utf-8",
+    )
+    safe, reason = is_update_safe(runtime)
+    assert safe is False
+    assert reason == "download_active"
+
+
+def test_is_update_safe_clear_when_no_download(runtime):
+    safe, reason = is_update_safe(runtime)
+    assert safe is True
+    assert reason is None
+
+
+def test_is_update_safe_clear_when_download_complete(runtime):
+    runtime.download_state_path.write_text(
+        json.dumps({"bytes_total": 1000, "bytes_downloaded": 1000, "percent": 100}),
+        encoding="utf-8",
+    )
+    safe, reason = is_update_safe(runtime)
+    assert safe is True
+    assert reason is None
+
+
+def test_is_update_safe_clear_when_download_errored(runtime):
+    runtime.download_state_path.write_text(
+        json.dumps({"bytes_total": 1000, "bytes_downloaded": 500, "percent": 50, "error": "timeout"}),
+        encoding="utf-8",
+    )
+    safe, reason = is_update_safe(runtime)
+    assert safe is True
+    assert reason is None

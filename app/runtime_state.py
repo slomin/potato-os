@@ -213,6 +213,22 @@ def _read_pi_device_model_name() -> str | None:
     return text or None
 
 
+PI4_8GB_MEMORY_THRESHOLD_BYTES = 6 * 1024 * 1024 * 1024
+PI4_INCOMPATIBLE_RUNTIMES = ("ik_llama",)
+
+DEVICE_CLOCK_LIMITS: dict[str, dict[str, int]] = {
+    "pi5": {"cpu_max_hz": 2_400_000_000, "gpu_max_hz": 1_000_000_000},
+    "pi4": {"cpu_max_hz": 1_500_000_000, "gpu_max_hz": 500_000_000},
+}
+
+
+def get_device_clock_limits(device_class: str) -> dict[str, int]:
+    for prefix, limits in DEVICE_CLOCK_LIMITS.items():
+        if device_class.startswith(prefix):
+            return dict(limits)
+    return dict(DEVICE_CLOCK_LIMITS["pi5"])
+
+
 def classify_runtime_device(
     *,
     total_memory_bytes: int | None = None,
@@ -228,7 +244,30 @@ def classify_runtime_device(
         if total is not None and total >= MODEL_UPLOAD_PI_16GB_MEMORY_THRESHOLD_BYTES:
             return "pi5-16gb"
         return "pi5-8gb"
+    if "raspberry pi 4" in model_name:
+        total = total_memory_bytes if total_memory_bytes is not None else _detect_total_memory_bytes()
+        if total is not None and total >= MODEL_UPLOAD_PI_16GB_MEMORY_THRESHOLD_BYTES:
+            return "pi4-16gb"
+        if total is not None and total >= PI4_8GB_MEMORY_THRESHOLD_BYTES:
+            return "pi4-8gb"
+        return "pi4-4gb"
     return "other-pi"
+
+
+def check_runtime_device_compatibility(
+    device_class: str,
+    runtime_family: str,
+) -> dict[str, Any]:
+    if device_class.startswith("pi4-") and runtime_family in PI4_INCOMPATIBLE_RUNTIMES:
+        return {
+            "compatible": False,
+            "reason": (
+                f"{runtime_family} requires ARMv8.2-A dot product instructions (Cortex-A76+). "
+                f"Pi 4 (Cortex-A72, ARMv8.0-A) must use llama_cpp."
+            ),
+            "recommended_family": "llama_cpp",
+        }
+    return {"compatible": True, "reason": None, "recommended_family": None}
 
 
 def get_large_model_warn_threshold_bytes() -> int:
@@ -756,6 +795,12 @@ def build_large_model_compatibility(
             }
         )
 
+    runtime_family = ""
+    marker = read_llama_runtime_bundle_marker(runtime)
+    if isinstance(marker, dict):
+        runtime_family = str(marker.get("family") or "")
+    runtime_compat = check_runtime_device_compatibility(device_class, runtime_family)
+
     return {
         "device_class": device_class,
         "pi_model_name": pi_model_name,
@@ -763,6 +808,7 @@ def build_large_model_compatibility(
         "large_model_warn_threshold_bytes": threshold_bytes,
         "supported_target": "raspberry-pi-5-16gb",
         "override_enabled": override_enabled,
+        "runtime_compatibility": runtime_compat,
         "warnings": warnings,
     }
 

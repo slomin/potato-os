@@ -1,6 +1,13 @@
 "use strict";
 
 import { appState, CPU_CLOCK_MAX_HZ_PI5, GPU_CLOCK_MAX_HZ_PI5 } from "./state.js";
+
+    function _cpuMaxHz(systemPayload) {
+      return Number(systemPayload?.device_clock_limits?.cpu_max_hz) || CPU_CLOCK_MAX_HZ_PI5;
+    }
+    function _gpuMaxHz(systemPayload) {
+      return Number(systemPayload?.device_clock_limits?.gpu_max_hz) || GPU_CLOCK_MAX_HZ_PI5;
+    }
 import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRuntimeMetricSeverity } from "./utils.js";
 
     export function setRuntimeDetailsExpanded(expanded) {
@@ -98,7 +105,7 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
       if (cpuDetail) cpuDetail.textContent = cpuTotal;
       if (coresDetail) coresDetail.textContent = coresText;
       if (cpuClockDetail) cpuClockDetail.textContent = cpuClock;
-      applyRuntimeMetricSeverity(cpuClockDetail, percentFromRatio(systemPayload?.cpu_clock_arm_hz, CPU_CLOCK_MAX_HZ_PI5));
+      applyRuntimeMetricSeverity(cpuClockDetail, percentFromRatio(systemPayload?.cpu_clock_arm_hz, _cpuMaxHz(systemPayload)));
 
       const memUsed = formatBytes(systemPayload?.memory_used_bytes);
       const memTotal = formatBytes(systemPayload?.memory_total_bytes);
@@ -193,7 +200,7 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
         Number(systemPayload?.gpu_clock_core_hz) || 0,
         Number(systemPayload?.gpu_clock_v3d_hz) || 0,
       );
-      applyRuntimeMetricSeverity(gpuDetail, percentFromRatio(gpuPeakHz, GPU_CLOCK_MAX_HZ_PI5));
+      applyRuntimeMetricSeverity(gpuDetail, percentFromRatio(gpuPeakHz, _gpuMaxHz(systemPayload)));
 
       const currentFlags = Array.isArray(systemPayload?.throttling?.current_flags)
         ? systemPayload.throttling.current_flags

@@ -12,6 +12,7 @@ from app.runtime_state import (
     build_power_estimate_status,
     build_large_model_compatibility,
     check_llama_health,
+    check_runtime_device_compatibility,
     collect_system_metrics_snapshot,
     compute_required_download_bytes,
     classify_runtime_device,
@@ -602,10 +603,26 @@ def test_classify_runtime_device_identifies_pi5_8gb():
     assert device == "pi5-8gb"
 
 
-def test_classify_runtime_device_identifies_other_pi():
+def test_classify_runtime_device_identifies_pi4_8gb():
     device = classify_runtime_device(
         total_memory_bytes=8 * 1024 * 1024 * 1024,
         pi_model_name="Raspberry Pi 4 Model B Rev 1.5",
+    )
+    assert device == "pi4-8gb"
+
+
+def test_classify_runtime_device_identifies_pi4_4gb():
+    device = classify_runtime_device(
+        total_memory_bytes=4 * 1024 * 1024 * 1024,
+        pi_model_name="Raspberry Pi 4 Model B Rev 1.4",
+    )
+    assert device == "pi4-4gb"
+
+
+def test_classify_runtime_device_identifies_other_pi():
+    device = classify_runtime_device(
+        total_memory_bytes=1 * 1024 * 1024 * 1024,
+        pi_model_name="Raspberry Pi 3 Model B Plus Rev 1.3",
     )
     assert device == "other-pi"
 
@@ -648,3 +665,27 @@ def test_build_large_model_compatibility_no_warning_on_pi5_16gb(monkeypatch, run
 
     assert payload["device_class"] == "pi5-16gb"
     assert payload["warnings"] == []
+
+
+def test_runtime_device_compatibility_pi4_ik_llama_incompatible():
+    result = check_runtime_device_compatibility("pi4-8gb", "ik_llama")
+    assert result["compatible"] is False
+    assert result["recommended_family"] == "llama_cpp"
+    assert "dot product" in result["reason"]
+
+
+def test_runtime_device_compatibility_pi4_llama_cpp_ok():
+    result = check_runtime_device_compatibility("pi4-8gb", "llama_cpp")
+    assert result["compatible"] is True
+    assert result["reason"] is None
+
+
+def test_runtime_device_compatibility_pi5_ik_llama_ok():
+    result = check_runtime_device_compatibility("pi5-8gb", "ik_llama")
+    assert result["compatible"] is True
+
+
+def test_runtime_device_compatibility_pi4_4gb_ik_llama_incompatible():
+    result = check_runtime_device_compatibility("pi4-4gb", "ik_llama")
+    assert result["compatible"] is False
+    assert result["recommended_family"] == "llama_cpp"

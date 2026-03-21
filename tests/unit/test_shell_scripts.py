@@ -736,7 +736,7 @@ def test_generate_imager_manifest_script_outputs_pi5_manifest(tmp_path: Path):
     assert "imager" in payload
     assert "os_list" in payload
     assert payload["os_list"][0]["name"] == "Potato OS Test"
-    assert payload["os_list"][0]["devices"] == ["pi5-64bit"]
+    assert payload["os_list"][0]["devices"] == ["pi5-64bit", "pi4-64bit"]
     assert payload["os_list"][0]["init_format"] == "systemd"
     assert payload["os_list"][0]["architecture"] == "armv8"
     assert payload["os_list"][0]["extract_size"] == image_path.stat().st_size

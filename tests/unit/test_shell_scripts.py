@@ -297,6 +297,8 @@ printf '%s\n' "$@" > "$ARGS_OUT"
     assert "--jinja" in args
     assert "--flash-attn" in args
     assert "on" in args
+    assert "--chat-template-kwargs" in args
+    assert "enable_thinking" in args
 
 
 def test_start_llama_text_model_skips_mmproj(tmp_path: Path):

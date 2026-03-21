@@ -390,7 +390,7 @@ test("power display shows PMIC labels for Pi 5 method", async ({ page }) => {
   await expect(page.locator("#runtimeDetailPowerRaw")).toContainText("Power (PMIC raw): 4.500 W");
 });
 
-test("power display shows CPU load label for Pi 4 and hides PMIC raw", async ({ page }) => {
+test("power display shows CPU load raw label for Pi 4", async ({ page }) => {
   await page.route("**/status", async (route) => {
     await route.fulfill({
       status: 200,
@@ -415,8 +415,8 @@ test("power display shows CPU load label for Pi 4 and hides PMIC raw", async ({ 
   });
   await page.goto("/");
   await waitForStatusApplied(page);
-  await expect(page.locator("#runtimeDetailPower")).toContainText("Power (CPU load est.): 5.400 W");
-  await expect(page.locator("#runtimeDetailPowerRaw")).toHaveText("");
+  await expect(page.locator("#runtimeDetailPower")).toContainText("Power (estimated total): 5.400 W");
+  await expect(page.locator("#runtimeDetailPowerRaw")).toContainText("Power (CPU load raw): 5.400 W");
 });
 
 

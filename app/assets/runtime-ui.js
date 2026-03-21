@@ -185,20 +185,17 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
       const rawPowerWatts = Number(powerEstimate?.raw_total_watts ?? powerEstimate?.total_watts);
       const adjustedPowerWatts = Number(powerEstimate?.adjusted_total_watts);
       const isCpuLoadMethod = powerEstimate?.method === "cpu_load_estimate";
+      const powerLabel = isCpuLoadMethod ? "Power (estimated total)" : "Power (estimated total)";
+      const rawLabel = isCpuLoadMethod ? "Power (CPU load raw)" : "Power (PMIC raw)";
       if (powerDetail) {
-        const powerLabel = isCpuLoadMethod ? "Power (CPU load est.)" : "Power (estimated total)";
         powerDetail.textContent = Number.isFinite(adjustedPowerWatts) && powerEstimate?.available === true
           ? `${powerLabel}: ${adjustedPowerWatts.toFixed(3)} W`
           : `${powerLabel}: --`;
       }
       if (powerRawDetail) {
-        if (isCpuLoadMethod) {
-          powerRawDetail.textContent = "";
-        } else {
-          powerRawDetail.textContent = Number.isFinite(rawPowerWatts) && powerEstimate?.available === true
-            ? `Power (PMIC raw): ${rawPowerWatts.toFixed(3)} W`
-            : "Power (PMIC raw): --";
-        }
+        powerRawDetail.textContent = Number.isFinite(rawPowerWatts) && powerEstimate?.available === true
+          ? `${rawLabel}: ${rawPowerWatts.toFixed(3)} W`
+          : `${rawLabel}: --`;
       }
 
       if (gpuDetail) gpuDetail.textContent = `core ${gpuCore}, v3d ${gpuV3d}`;

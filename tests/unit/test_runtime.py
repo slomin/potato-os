@@ -23,6 +23,7 @@ from app.runtime_state import (
     normalize_power_calibration_settings,
     _apply_power_calibration,
     _fit_linear_power_calibration,
+    _estimate_power_from_cpu_load,
     _parse_vcgencmd_bootloader_version,
     _parse_vcgencmd_firmware_version,
     _parse_vcgencmd_pmic_read_adc,
@@ -689,3 +690,33 @@ def test_runtime_device_compatibility_pi4_4gb_ik_llama_incompatible():
     result = check_runtime_device_compatibility("pi4-4gb", "ik_llama")
     assert result["compatible"] is False
     assert result["recommended_family"] == "llama_cpp"
+
+
+def test_cpu_load_power_estimate_idle():
+    result = _estimate_power_from_cpu_load(cpu_percent=0.0, device_class="pi4-8gb")
+    assert result["available"] is True
+    assert result["method"] == "cpu_load_estimate"
+    assert result["total_watts"] == pytest.approx(3.0, abs=0.5)
+
+
+def test_cpu_load_power_estimate_full_load():
+    result = _estimate_power_from_cpu_load(cpu_percent=100.0, device_class="pi4-8gb")
+    assert result["available"] is True
+    assert result["total_watts"] == pytest.approx(6.0, abs=0.5)
+
+
+def test_cpu_load_power_estimate_half_load():
+    result = _estimate_power_from_cpu_load(cpu_percent=50.0, device_class="pi4-8gb")
+    assert result["available"] is True
+    assert 4.0 <= result["total_watts"] <= 5.0
+
+
+def test_cpu_load_power_estimate_pi5_returns_unavailable():
+    result = _estimate_power_from_cpu_load(cpu_percent=50.0, device_class="pi5-8gb")
+    assert result["available"] is False
+    assert result["method"] == "cpu_load_estimate"
+
+
+def test_cpu_load_power_estimate_unknown_device_returns_unavailable():
+    result = _estimate_power_from_cpu_load(cpu_percent=50.0, device_class="unknown")
+    assert result["available"] is False

@@ -49,6 +49,13 @@ SYSTEM_POWER_ESTIMATE_DISCLAIMER = (
     "Estimated from PMIC rails; excludes main 5V input current/peripherals/HATs and conversion losses."
 )
 
+PI4_POWER_IDLE_WATTS = 3.0
+PI4_POWER_LOAD_WATTS = 6.0
+PI4_POWER_CPU_LOAD_DISCLAIMER = (
+    "Estimated from CPU load using known Pi 4 power characteristics. "
+    "Not a hardware measurement; actual draw depends on peripherals and workload."
+)
+
 _SYSTEM_STATIC_INFO_CACHE: dict[str, Any] = {
     "expires_at_unix": 0,
     "value": None,
@@ -1036,6 +1043,31 @@ def _default_firmware_version_snapshot() -> dict[str, Any]:
     }
 
 
+def _estimate_power_from_cpu_load(
+    cpu_percent: float,
+    device_class: str,
+) -> dict[str, Any]:
+    if not device_class.startswith("pi4-"):
+        return {
+            "available": False,
+            "total_watts": None,
+            "method": "cpu_load_estimate",
+            "label": "CPU load estimate",
+            "disclaimer": PI4_POWER_CPU_LOAD_DISCLAIMER,
+            "error": "unsupported_device",
+        }
+    clamped = max(0.0, min(100.0, float(cpu_percent)))
+    watts = PI4_POWER_IDLE_WATTS + (clamped / 100.0) * (PI4_POWER_LOAD_WATTS - PI4_POWER_IDLE_WATTS)
+    return {
+        "available": True,
+        "total_watts": round(watts, 3),
+        "method": "cpu_load_estimate",
+        "label": "CPU load estimate",
+        "disclaimer": PI4_POWER_CPU_LOAD_DISCLAIMER,
+        "error": None,
+    }
+
+
 def _default_power_estimate_snapshot() -> dict[str, Any]:
     return {
         "available": False,
@@ -1240,6 +1272,16 @@ def _collect_static_platform_info_cached(*, now_unix: int | None = None) -> dict
 def _build_power_estimate_snapshot(*, now_unix: int | None = None) -> dict[str, Any]:
     now = int(time.time()) if now_unix is None else int(now_unix)
     payload = _parse_vcgencmd_pmic_read_adc(_run_vcgencmd("pmic_read_adc"))
+    if not payload.get("available"):
+        device_class = classify_runtime_device(pi_model_name=_read_pi_device_model_name())
+        if device_class.startswith("pi4-"):
+            cpu_pct = 0.0
+            if psutil is not None:
+                try:
+                    cpu_pct = psutil.cpu_percent(interval=None) or 0.0
+                except Exception:
+                    cpu_pct = 0.0
+            payload = _estimate_power_from_cpu_load(cpu_pct, device_class)
     payload["updated_at_unix"] = now
     if isinstance(payload.get("total_watts"), (int, float)):
         payload["total_watts"] = round(float(payload["total_watts"]), 3)
@@ -1301,15 +1343,23 @@ def build_power_estimate_status(runtime: RuntimeConfig, power_snapshot: Any) -> 
     payload["total_watts"] = raw_watts
     payload["raw_total_watts"] = raw_watts
 
+    is_cpu_load_method = payload.get("method") == "cpu_load_estimate"
+
     calibration = build_power_calibration_status(runtime)
     payload["calibration"] = calibration
-    payload["confidence"] = "meter-calibrated" if calibration.get("mode") == "custom" else "experimental-default"
 
-    adjusted = _apply_power_calibration(raw_watts, a=calibration.get("a"), b=calibration.get("b"))
-    payload["adjusted_total_watts"] = round(adjusted, 3) if adjusted is not None else None
-    payload["adjusted_label"] = "Estimated total power" if payload["adjusted_total_watts"] is not None else None
-    payload["estimated_total_disclaimer"] = (
-        "PMIC raw excludes direct 5V loads (USB/HAT/NVMe); estimated total uses "
+    if is_cpu_load_method:
+        payload["confidence"] = "cpu-load-model"
+        payload["adjusted_total_watts"] = raw_watts
+        payload["adjusted_label"] = "CPU load estimate" if raw_watts is not None else None
+        payload["estimated_total_disclaimer"] = PI4_POWER_CPU_LOAD_DISCLAIMER
+    else:
+        payload["confidence"] = "meter-calibrated" if calibration.get("mode") == "custom" else "experimental-default"
+        adjusted = _apply_power_calibration(raw_watts, a=calibration.get("a"), b=calibration.get("b"))
+        payload["adjusted_total_watts"] = round(adjusted, 3) if adjusted is not None else None
+        payload["adjusted_label"] = "Estimated total power" if payload["adjusted_total_watts"] is not None else None
+        payload["estimated_total_disclaimer"] = (
+            "PMIC raw excludes direct 5V loads (USB/HAT/NVMe); estimated total uses "
         + ("meter-calibrated" if calibration.get("mode") == "custom" else "default")
         + " correction."
     )

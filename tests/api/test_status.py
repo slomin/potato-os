@@ -199,43 +199,14 @@ def test_status_includes_large_model_override_setting(client):
     assert "override_enabled" in body["compatibility"]
 
 
-def test_status_includes_storage_targets_payload(client, monkeypatch):
-    monkeypatch.setattr(
-        "app.main.build_model_storage_target_status",
-        lambda _runtime: {
-            "ssd": {
-                "available": True,
-                "mount_point": "/media/pi/ssd",
-                "models_dir": "/media/pi/ssd/potato-models",
-                "free_bytes": 123456,
-                "label": "Mounted SSD",
-            }
-        },
-    )
-
-    response = client.get("/status")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["storage_targets"]["ssd"]["available"] is True
-    assert body["storage_targets"]["ssd"]["models_dir"] == "/media/pi/ssd/potato-models"
-
-
 def test_status_includes_active_model_storage_details(client, runtime):
-    ssd_dir = runtime.base_dir / "media" / "ssd" / "potato-models"
-    ssd_dir.mkdir(parents=True)
-    target = ssd_dir / runtime.model_path.name
-    target.write_bytes(b"gguf")
-    if runtime.model_path.exists():
-        runtime.model_path.unlink()
-    runtime.model_path.symlink_to(target)
+    runtime.model_path.write_bytes(b"gguf")
 
     response = client.get("/status")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["model"]["storage"]["location"] == "ssd"
-    assert body["model"]["storage"]["is_symlink"] is True
+    assert body["model"]["storage"]["location"] == "local"
 
 
 def test_status_reconciles_active_model_from_runtime_path_when_state_is_missing(client, runtime, monkeypatch):

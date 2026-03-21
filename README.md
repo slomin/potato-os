@@ -38,7 +38,6 @@ Potato OS is an early release meant for testing and tinkering, not production us
 - Vision — attach a photo and ask about it
 - Multi-chat sessions (persisted in your browser)
 - Model management — download by URL, upload, delete, switch active model
-- SSD-backed model storage (USB SSD auto-detected)
 - System monitoring — CPU, GPU, temperature, memory, storage, power draw
 - Dual inference runtime — ik_llama (default) and upstream llama.cpp
 

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
-import time
 import re
 from pathlib import Path
 from typing import Any
@@ -291,62 +289,27 @@ def any_model_ready(runtime: RuntimeConfig) -> bool:
 
 
 def resolve_model_runtime_path(runtime: RuntimeConfig, filename: str) -> Path:
-    path = _model_file_path(runtime, filename)
-    try:
-        if path.is_symlink():
-            return path.resolve(strict=False)
-    except OSError:
-        return path
-    return path
+    return _model_file_path(runtime, filename)
 
 
-def describe_model_storage(runtime: RuntimeConfig, filename: str, *, ssd_dir: Path | None = None) -> dict[str, Any]:
+def describe_model_storage(runtime: RuntimeConfig, filename: str) -> dict[str, Any]:
     path = _model_file_path(runtime, filename)
-    managed_models_dir = runtime.base_dir / "models"
-    actual_path = path
-    is_symlink = False
     size_bytes = 0
     exists = False
-
-    try:
-        is_symlink = path.is_symlink()
-    except OSError:
-        is_symlink = False
 
     try:
         exists = path.exists()
     except OSError:
         exists = False
 
-    if is_symlink:
-        try:
-            actual_path = path.resolve(strict=False)
-        except OSError:
-            actual_path = path
     if exists:
         try:
-            size_bytes = max(0, int(actual_path.stat().st_size))
+            size_bytes = max(0, int(path.stat().st_size))
         except OSError:
             size_bytes = 0
 
-    location = "local"
-    if ssd_dir is not None:
-        try:
-            if actual_path.is_relative_to(ssd_dir):
-                location = "ssd"
-        except (OSError, ValueError):
-            location = "local"
-    elif is_symlink:
-        try:
-            if not actual_path.is_relative_to(managed_models_dir):
-                location = "ssd"
-        except (OSError, ValueError):
-            location = "ssd"
-
     return {
-        "location": location,
-        "is_symlink": is_symlink,
-        "actual_path": str(actual_path),
+        "location": "local",
         "size_bytes": size_bytes,
         "exists": exists,
     }
@@ -573,56 +536,6 @@ def register_model_url(runtime: RuntimeConfig, source_url: str, alias: str | Non
     saved = save_models_state(runtime, state)
     created = get_model_by_id(saved, model_id)
     return True, "registered", created
-
-
-def move_model_to_ssd(runtime: RuntimeConfig, *, model_id: str, ssd_dir: Path) -> tuple[bool, str, dict[str, Any]]:
-    state = ensure_models_state(runtime)
-    model = get_model_by_id(state, model_id)
-    if model is None:
-        return False, "model_not_found", {"location": "unknown", "is_symlink": False, "actual_path": "", "size_bytes": 0, "exists": False}
-
-    filename = str(model.get("filename") or "")
-    source_path = _model_file_path(runtime, filename)
-    storage = describe_model_storage(runtime, filename, ssd_dir=ssd_dir)
-    if storage["location"] == "ssd":
-        return False, "already_on_ssd", storage
-    if not model_file_present(runtime, filename):
-        return False, "model_not_ready", storage
-
-    try:
-        ssd_dir.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        return False, "no_ssd_available", storage
-
-    target_path = ssd_dir / filename
-    if target_path.exists():
-        return False, "target_exists", storage
-
-    temp_target = ssd_dir / f".{filename}.copying-{int(time.time() * 1000)}"
-    temp_link = source_path.with_name(f".{source_path.name}.ssd-link")
-    backup_source = source_path.with_name(f".{source_path.name}.local-backup")
-
-    try:
-        shutil.copy2(source_path, temp_target)
-        temp_target.replace(target_path)
-        temp_link.unlink(missing_ok=True)
-        temp_link.symlink_to(target_path)
-        backup_source.unlink(missing_ok=True)
-        source_path.replace(backup_source)
-        try:
-            temp_link.replace(source_path)
-        except OSError:
-            if backup_source.exists():
-                backup_source.replace(source_path)
-            raise
-        backup_source.unlink(missing_ok=True)
-    except OSError:
-        temp_link.unlink(missing_ok=True)
-        temp_target.unlink(missing_ok=True)
-        logger.warning("Could not move model to SSD: %s", source_path, exc_info=True)
-        return False, "move_failed", describe_model_storage(runtime, filename, ssd_dir=ssd_dir)
-
-    return True, "moved", describe_model_storage(runtime, filename, ssd_dir=ssd_dir)
 
 
 def delete_model(runtime: RuntimeConfig, *, model_id: str) -> tuple[bool, str, bool, int, bool]:

@@ -16,7 +16,6 @@ try:
     from app.model_state import (
         get_model_by_id,
         normalize_model_settings,
-        resolve_model_runtime_path,
         save_models_state,
         set_download_countdown_enabled,
         update_model_settings,
@@ -36,7 +35,6 @@ except ModuleNotFoundError:
     from model_state import (  # type: ignore[no-redef]
         get_model_by_id,
         normalize_model_settings,
-        resolve_model_runtime_path,
         save_models_state,
         set_download_countdown_enabled,
         update_model_settings,
@@ -272,66 +270,6 @@ async def activate_model_endpoint(
     return JSONResponse(
         status_code=status_code,
         content={"switched": switched, "reason": reason, "restarted": restarted, "model_id": model_id},
-    )
-
-
-@router.post("/internal/models/move-to-ssd")
-async def move_model_to_ssd_endpoint(
-    request: Request,
-    runtime_cfg: RuntimeConfig = Depends(get_runtime),
-) -> JSONResponse:
-    if not runtime_cfg.enable_orchestrator:
-        return JSONResponse(
-            status_code=409,
-            content={"moved": False, "reason": "orchestrator_disabled"},
-        )
-    payload = await request.json()
-    model_id = str(payload.get("model_id") or "").strip()
-    if not model_id:
-        return JSONResponse(status_code=400, content={"moved": False, "reason": "model_id_required"})
-    ssd_dir = _main.get_preferred_model_offload_dir(runtime_cfg)
-    if ssd_dir is None:
-        return JSONResponse(
-            status_code=409,
-            content={"moved": False, "reason": "no_ssd_available", "model_id": model_id},
-        )
-    moved, reason, storage = await _main.asyncio.to_thread(
-        _main.move_model_to_ssd,
-        runtime_cfg,
-        model_id=model_id,
-        ssd_dir=ssd_dir,
-    )
-    if moved:
-        restarted = False
-        restart_reason = "not_required"
-        state = _main.ensure_models_state(runtime_cfg)
-        if model_id == str(state.get("active_model_id") or ""):
-            model = get_model_by_id(state, model_id)
-            if isinstance(model, dict):
-                runtime_cfg.model_path = resolve_model_runtime_path(runtime_cfg, str(model.get("filename") or ""))
-            restarted, restart_reason = await _main.restart_managed_llama_process(request.app)
-        return JSONResponse(
-            status_code=200,
-            content={
-                "moved": True,
-                "reason": reason,
-                "model_id": model_id,
-                "storage": storage,
-                "restarted": restarted,
-                "restart_reason": restart_reason,
-            },
-        )
-    status_code = 404 if reason == "model_not_found" else 500 if reason == "move_failed" else 409
-    return JSONResponse(
-        status_code=status_code,
-        content={
-            "moved": False,
-            "reason": reason,
-            "model_id": model_id,
-            "storage": storage,
-            "restarted": False,
-            "restart_reason": "not_required",
-        },
     )
 
 

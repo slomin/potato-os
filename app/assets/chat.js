@@ -647,30 +647,6 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
       }
     }
 
-    async function moveModelToSsd(modelId) {
-      if (!modelId) return;
-      if (appState.modelActionInFlight) return;
-      const targetModel = findModelInLatestStatus(modelId);
-      const targetName = String(targetModel?.filename || "this model");
-      const targetLabel = String(appState.latestStatus?.storage_targets?.ssd?.label || "attached SSD");
-      const confirmed = window.confirm(`Move ${targetName} onto ${targetLabel} now?`);
-      if (!confirmed) return;
-      appState.modelActionInFlight = true;
-      try {
-        const { res, body } = await postJson("/internal/models/move-to-ssd", { model_id: modelId });
-        if (!res.ok) {
-          appendMessage("assistant", `Could not move model to SSD (${body?.reason || res.status}).`);
-          return;
-        }
-        setComposerActivity(`${targetName} moved to SSD.`);
-      } catch (err) {
-        appendMessage("assistant", `Could not move model to SSD: ${err}`);
-      } finally {
-        appState.modelActionInFlight = false;
-        await pollStatus();
-      }
-    }
-
     async function deleteSelectedModel(modelId) {
       if (!modelId) return;
       if (appState.modelActionInFlight) return;
@@ -1265,8 +1241,6 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
         cancelActiveModelDownload(modelId);
       } else if (action === "activate") {
         activateSelectedModel(modelId);
-      } else if (action === "move-to-ssd") {
-        moveModelToSsd(modelId);
       } else if (action === "delete") {
         deleteSelectedModel(modelId);
       }

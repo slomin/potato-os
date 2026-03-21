@@ -551,8 +551,7 @@ import { formatModelStatusLabel } from "./status.js";
       if (modelIdentityMeta) {
         modelIdentityMeta.replaceChildren();
         const metaBits = [];
-        if (selectedModel?.storage?.location === "ssd") metaBits.push("Stored on SSD");
-        else if (selectedModel?.storage?.location) metaBits.push(`Stored on ${String(selectedModel.storage.location).toUpperCase()}`);
+        if (selectedModel?.storage?.location) metaBits.push(`Stored on ${String(selectedModel.storage.location).toUpperCase()}`);
         if (selectedModel?.source_type === "url") metaBits.push("Added from URL");
         else if (selectedModel?.source_type === "upload") metaBits.push("Uploaded locally");
         if (selectedModel?.status === "failed" && selectedModel?.error) {
@@ -667,7 +666,6 @@ import { formatModelStatusLabel } from "./status.js";
       const container = document.getElementById("modelsList");
       if (!container) return;
       const models = Array.isArray(statusPayload?.models) ? statusPayload.models : [];
-      const ssdAvailable = statusPayload?.storage_targets?.ssd?.available === true;
       const selectedModel = resolveSelectedSettingsModel(statusPayload);
       container.replaceChildren();
       if (models.length === 0) {
@@ -704,7 +702,6 @@ import { formatModelStatusLabel } from "./status.js";
         const metaBits = [];
         if (model?.is_active === true) metaBits.push("Active");
         if (model?.capabilities?.vision) metaBits.push("Vision");
-        if (model?.storage?.location === "ssd") metaBits.push("SSD");
         if (String(model?.source_type || "") === "url") metaBits.push("URL");
         for (const bit of metaBits) {
           const chip = document.createElement("span");
@@ -739,15 +736,6 @@ import { formatModelStatusLabel } from "./status.js";
           activeBtn.textContent = "Set active";
           actions.appendChild(activeBtn);
         }
-        if (ssdAvailable && model?.status === "ready" && model?.storage?.location !== "ssd") {
-          const ssdBtn = document.createElement("button");
-          ssdBtn.type = "button";
-          ssdBtn.className = "ghost-btn";
-          ssdBtn.dataset.action = "move-to-ssd";
-          ssdBtn.textContent = "Move to SSD";
-          ssdBtn.title = "Copy this model to the attached SSD and keep using it from there";
-          actions.appendChild(ssdBtn);
-        }
         if (String(model?.id || "").length > 0) {
           const deleteBtn = document.createElement("button");
           deleteBtn.type = "button";
@@ -761,12 +749,6 @@ import { formatModelStatusLabel } from "./status.js";
           activeLabel.className = "runtime-compact";
           activeLabel.textContent = "Active model";
           actions.appendChild(activeLabel);
-        }
-        if (model?.storage?.location === "ssd") {
-          const storageLabel = document.createElement("span");
-          storageLabel.className = "runtime-compact";
-          storageLabel.textContent = "On SSD";
-          actions.appendChild(storageLabel);
         }
         if (model?.status === "downloading") {
           const progress = document.createElement("span");

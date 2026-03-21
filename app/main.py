@@ -55,7 +55,6 @@ try:
         model_file_present,
         model_present,
         model_supports_vision_filename,
-        move_model_to_ssd,
         normalize_model_settings,
         register_model_url,
         resolve_active_model,
@@ -82,7 +81,6 @@ try:
         POWER_CALIBRATION_DEFAULT_A,
         POWER_CALIBRATION_DEFAULT_B,
         RuntimeConfig,
-        build_model_storage_target_status,
         build_large_model_compatibility,
         build_llama_large_model_override_status,
         build_llama_memory_loading_status,
@@ -102,7 +100,6 @@ try:
         get_large_model_warn_threshold_bytes,
         get_model_upload_max_bytes,
         get_monotonic_time,
-        get_preferred_model_offload_dir,
         install_llama_runtime_bundle,
         is_likely_too_large_for_storage,
         llama_memory_loading_no_mmap_env,
@@ -162,7 +159,6 @@ except ModuleNotFoundError:
         model_file_present,
         model_present,
         model_supports_vision_filename,
-        move_model_to_ssd,
         normalize_model_settings,
         register_model_url,
         resolve_active_model,
@@ -189,7 +185,6 @@ except ModuleNotFoundError:
         POWER_CALIBRATION_DEFAULT_A,
         POWER_CALIBRATION_DEFAULT_B,
         RuntimeConfig,
-        build_model_storage_target_status,
         build_large_model_compatibility,
         build_llama_large_model_override_status,
         build_llama_memory_loading_status,
@@ -209,7 +204,6 @@ except ModuleNotFoundError:
         get_large_model_warn_threshold_bytes,
         get_model_upload_max_bytes,
         get_monotonic_time,
-        get_preferred_model_offload_dir,
         install_llama_runtime_bundle,
         is_likely_too_large_for_storage,
         llama_memory_loading_no_mmap_env,
@@ -557,10 +551,6 @@ def _build_status_fs(
     llama_transport_healthy = False
     llama_ready = False
     needs_health_check = False
-    storage_targets = build_model_storage_target_status(runtime)
-    ssd_models_dir_raw = storage_targets.get("ssd", {}).get("models_dir")
-    ssd_models_dir = Path(str(ssd_models_dir_raw)) if ssd_models_dir_raw else None
-
     if has_model:
         readiness_state: dict[str, Any] | None = None
         if app is not None and runtime.enable_orchestrator:
@@ -636,7 +626,7 @@ def _build_status_fs(
                 "settings": normalize_model_settings(item.get("settings"), filename=filename),
                 "capabilities": build_model_capabilities(filename),
                 "projector": build_model_projector_status(runtime, item),
-                "storage": describe_model_storage(runtime, filename, ssd_dir=ssd_models_dir),
+                "storage": describe_model_storage(runtime, filename),
                 **model_progress,
             }
         )
@@ -708,13 +698,12 @@ def _build_status_fs(
         "model": {
             "filename": active_model_path.name,
             "active_model_id": models_state.get("active_model_id"),
-            "storage": describe_model_storage(runtime, active_model_path.name, ssd_dir=ssd_models_dir),
+            "storage": describe_model_storage(runtime, active_model_path.name),
             "settings": normalize_model_settings(active_model.get("settings"), filename=active_model_path.name),
             "capabilities": build_model_capabilities(active_model_path.name),
             "projector": build_model_projector_status(runtime, active_model),
         },
         "models": models_payload,
-        "storage_targets": storage_targets,
         "download": download_payload,
         "upload": upload_snapshot,
         "llama_server": {

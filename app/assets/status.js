@@ -27,8 +27,6 @@ import { formatBytes, formatCountdownSeconds } from "./utils.js";
       ).toLowerCase();
       const modelFilename = String(statusPayload?.model?.filename || "").trim();
       const modelSuffix = modelFilename ? `:${modelFilename}` : "";
-      const activeModelStorage = String(statusPayload?.model?.storage?.location || "").toLowerCase();
-      const storageSuffix = activeModelStorage === "ssd" ? ":SSD" : "";
       const isReady = String(statusPayload?.state || "").toUpperCase() === "READY";
       const statusState = String(statusPayload?.state || "").toUpperCase();
       const hasModel = statusPayload?.model_present === true;
@@ -47,17 +45,17 @@ import { formatBytes, formatCountdownSeconds } from "./utils.js";
       } else if (isHealthy) {
         badge.classList.add("online");
         dot.classList.add("online");
-        label.textContent = `CONNECTED:llama.cpp${modelSuffix}${storageSuffix}`;
+        label.textContent = `CONNECTED:llama.cpp${modelSuffix}`;
       } else if (isLoading) {
         badge.classList.add("loading");
         dot.classList.add("loading");
         dot.hidden = true;
         if (spinner) spinner.hidden = false;
-        label.textContent = `LOADING:llama.cpp${modelSuffix}${storageSuffix}`;
+        label.textContent = `LOADING:llama.cpp${modelSuffix}`;
       } else if (isFailed) {
         badge.classList.add("failed");
         dot.classList.add("failed");
-        label.textContent = `FAILED:llama.cpp${modelSuffix}${storageSuffix}`;
+        label.textContent = `FAILED:llama.cpp${modelSuffix}`;
       } else {
         badge.classList.add("offline");
         dot.classList.add("offline");

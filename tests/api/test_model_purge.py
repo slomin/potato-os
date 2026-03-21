@@ -107,32 +107,6 @@ def test_purge_models_clears_files_and_model_metadata(runtime):
     assert status_body["download"]["bytes_downloaded"] == 0
 
 
-def test_purge_models_removes_ssd_offloaded_targets(runtime):
-    runtime.enable_orchestrator = True
-    app = create_app(runtime=runtime, enable_orchestrator=True)
-    app.dependency_overrides[get_runtime] = lambda: runtime
-
-    ssd_dir = runtime.base_dir / "media" / "ssd" / "potato-models"
-    ssd_dir.mkdir(parents=True)
-    ssd_target = ssd_dir / runtime.model_path.name
-
-    with TestClient(app) as client:
-        ssd_target.write_bytes(b"default-model")
-        if runtime.model_path.exists():
-            runtime.model_path.unlink()
-        runtime.model_path.symlink_to(ssd_target)
-
-        response = client.post("/internal/models/purge", json={"reset_bootstrap_flag": True})
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["purged"] is True
-    assert body["deleted_files"] >= 2
-    assert body["freed_bytes"] >= len(b"default-model")
-    assert not runtime.model_path.exists()
-    assert not ssd_target.exists()
-
-
 def test_upload_write_failure_clears_active_state_and_allows_retry(runtime, monkeypatch):
     runtime.enable_orchestrator = True
     app = create_app(runtime=runtime, enable_orchestrator=True)

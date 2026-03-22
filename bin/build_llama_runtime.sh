@@ -259,6 +259,13 @@ if [ -x "${build_dir}/bin/llama-bench" ]; then
   cp -f "${build_dir}/bin/llama-bench" "${slot_dir}/bin/"
 fi
 
+# Fix RPATH: cmake embeds the build directory as RUNPATH. Replace with $ORIGIN
+# so the binary finds shared libs relative to itself (bin/../lib/).
+if command -v patchelf >/dev/null 2>&1; then
+  patchelf --set-rpath '$ORIGIN/../lib' "${slot_dir}/bin/llama-server"
+  [ -x "${slot_dir}/bin/llama-bench" ] && patchelf --set-rpath '$ORIGIN/../lib' "${slot_dir}/bin/llama-bench"
+fi
+
 shopt -s nullglob
 for so in "${build_dir}/bin/"*.so* "${build_dir}/lib/"*.so*; do
   cp -P "${so}" "${slot_dir}/lib/"
@@ -275,6 +282,15 @@ if [ "${BUILD_PROFILE}" = "universal" ]; then
 fi
 
 copy_runtime_deps "${slot_dir}/lib" "${slot_dir}/bin/llama-server" "${slot_dir}/bin/llama-bench" "${slot_dir}/lib/"*.so*
+
+# Universal profile: llama.cpp discovers BACKEND_DL backends by scanning the
+# executable's directory (GGML_BACKEND_DIR env var is ignored in current versions).
+# Symlink backend .so files into bin/ so llama-server finds them at startup.
+if [ "${BUILD_PROFILE}" = "universal" ]; then
+  for so in "${slot_dir}/lib/libggml-cpu-"*.so "${slot_dir}/lib/libggml-blas.so"; do
+    [ -f "${so}" ] && ln -sf "../lib/$(basename "${so}")" "${slot_dir}/bin/$(basename "${so}")"
+  done
+fi
 write_launchers "${slot_dir}"
 
 # Generate runtime.json metadata

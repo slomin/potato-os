@@ -340,6 +340,7 @@ fi
 
 if [ -d "${LLAMA_RUNTIME_DIR}/lib" ]; then
   export LD_LIBRARY_PATH="${LLAMA_RUNTIME_DIR}/lib:${LD_LIBRARY_PATH:-}"
+  export GGML_BACKEND_DIR="${LLAMA_RUNTIME_DIR}/lib"
 fi
 
 mkdir -p "${SLOT_SAVE_PATH}"

@@ -44,16 +44,11 @@ def test_shell_scripts_have_valid_bash_syntax():
         subprocess.run(["bash", "-n", str(script)], check=True, cwd=REPO_ROOT)
 
 
-def test_install_dev_skips_family_auto_detect_when_bundle_src_is_set():
-    """When POTATO_LLAMA_BUNDLE_SRC is explicit, install_dev.sh must not override LLAMA_RUNTIME_FAMILY from hardware."""
+def test_install_dev_reads_family_from_bundle_runtime_json_when_bundle_src_set():
+    """When POTATO_LLAMA_BUNDLE_SRC is set, install_dev.sh must derive the family from the bundle's runtime.json."""
     script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
 
-    # Find the auto-detect block (the one that checks "Raspberry Pi 4")
-    # and verify it also checks POTATO_LLAMA_BUNDLE_SRC, not just POTATO_LLAMA_RUNTIME_FAMILY.
     import re
-    # The if-block that gates the Pi 4 auto-detect must mention POTATO_LLAMA_BUNDLE_SRC
-    # in its condition, otherwise an explicit ik_llama bundle on Pi 4 gets installed
-    # into the wrong slot.
     auto_detect_block = re.search(
         r'if\s.*POTATO_LLAMA_RUNTIME_FAMILY.*?fi',
         script,
@@ -62,8 +57,12 @@ def test_install_dev_skips_family_auto_detect_when_bundle_src_is_set():
     assert auto_detect_block, "auto-detect block not found in install_dev.sh"
     block_text = auto_detect_block.group(0)
     assert "POTATO_LLAMA_BUNDLE_SRC" in block_text, (
-        "install_dev.sh auto-detect block checks POTATO_LLAMA_RUNTIME_FAMILY but not "
-        "POTATO_LLAMA_BUNDLE_SRC — an explicit bundle on Pi 4 would be misclassified"
+        "install_dev.sh auto-detect block must check POTATO_LLAMA_BUNDLE_SRC"
+    )
+    # Must read family from the bundle, not hardcode it
+    assert "runtime.json" in block_text, (
+        "When POTATO_LLAMA_BUNDLE_SRC is set, install_dev.sh must read the family "
+        "from the bundle's runtime.json, not hardcode a default"
     )
 
 

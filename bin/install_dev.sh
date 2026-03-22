@@ -18,7 +18,9 @@ LLAMA_BUNDLE_SRC="${POTATO_LLAMA_BUNDLE_SRC:-}"
 if [ -n "${POTATO_LLAMA_RUNTIME_FAMILY:-}" ]; then
   LLAMA_RUNTIME_FAMILY="${POTATO_LLAMA_RUNTIME_FAMILY}"
 elif [ -n "${POTATO_LLAMA_BUNDLE_SRC:-}" ] && [ -f "${POTATO_LLAMA_BUNDLE_SRC}/runtime.json" ]; then
-  LLAMA_RUNTIME_FAMILY="$(jq -r '.family // "ik_llama"' "${POTATO_LLAMA_BUNDLE_SRC}/runtime.json" 2>/dev/null || echo "ik_llama")"
+  # Read family from the bundle metadata (grep+sed; no deps beyond coreutils).
+  LLAMA_RUNTIME_FAMILY="$(grep -o '"family"[[:space:]]*:[[:space:]]*"[^"]*"' "${POTATO_LLAMA_BUNDLE_SRC}/runtime.json" 2>/dev/null | sed 's/.*"family"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || echo "ik_llama")"
+  [ -z "${LLAMA_RUNTIME_FAMILY}" ] && LLAMA_RUNTIME_FAMILY="ik_llama"
 else
   _pi_model="$(tr -d '\000' < /proc/device-tree/model 2>/dev/null || true)"
   if [[ "${_pi_model}" == *"Raspberry Pi 4"* ]]; then

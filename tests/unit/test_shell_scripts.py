@@ -64,6 +64,10 @@ def test_install_dev_reads_family_from_bundle_runtime_json_when_bundle_src_set()
         "When POTATO_LLAMA_BUNDLE_SRC is set, install_dev.sh must read the family "
         "from the bundle's runtime.json, not hardcode a default"
     )
+    # Must not depend on jq — it's installed later in the script via apt-get
+    assert "jq " not in block_text, (
+        "Bundle family detection must not use jq — it runs before apt-get install"
+    )
 
 
 def test_shell_scripts_do_not_use_local_outside_functions():

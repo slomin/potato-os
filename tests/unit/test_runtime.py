@@ -906,3 +906,77 @@ def test_pi4_power_calibration_defaults_differ_from_pi5(monkeypatch):
     a, b = _get_power_calibration_default_coefficients()
     assert a == pytest.approx(POWER_CALIBRATION_DEFAULT_A)
     assert b == pytest.approx(POWER_CALIBRATION_DEFAULT_B)
+
+
+def _create_runtime_slot(runtime, family: str) -> None:
+    """Helper: create a minimal runtime slot with bin/llama-server stub."""
+    slot_dir = runtime.base_dir / "runtimes" / family / "bin"
+    slot_dir.mkdir(parents=True, exist_ok=True)
+    server_bin = slot_dir / "llama-server"
+    server_bin.write_bytes(b"#!/bin/sh\n")
+    server_bin.chmod(0o755)
+    runtime_json = slot_dir.parent / "runtime.json"
+    runtime_json.write_text(
+        json.dumps({"family": family, "commit": "abc12345", "profile": "test"}),
+        encoding="utf-8",
+    )
+
+
+def test_available_runtimes_marks_ik_llama_incompatible_on_pi4(runtime, monkeypatch):
+    """On Pi 4, ik_llama must be marked compatible=False, llama_cpp compatible=True."""
+    _create_runtime_slot(runtime, "ik_llama")
+    _create_runtime_slot(runtime, "llama_cpp")
+    # Write a marker so build_llama_runtime_status knows the current family
+    marker_path = runtime.base_dir / "llama"
+    marker_path.mkdir(parents=True, exist_ok=True)
+    (marker_path / "runtime.json").write_text(
+        json.dumps({"family": "llama_cpp"}), encoding="utf-8"
+    )
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.4")
+    monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
+
+    from app.runtime_state import build_llama_runtime_status
+    status = build_llama_runtime_status(runtime)
+
+    runtimes_by_family = {rt["family"]: rt for rt in status["available_runtimes"]}
+    assert runtimes_by_family["ik_llama"]["compatible"] is False
+    assert runtimes_by_family["llama_cpp"]["compatible"] is True
+
+
+def test_available_runtimes_marks_both_compatible_on_pi5(runtime, monkeypatch):
+    """On Pi 5, both ik_llama and llama_cpp must be marked compatible=True."""
+    _create_runtime_slot(runtime, "ik_llama")
+    _create_runtime_slot(runtime, "llama_cpp")
+    marker_path = runtime.base_dir / "llama"
+    marker_path.mkdir(parents=True, exist_ok=True)
+    (marker_path / "runtime.json").write_text(
+        json.dumps({"family": "ik_llama"}), encoding="utf-8"
+    )
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 5 Model B Rev 1.0")
+    monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
+
+    from app.runtime_state import build_llama_runtime_status
+    status = build_llama_runtime_status(runtime)
+
+    runtimes_by_family = {rt["family"]: rt for rt in status["available_runtimes"]}
+    assert runtimes_by_family["ik_llama"]["compatible"] is True
+    assert runtimes_by_family["llama_cpp"]["compatible"] is True
+
+
+def test_available_runtimes_works_with_single_slot(runtime, monkeypatch):
+    """When only llama_cpp is installed, it should appear as compatible."""
+    _create_runtime_slot(runtime, "llama_cpp")
+    marker_path = runtime.base_dir / "llama"
+    marker_path.mkdir(parents=True, exist_ok=True)
+    (marker_path / "runtime.json").write_text(
+        json.dumps({"family": "llama_cpp"}), encoding="utf-8"
+    )
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.4")
+    monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
+
+    from app.runtime_state import build_llama_runtime_status
+    status = build_llama_runtime_status(runtime)
+
+    assert len(status["available_runtimes"]) == 1
+    assert status["available_runtimes"][0]["family"] == "llama_cpp"
+    assert status["available_runtimes"][0]["compatible"] is True

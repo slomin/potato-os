@@ -333,7 +333,9 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
       }
 
       if (selectEl) {
-        const runtimes = Array.isArray(runtimePayload?.available_runtimes) ? runtimePayload.available_runtimes : [];
+        const runtimes = Array.isArray(runtimePayload?.available_runtimes)
+          ? runtimePayload.available_runtimes.filter(rt => rt.compatible !== false)
+          : [];
         const prevValue = String(selectEl.value || "");
         selectEl.replaceChildren();
         if (!runtimes.length) {

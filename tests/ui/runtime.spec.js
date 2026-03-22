@@ -419,4 +419,61 @@ test("power display shows CPU load raw label for Pi 4", async ({ page }) => {
   await expect(page.locator("#runtimeDetailPowerRaw")).toContainText("Power (CPU load raw): 5.400 W");
 });
 
+test("runtime dropdown hides incompatible runtimes on Pi 4 mock", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        llama_runtime: {
+          current: { family: "llama_cpp", llama_cpp_commit: "def67890", profile: "universal", has_server_binary: true },
+          available_runtimes: [
+            { family: "ik_llama", commit: "abc12345", is_active: false, compatible: false },
+            { family: "llama_cpp", commit: "def67890", is_active: true, compatible: true },
+          ],
+          switch: { active: false, target_family: null, error: null },
+          memory_loading: { mode: "auto", label: "Automatic", no_mmap_env: "0" },
+          large_model_override: { enabled: false },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await openSettingsModal(page);
+  await openAdvancedSettingsModal(page);
+  const options = await page.locator("#llamaRuntimeFamilySelect option").allTextContents();
+  expect(options).toHaveLength(1);
+  expect(options[0]).toContain("llama cpp");
+});
+
+test("runtime dropdown shows all compatible runtimes on Pi 5 mock", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        llama_runtime: {
+          current: { family: "ik_llama", llama_cpp_commit: "abc12345", profile: "pi5-opt", has_server_binary: true },
+          available_runtimes: [
+            { family: "ik_llama", commit: "abc12345", is_active: true, compatible: true },
+            { family: "llama_cpp", commit: "def67890", is_active: false, compatible: true },
+          ],
+          switch: { active: false, target_family: null, error: null },
+          memory_loading: { mode: "auto", label: "Automatic", no_mmap_env: "0" },
+          large_model_override: { enabled: false },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await openSettingsModal(page);
+  await openAdvancedSettingsModal(page);
+  const options = await page.locator("#llamaRuntimeFamilySelect option").allTextContents();
+  expect(options).toHaveLength(2);
+  expect(options[0]).toContain("ik llama");
+  expect(options[1]).toContain("llama cpp");
+});
+
 

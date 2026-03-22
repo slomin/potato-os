@@ -11,7 +11,18 @@ POTATO_ENFORCE_HOSTNAME="${POTATO_ENFORCE_HOSTNAME:-1}"
 LLAMA_RUNTIME_DIR="${POTATO_LLAMA_RUNTIME_DIR:-${TARGET_ROOT}/llama}"
 LLAMA_BUNDLE_ROOT="${POTATO_LLAMA_BUNDLE_ROOT:-${REPO_ROOT}/references/old_reference_design/llama_cpp_binary}"
 LLAMA_BUNDLE_SRC="${POTATO_LLAMA_BUNDLE_SRC:-}"
-LLAMA_RUNTIME_FAMILY="${POTATO_LLAMA_RUNTIME_FAMILY:-ik_llama}"
+# Auto-detect runtime family from hardware if not explicitly set.
+# Pi 4 cannot run ik_llama (requires ARMv8.2-A dot product instructions).
+if [ -n "${POTATO_LLAMA_RUNTIME_FAMILY:-}" ]; then
+  LLAMA_RUNTIME_FAMILY="${POTATO_LLAMA_RUNTIME_FAMILY}"
+else
+  _pi_model="$(tr -d '\000' < /proc/device-tree/model 2>/dev/null || true)"
+  if [[ "${_pi_model}" == *"Raspberry Pi 4"* ]]; then
+    LLAMA_RUNTIME_FAMILY="llama_cpp"
+  else
+    LLAMA_RUNTIME_FAMILY="ik_llama"
+  fi
+fi
 REQUIRE_LLAMA_BUNDLE="${POTATO_REQUIRE_LLAMA_BUNDLE:-1}"
 
 # Source shared release download helpers

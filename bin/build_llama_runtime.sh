@@ -74,6 +74,7 @@ write_launchers() {
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export LD_LIBRARY_PATH="$DIR/lib:${LD_LIBRARY_PATH:-}"
+export GGML_BACKEND_DIR="$DIR/lib"
 exec "$DIR/bin/llama-server" "$@"
 LAUNCHER
   chmod +x "${bundle_dir}/run-llama-server.sh"
@@ -83,6 +84,7 @@ LAUNCHER
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export LD_LIBRARY_PATH="$DIR/lib:${LD_LIBRARY_PATH:-}"
+export GGML_BACKEND_DIR="$DIR/lib"
 exec "$DIR/bin/llama-bench" "$@"
 LAUNCHER
   chmod +x "${bundle_dir}/run-llama-bench.sh"
@@ -179,9 +181,13 @@ esac
 pi_model="$(tr -d '\000' < /proc/device-tree/model 2>/dev/null || true)"
 printf 'Detected hardware: %s\n' "${pi_model:-unknown}"
 
-# Auto-detect build profile from hardware, allow env override
+# Auto-detect build profile from hardware, allow env override.
+# For llama_cpp, default to "universal" (GGML_CPU_ALL_VARIANTS) which produces
+# per-ISA backend .so files and works on both Pi 4 (armv8.0) and Pi 5 (armv8.2+dotprod).
 if [ -n "${POTATO_LLAMA_BUILD_PROFILE:-}" ]; then
   BUILD_PROFILE="${POTATO_LLAMA_BUILD_PROFILE}"
+elif [ "${FAMILY}" = "llama_cpp" ]; then
+  BUILD_PROFILE="universal"
 elif [ -n "${pi_model}" ] && [[ "${pi_model}" == *"Raspberry Pi 4"* ]]; then
   BUILD_PROFILE="pi4-opt"
 else
@@ -195,20 +201,38 @@ if [ "${CLEAN_BUILD}" = "1" ]; then
 fi
 mkdir -p "${build_dir}"
 
-# Common cmake flags for both families
-common_flags=(
-  -DCMAKE_BUILD_TYPE=Release
-  -DGGML_BLAS=ON
-  -DGGML_BLAS_VENDOR=OpenBLAS
-  -DGGML_OPENMP=ON
-  -DLLAMA_BUILD_SERVER=ON
-  -DLLAMA_BUILD_TOOLS=ON
-  -DGGML_VULKAN=OFF
-  -DGGML_NATIVE=ON
-  -DGGML_LTO=ON
-  "-DCMAKE_C_FLAGS=-mcpu=native"
-  "-DCMAKE_CXX_FLAGS=-mcpu=native"
-)
+# Build flags depend on the profile.
+# "universal" uses GGML_CPU_ALL_VARIANTS which produces per-ISA .so backends
+# and requires GGML_BACKEND_DL + BUILD_SHARED_LIBS (GGML_NATIVE must be OFF).
+if [ "${BUILD_PROFILE}" = "universal" ]; then
+  common_flags=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DGGML_CPU_ALL_VARIANTS=ON
+    -DGGML_BACKEND_DL=ON
+    -DBUILD_SHARED_LIBS=ON
+    -DGGML_NATIVE=OFF
+    -DGGML_BLAS=ON
+    -DGGML_BLAS_VENDOR=OpenBLAS
+    -DGGML_OPENMP=ON
+    -DLLAMA_BUILD_SERVER=ON
+    -DLLAMA_BUILD_TOOLS=ON
+    -DGGML_VULKAN=OFF
+  )
+else
+  common_flags=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DGGML_BLAS=ON
+    -DGGML_BLAS_VENDOR=OpenBLAS
+    -DGGML_OPENMP=ON
+    -DLLAMA_BUILD_SERVER=ON
+    -DLLAMA_BUILD_TOOLS=ON
+    -DGGML_VULKAN=OFF
+    -DGGML_NATIVE=ON
+    -DGGML_LTO=ON
+    "-DCMAKE_C_FLAGS=-mcpu=native"
+    "-DCMAKE_CXX_FLAGS=-mcpu=native"
+  )
+fi
 
 # Family-specific flags
 family_flags=()
@@ -240,6 +264,15 @@ for so in "${build_dir}/bin/"*.so* "${build_dir}/lib/"*.so*; do
   cp -P "${so}" "${slot_dir}/lib/"
 done
 shopt -u nullglob
+
+# Universal profile: cmake MODULE libraries (ggml-cpu-armv8*.so) may land in
+# subdirectories of the build tree instead of bin/ or lib/. Copy any we missed.
+if [ "${BUILD_PROFILE}" = "universal" ]; then
+  while IFS= read -r so; do
+    base="$(basename "${so}")"
+    [ ! -e "${slot_dir}/lib/${base}" ] && cp -P "${so}" "${slot_dir}/lib/"
+  done < <(find "${build_dir}" -name 'libggml*.so*' -type f 2>/dev/null)
+fi
 
 copy_runtime_deps "${slot_dir}/lib" "${slot_dir}/bin/llama-server" "${slot_dir}/bin/llama-bench" "${slot_dir}/lib/"*.so*
 write_launchers "${slot_dir}"

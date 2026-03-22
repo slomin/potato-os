@@ -823,6 +823,18 @@ def test_generate_imager_manifest_log_does_not_say_pi5_only(tmp_path: Path):
     assert "Pi 5-only" not in result.stdout, f"Stale log message: {result.stdout}"
 
 
+def test_publish_image_release_notes_template_supports_pi4():
+    """Release notes template must reference both Pi 4 and Pi 5, not Pi 5 only."""
+    script = (REPO_ROOT / "bin" / "publish_image_release.sh").read_text(encoding="utf-8")
+
+    # The device field must mention Pi 4
+    assert "Raspberry Pi 4" in script, "Release notes template missing Pi 4 device reference"
+    # The tagline must not be Pi 5 only
+    assert "Local AI chat on Raspberry Pi 5 —" not in script, (
+        "Release notes tagline still says 'Raspberry Pi 5' only"
+    )
+
+
 def test_vision_e2e_script_exercises_multimodal_requests():
     script = (REPO_ROOT / "tests" / "e2e" / "vision_multi_image_pi.sh").read_text(encoding="utf-8")
 

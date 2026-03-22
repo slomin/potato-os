@@ -44,6 +44,32 @@ def test_shell_scripts_have_valid_bash_syntax():
         subprocess.run(["bash", "-n", str(script)], check=True, cwd=REPO_ROOT)
 
 
+def test_install_dev_reads_family_from_bundle_runtime_json_when_bundle_src_set():
+    """When POTATO_LLAMA_BUNDLE_SRC is set, install_dev.sh must derive the family from the bundle's runtime.json."""
+    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
+
+    import re
+    auto_detect_block = re.search(
+        r'if\s.*POTATO_LLAMA_RUNTIME_FAMILY.*?fi',
+        script,
+        re.DOTALL,
+    )
+    assert auto_detect_block, "auto-detect block not found in install_dev.sh"
+    block_text = auto_detect_block.group(0)
+    assert "POTATO_LLAMA_BUNDLE_SRC" in block_text, (
+        "install_dev.sh auto-detect block must check POTATO_LLAMA_BUNDLE_SRC"
+    )
+    # Must read family from the bundle, not hardcode it
+    assert "runtime.json" in block_text, (
+        "When POTATO_LLAMA_BUNDLE_SRC is set, install_dev.sh must read the family "
+        "from the bundle's runtime.json, not hardcode a default"
+    )
+    # Must not depend on jq — it's installed later in the script via apt-get
+    assert "jq " not in block_text, (
+        "Bundle family detection must not use jq — it runs before apt-get install"
+    )
+
+
 def test_shell_scripts_do_not_use_local_outside_functions():
     """Trixie bash is strict about 'local' outside functions — catch this at test time."""
     scripts = [
@@ -767,6 +793,34 @@ def test_generate_imager_manifest_script_outputs_pi5_manifest(tmp_path: Path):
     assert payload["os_list"][0]["url"].startswith("file://")
     icon = payload["os_list"][0]["icon"]
     assert icon == "potato-imager-icon.svg"
+
+
+def test_generate_imager_manifest_log_does_not_say_pi5_only(tmp_path: Path):
+    """The manifest targets Pi 4 + Pi 5 — log output must not say 'Pi 5-only'."""
+    image_path = tmp_path / "potato-lite-test.img"
+    image_path.write_bytes(b"potato-os")
+    manifest_path = tmp_path / "potato-lite.rpi-imager-manifest"
+    import shutil
+    icon_src = REPO_ROOT / "bin" / "assets" / "potato-imager-icon.svg"
+    icon_dst = tmp_path / "potato-imager-icon.svg"
+    shutil.copy2(icon_src, icon_dst)
+
+    result = subprocess.run(
+        [
+            "python3",
+            str(REPO_ROOT / "bin" / "generate_imager_manifest.py"),
+            "--image", str(image_path),
+            "--output", str(manifest_path),
+            "--name", "Potato OS Test",
+            "--icon", str(icon_dst),
+        ],
+        check=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Pi 5-only" not in result.stdout, f"Stale log message: {result.stdout}"
 
 
 def test_vision_e2e_script_exercises_multimodal_requests():

@@ -946,8 +946,15 @@ def build_llama_runtime_status(runtime: RuntimeConfig, app: FastAPI | None = Non
     available_runtimes = discover_runtime_slots(runtime)
 
     current_family = str(metadata.get("family") or metadata.get("source_bundle_name") or "").strip()
+    device_class = classify_runtime_device(
+        pi_model_name=_read_pi_device_model_name(),
+        total_memory_bytes=_detect_total_memory_bytes(),
+    )
     for slot in available_runtimes:
         slot["is_active"] = slot.get("family") == current_family
+        slot["compatible"] = check_runtime_device_compatibility(
+            device_class, slot.get("family", "")
+        )["compatible"]
 
     switch_snapshot = {
         "active": False,

@@ -149,6 +149,16 @@ function makeStatusPayload(overrides = {}) {
     llama_server: { healthy: true, running: true, url: "http://127.0.0.1:8080" },
     backend: { mode: "llama", active: "llama", fallback_active: false },
     system: { available: false, cpu_cores_percent: [] },
+    llama_runtime: {
+      current: { family: "ik_llama", llama_cpp_commit: "abc12345", profile: "pi5-opt", has_server_binary: true },
+      available_runtimes: [
+        { family: "ik_llama", commit: "abc12345", is_active: true, compatible: true },
+        { family: "llama_cpp", commit: "def67890", is_active: false, compatible: true },
+      ],
+      switch: { active: false, target_family: null, error: null },
+      memory_loading: { mode: "auto", label: "Automatic", no_mmap_env: "0" },
+      large_model_override: { enabled: false },
+    },
   };
   return { ...base, ...overrides };
 }

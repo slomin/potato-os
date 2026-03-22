@@ -104,7 +104,14 @@ class RuntimeConfig:
                 base_dir = preferred
             else:
                 base_dir = Path.home() / ".cache" / "potato-os"
-        model_path = Path(os.getenv("POTATO_MODEL_PATH", str(base_dir / "models" / "Qwen3.5-2B-Q4_K_M.gguf")))
+        model_path_env = os.getenv("POTATO_MODEL_PATH", "").strip()
+        if model_path_env:
+            model_path = Path(model_path_env)
+        else:
+            from app.model_state import default_model_for_device
+            device_class = classify_runtime_device(pi_model_name=_read_pi_device_model_name())
+            default_filename, _ = default_model_for_device(device_class)
+            model_path = base_dir / "models" / default_filename
         download_state_path = Path(
             os.getenv("POTATO_DOWNLOAD_STATE_PATH", str(base_dir / "state" / "download.json"))
         )
@@ -279,13 +286,30 @@ def check_runtime_device_compatibility(
     return {"compatible": True, "reason": None, "recommended_family": None}
 
 
+def _detect_installed_runtime_family(runtime: RuntimeConfig) -> str:
+    """Detect the active runtime family from marker or installed runtime.json."""
+    marker = read_llama_runtime_bundle_marker(runtime)
+    if isinstance(marker, dict) and marker.get("family"):
+        return str(marker["family"])
+    # Fallback: read runtime.json from the llama install dir (fresh installs have no marker)
+    install_dir = _llama_runtime_install_dir(runtime)
+    runtime_json = install_dir / "runtime.json"
+    if runtime_json.exists():
+        try:
+            meta = json.loads(runtime_json.read_text(encoding="utf-8"))
+            if isinstance(meta, dict) and meta.get("family"):
+                return str(meta["family"])
+        except (OSError, json.JSONDecodeError):
+            pass
+    return ""
+
+
 async def ensure_compatible_runtime(runtime: RuntimeConfig) -> tuple[bool, str]:
     device_class = classify_runtime_device(
         pi_model_name=_read_pi_device_model_name(),
         total_memory_bytes=_detect_total_memory_bytes(),
     )
-    marker = read_llama_runtime_bundle_marker(runtime)
-    current_family = str(marker.get("family") or "") if isinstance(marker, dict) else ""
+    current_family = _detect_installed_runtime_family(runtime)
     compat = check_runtime_device_compatibility(device_class, current_family)
     if compat["compatible"]:
         return False, "compatible"
@@ -297,11 +321,12 @@ async def ensure_compatible_runtime(runtime: RuntimeConfig) -> tuple[bool, str]:
     if slot is None:
         logger.warning("Recommended runtime %s not available as a slot", recommended)
         return False, "slot_unavailable"
+    slot_path = Path(slot["path"])
     logger.info(
         "Auto-switching runtime: %s -> %s (device %s incompatible with %s)",
         current_family, recommended, device_class, current_family,
     )
-    await install_llama_runtime_bundle(runtime, slot)
+    await install_llama_runtime_bundle(runtime, slot_path)
     return True, "pi4_incompatible_runtime"
 
 

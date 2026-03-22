@@ -735,6 +735,33 @@ async def test_ensure_compatible_runtime_noop_on_pi5(monkeypatch, runtime):
 
 
 @pytest.mark.anyio
+async def test_ensure_compatible_runtime_detects_family_from_runtime_json_when_no_marker(monkeypatch, runtime):
+    """P4: Fresh install has no marker file. Should read runtime.json from install dir."""
+    import json
+    # No marker, but runtime.json exists in the llama install dir
+    llama_dir = runtime.base_dir / "llama"
+    llama_dir.mkdir(parents=True, exist_ok=True)
+    (llama_dir / "runtime.json").write_text(json.dumps({"family": "ik_llama", "profile": "pi5-opt"}))
+    (llama_dir / "bin").mkdir(parents=True, exist_ok=True)
+    (llama_dir / "bin" / "llama-server").write_bytes(b"fake")
+    # Set up llama_cpp slot
+    slot_dir = runtime.base_dir / "runtimes" / "llama_cpp"
+    slot_dir.mkdir(parents=True, exist_ok=True)
+    (slot_dir / "bin").mkdir(parents=True, exist_ok=True)
+    (slot_dir / "bin" / "llama-server").write_bytes(b"fake")
+    (slot_dir / "bin" / "llama-server").chmod(0o755)
+    (slot_dir / "lib").mkdir(exist_ok=True)
+    (slot_dir / "runtime.json").write_text(json.dumps({"family": "llama_cpp", "commit": "abc", "profile": "pi4-opt"}))
+
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.4")
+    monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024**3)
+
+    switched, reason = await ensure_compatible_runtime(runtime)
+    assert switched is True
+    assert reason == "pi4_incompatible_runtime"
+
+
+@pytest.mark.anyio
 async def test_ensure_compatible_runtime_noop_when_already_llama_cpp(monkeypatch, runtime):
     import json
     marker_path = runtime.base_dir / "llama" / ".potato-llama-runtime-bundle.json"
@@ -747,6 +774,24 @@ async def test_ensure_compatible_runtime_noop_when_already_llama_cpp(monkeypatch
     switched, reason = await ensure_compatible_runtime(runtime)
     assert switched is False
     assert reason == "compatible"
+
+
+def test_runtime_config_model_path_uses_device_default_on_pi4(monkeypatch):
+    """P1: model_path should align with the Pi 4 default model, not hardcode 2B."""
+    from app.model_state import MODEL_FILENAME_PI4
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.4")
+    monkeypatch.delenv("POTATO_MODEL_PATH", raising=False)
+    config = RuntimeConfig.from_env()
+    assert config.model_path.name == MODEL_FILENAME_PI4
+
+
+def test_runtime_config_model_path_uses_2b_on_pi5(monkeypatch):
+    """P1: Pi 5 should still default to 2B."""
+    from app.model_state import MODEL_FILENAME
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 5 Model B Rev 1.0")
+    monkeypatch.delenv("POTATO_MODEL_PATH", raising=False)
+    config = RuntimeConfig.from_env()
+    assert config.model_path.name == MODEL_FILENAME
 
 
 def test_cpu_load_power_estimate_idle():

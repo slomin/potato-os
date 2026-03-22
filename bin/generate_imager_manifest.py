@@ -159,7 +159,7 @@ def main() -> int:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    print(f"Wrote Pi 5-only manifest: {output_path}")
+    print(f"Wrote manifest: {output_path}")
     return 0
 
 

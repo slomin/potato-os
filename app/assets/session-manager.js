@@ -136,16 +136,21 @@ export async function saveActiveSession() {
   const firstUserMsg = appState.chatHistory.find((m) => m.role === "user");
   const existingMeta = appState.sessionIndex.find((s) => s.id === appState.activeSessionId);
   const title = existingMeta?.title || generateSessionTitle(firstUserMsg?.content || "");
-  const session = {
+  const baseMeta = {
     id: appState.activeSessionId,
     title,
     createdAt: existingMeta?.createdAt || now,
     updatedAt: now,
-    messages: appState.chatHistory.map((m) => ({ ...m })),
   };
-  await putSession(session);
+  try {
+    // Try saving with full image data URLs (IndexedDB handles ~140KB/image fine for typical chats)
+    await putSession({ ...baseMeta, messages: appState.chatHistory.map((m) => ({ ...m })) });
+  } catch (_e) {
+    // Quota exceeded or write error — fall back to stripped images for safe persistence
+    await putSession({ ...baseMeta, messages: stripImagesForPersistence(appState.chatHistory) });
+  }
   const metaIdx = appState.sessionIndex.findIndex((s) => s.id === appState.activeSessionId);
-  const meta = { id: session.id, title: session.title, createdAt: session.createdAt, updatedAt: now, messageCount: appState.chatHistory.length };
+  const meta = { id: baseMeta.id, title: baseMeta.title, createdAt: baseMeta.createdAt, updatedAt: now, messageCount: appState.chatHistory.length };
   if (metaIdx >= 0) {
     appState.sessionIndex[metaIdx] = meta;
   } else {

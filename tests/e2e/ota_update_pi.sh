@@ -130,11 +130,7 @@ cleanup() {
       rm -rf "${PI_SNAPSHOT_DIR}"
     fi
   elif [ -n "${PI_SNAPSHOT_DIR}" ] && [ -d "${PI_SNAPSHOT_DIR}" ]; then
-    echo "" >&2
-    echo "IMPORTANT: Pi snapshot preserved at: ${PI_SNAPSHOT_DIR}" >&2
-    echo "  Restore manually with:" >&2
-    echo "  SSHPASS=\${PI_PASSWORD} sshpass -e rsync -az --delete -e 'ssh ${PI_SSH_OPTIONS}' ${PI_SNAPSHOT_DIR}/app/ ${PI_USER}@${PI_HOST}:/opt/potato/app/" >&2
-    echo "  SSHPASS=\${PI_PASSWORD} sshpass -e rsync -az --delete -e 'ssh ${PI_SSH_OPTIONS}' ${PI_SNAPSHOT_DIR}/bin/ ${PI_USER}@${PI_HOST}:/opt/potato/bin/" >&2
+    _print_manual_recovery
   fi
 
   exit "${exit_code}"
@@ -157,6 +153,31 @@ _wait_for_ssh() {
 _sudo_pi() {
   # Run a command on the Pi with sudo, using PI_PASSWORD
   ssh_pi "echo '${PI_PASSWORD}' | sudo -S $*"
+}
+
+_print_manual_recovery() {
+  # Print complete manual recovery instructions referencing the snapshot.
+  echo "" >&2
+  echo "IMPORTANT: Pi snapshot preserved at: ${PI_SNAPSHOT_DIR}" >&2
+  echo "  Expected version: ${ORIGINAL_VERSION}" >&2
+  echo "" >&2
+  echo "  Restore manually — run ALL steps:" >&2
+  echo "" >&2
+  echo "  # 1. Rsync app/ and bin/ from snapshot" >&2
+  echo "  export SSHPASS=\${PI_PASSWORD:-raspberry}" >&2
+  echo "  sshpass -e rsync -az --delete -e 'ssh ${PI_SSH_OPTIONS}' ${PI_SNAPSHOT_DIR}/app/ ${PI_USER}@${PI_HOST}:/opt/potato/app/" >&2
+  echo "  sshpass -e rsync -az --delete -e 'ssh ${PI_SSH_OPTIONS}' ${PI_SNAPSHOT_DIR}/bin/ ${PI_USER}@${PI_HOST}:/opt/potato/bin/" >&2
+  echo "" >&2
+  echo "  # 2. Reset update.json (remove stale OTA state)" >&2
+  echo "  sshpass -e ssh ${PI_SSH_OPTIONS} ${PI_USER}@${PI_HOST} \"echo '\\\${SSHPASS}' | sudo -S sh -c 'echo \\\"{}\\\" > /opt/potato/state/update.json && chown potato:potato /opt/potato/state/update.json'\"" >&2
+  echo "" >&2
+  echo "  # 3. Restart the service" >&2
+  echo "  sshpass -e ssh ${PI_SSH_OPTIONS} ${PI_USER}@${PI_HOST} \"echo '\\\${SSHPASS}' | sudo -S systemctl restart potato\"" >&2
+  echo "" >&2
+  echo "  # 4. Verify" >&2
+  echo "  curl -s http://${PI_HOST}/status | python3 -c \"import json,sys; print(json.load(sys.stdin)['version'])\"" >&2
+  echo "" >&2
+  echo "  Once restored, delete the snapshot: rm -rf ${PI_SNAPSHOT_DIR}" >&2
 }
 
 _restore_pi() {
@@ -455,11 +476,7 @@ log_stage "Phase 8: Restoring Pi to pre-test state..."
 
 if ! _restore_pi; then
   echo "FATAL: Could not restore Pi to original state. Manual intervention required." >&2
-  echo "  Expected version: ${ORIGINAL_VERSION}" >&2
-  echo "  Pi snapshot preserved at: ${PI_SNAPSHOT_DIR}" >&2
-  echo "  Restore manually with:" >&2
-  echo "  SSHPASS=\${PI_PASSWORD} sshpass -e rsync -az --delete -e 'ssh ${PI_SSH_OPTIONS}' ${PI_SNAPSHOT_DIR}/app/ ${PI_USER}@${PI_HOST}:/opt/potato/app/" >&2
-  echo "  SSHPASS=\${PI_PASSWORD} sshpass -e rsync -az --delete -e 'ssh ${PI_SSH_OPTIONS}' ${PI_SNAPSHOT_DIR}/bin/ ${PI_USER}@${PI_HOST}:/opt/potato/bin/" >&2
+  _print_manual_recovery
   exit 1
 fi
 report_stage_time "Phase 8 (restore)" "${stage_started_at}"

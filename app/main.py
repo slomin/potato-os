@@ -194,7 +194,17 @@ except ModuleNotFoundError:
         _unique_filename,
         _unique_model_id,
     )
-    from update_state import build_update_status  # type: ignore[no-redef]
+    from update_state import (  # type: ignore[no-redef]
+        build_update_status,
+        cleanup_staging,
+        detect_post_update_state,
+        download_release_tarball,
+        extract_tarball,
+        apply_staged_update,
+        signal_service_restart,
+        staging_dir,
+        write_execution_state,
+    )
     from runtime_state import (  # type: ignore[no-redef]
         LARGE_MODEL_UNSUPPORTED_PI_WARN_BYTES_DEFAULT,
         LLAMA_RUNTIME_BUNDLE_MARKER_FILENAME,

@@ -13,6 +13,7 @@ import signal
 import struct
 import termios
 import time
+import secrets
 import uuid
 
 from urllib.parse import urlparse
@@ -26,30 +27,28 @@ MAX_TERMINAL_SESSIONS = 3
 IDLE_TIMEOUT_SECONDS = 900
 PTY_READ_CHUNK = 4096
 
-# Allowed Origin hostnames for WebSocket connections.  This prevents cross-site
-# WebSocket hijacking (a malicious page opening ws://potato.local/ws/terminal).
-# It does NOT stop someone with direct LAN access and a raw WS client — that is
-# the same threat model as SSH, which is also open on the Pi by default.
-_ALLOWED_ORIGIN_HOSTS = frozenset({
-    "localhost",
-    "127.0.0.1",
-    "potato.local",
-})
-
 
 def register_terminal_helpers(**_kwargs: object) -> None:
     """Placeholder for consistency with the other route modules."""
 
 
-def _is_origin_allowed(origin: str | None) -> bool:
-    """Return True if the Origin header is absent (non-browser) or matches an allowed host."""
+def _is_origin_allowed(origin: str | None, request_host: str) -> bool:
+    """Check that the Origin header (if present) matches the Host the request arrived on.
+
+    Browsers always send an Origin on cross-origin WebSocket upgrades, so this
+    blocks CSWSH from malicious pages.  The comparison is against the *request*
+    Host header, so it works for any hostname/IP the user accesses the Pi through
+    (potato.local, 192.168.x.x, a custom DNS name, etc.).
+    """
     if not origin:
-        return True  # non-browser clients (curl, wscat) don't send Origin
+        return False  # require Origin — non-browser clients must use the token
     try:
-        host = urlparse(origin).hostname or ""
+        origin_host = urlparse(origin).hostname or ""
     except Exception:
         return False
-    return host in _ALLOWED_ORIGIN_HOSTS
+    # request_host may include a port (e.g. "potato.local:1983")
+    host_only = request_host.split(":")[0] if request_host else ""
+    return origin_host == host_only
 
 
 def _cleanup_session(session_id: str, sessions: dict) -> None:
@@ -145,10 +144,20 @@ async def _pty_reader(
 @router.websocket("/ws/terminal")
 async def terminal_websocket(websocket: WebSocket) -> None:
     sessions: dict = websocket.app.state.terminal_sessions
+    expected_token: str = websocket.app.state.terminal_token
 
-    # P1: Origin validation — block cross-site WebSocket hijacking.
+    # Auth gate: require a valid per-boot token AND matching Origin.
+    # The token is embedded in the HTML page — you must load the UI first.
+    # This blocks raw LAN clients (wscat, scripts) that don't have the token,
+    # AND cross-site WebSocket hijacking from malicious pages (Origin mismatch).
+    client_token = websocket.query_params.get("token", "")
     origin = websocket.headers.get("origin")
-    if not _is_origin_allowed(origin):
+    request_host = websocket.headers.get("host", "")
+
+    if not secrets.compare_digest(client_token, expected_token):
+        await websocket.close(code=4003)
+        return
+    if not _is_origin_allowed(origin, request_host):
         await websocket.close(code=4003)
         return
 

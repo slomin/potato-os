@@ -1694,6 +1694,8 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
     app.state.update_task = None
     app.state.update_lock = asyncio.Lock()
     app.state.terminal_sessions: dict = {}
+    import secrets as _secrets
+    app.state.terminal_token: str = _secrets.token_urlsafe(32)
     app.state.llama_consecutive_failures = 0
     app.state.startup_monotonic = None
     app.state.orchestrator_task = None

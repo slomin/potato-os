@@ -28,6 +28,12 @@ def terminal_client(runtime):
         yield c
 
 
+def _ws_url(client):
+    """Build the authenticated WS URL with the per-boot token."""
+    token = client.app.state.terminal_token
+    return f"/ws/terminal?token={token}"
+
+
 def _recv_until(ws, predicate, *, max_messages=50, timeout=5):
     """Read messages from the WebSocket until predicate(parsed_msg) is True."""
     collected = []
@@ -44,14 +50,14 @@ def _recv_until(ws, predicate, *, max_messages=50, timeout=5):
 
 
 def test_terminal_websocket_accepts_connection(terminal_client):
-    with terminal_client.websocket_connect("/ws/terminal") as ws:
+    with terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"}) as ws:
         # Should receive at least one output message (shell prompt)
         msgs = _recv_until(ws, lambda m: m["type"] == "output")
         assert any(m["type"] == "output" for m in msgs)
 
 
 def test_terminal_sends_input_receives_output(terminal_client):
-    with terminal_client.websocket_connect("/ws/terminal") as ws:
+    with terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"}) as ws:
         # Drain initial prompt output
         _recv_until(ws, lambda m: m["type"] == "output")
 
@@ -68,7 +74,7 @@ def test_terminal_sends_input_receives_output(terminal_client):
 
 
 def test_terminal_resize(terminal_client):
-    with terminal_client.websocket_connect("/ws/terminal") as ws:
+    with terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"}) as ws:
         # Drain initial output
         _recv_until(ws, lambda m: m["type"] == "output")
 
@@ -91,7 +97,7 @@ def test_terminal_session_limit(terminal_client):
     # Open MAX sessions
     open_ws = []
     for _ in range(MAX_TERMINAL_SESSIONS):
-        ws = terminal_client.websocket_connect("/ws/terminal")
+        ws = terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"})
         ws.__enter__()
         # Drain initial output so the PTY is fully set up
         _recv_until(ws, lambda m: m["type"] == "output")
@@ -99,7 +105,7 @@ def test_terminal_session_limit(terminal_client):
 
     try:
         # The next connection should be rejected
-        with terminal_client.websocket_connect("/ws/terminal") as overflow_ws:
+        with terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"}) as overflow_ws:
             msgs = _recv_until(overflow_ws, lambda m: m["type"] == "error")
             assert any(
                 m["type"] == "error" and "limit" in m.get("message", "").lower()
@@ -111,7 +117,7 @@ def test_terminal_session_limit(terminal_client):
 
 
 def test_terminal_session_cleanup_on_disconnect(terminal_client):
-    with terminal_client.websocket_connect("/ws/terminal") as ws:
+    with terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"}) as ws:
         _recv_until(ws, lambda m: m["type"] == "output")
         sessions_before = len(terminal_client.app.state.terminal_sessions)
         assert sessions_before >= 1
@@ -121,7 +127,7 @@ def test_terminal_session_cleanup_on_disconnect(terminal_client):
 
 
 def test_terminal_invalid_json_ignored(terminal_client):
-    with terminal_client.websocket_connect("/ws/terminal") as ws:
+    with terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"}) as ws:
         _recv_until(ws, lambda m: m["type"] == "output")
 
         # Send garbage — should not crash the connection
@@ -138,7 +144,7 @@ def test_terminal_invalid_json_ignored(terminal_client):
 
 
 def test_terminal_unknown_message_type_ignored(terminal_client):
-    with terminal_client.websocket_connect("/ws/terminal") as ws:
+    with terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"}) as ws:
         _recv_until(ws, lambda m: m["type"] == "output")
 
         # Send unknown type — should not crash
@@ -155,29 +161,44 @@ def test_terminal_unknown_message_type_ignored(terminal_client):
 
 
 def test_terminal_rejects_bad_origin(terminal_client):
-    """P1: Cross-origin WebSocket connections must be rejected."""
+    """Cross-origin WebSocket connections must be rejected."""
     from starlette.websockets import WebSocketDisconnect as _WSD
 
     with pytest.raises(_WSD):
         with terminal_client.websocket_connect(
-            "/ws/terminal",
+            _ws_url(terminal_client),
             headers={"origin": "https://evil.example.com"},
         ) as ws:
             ws.receive_text()
 
 
-def test_terminal_allows_valid_origin(terminal_client):
-    with terminal_client.websocket_connect(
-        "/ws/terminal",
-        headers={"origin": "http://potato.local"},
-    ) as ws:
-        msgs = _recv_until(ws, lambda m: m["type"] == "output")
-        assert any(m["type"] == "output" for m in msgs)
+def test_terminal_rejects_missing_token(terminal_client):
+    """Connections without a valid token must be rejected."""
+    from starlette.websockets import WebSocketDisconnect as _WSD
+
+    with pytest.raises(_WSD):
+        with terminal_client.websocket_connect(
+            "/ws/terminal",
+            headers={"origin": "http://testserver"},
+        ) as ws:
+            ws.receive_text()
+
+
+def test_terminal_rejects_wrong_token(terminal_client):
+    """Connections with an invalid token must be rejected."""
+    from starlette.websockets import WebSocketDisconnect as _WSD
+
+    with pytest.raises(_WSD):
+        with terminal_client.websocket_connect(
+            "/ws/terminal?token=wrong-token-value",
+            headers={"origin": "http://testserver"},
+        ) as ws:
+            ws.receive_text()
 
 
 def test_terminal_shell_exit_closes_websocket(terminal_client):
     """P3: When the user types 'exit', the WS should close and session should be freed."""
-    with terminal_client.websocket_connect("/ws/terminal") as ws:
+    with terminal_client.websocket_connect(_ws_url(terminal_client), headers={"origin": "http://testserver"}) as ws:
         _recv_until(ws, lambda m: m["type"] == "output")
 
         # Tell the shell to exit

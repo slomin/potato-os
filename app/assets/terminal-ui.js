@@ -29,7 +29,8 @@ function _setReconnectVisible(visible) {
 
 function _connectWebSocket() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${proto}//${location.host}/ws/terminal`;
+  const token = document.querySelector('meta[name="terminal-token"]')?.content || "";
+  const url = `${proto}//${location.host}/ws/terminal?token=${encodeURIComponent(token)}`;
 
   _setStatus("Connecting...");
   _setReconnectVisible(false);

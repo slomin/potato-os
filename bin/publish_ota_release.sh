@@ -68,7 +68,7 @@ printf 'Tag version:  %s\n' "${VERSION_NUM}"
 printf 'App version:  %s\n' "${APP_VERSION}"
 
 if [ "${VERSION_NUM}" != "${APP_VERSION}" ]; then
-  printf 'WARNING: Tag version "%s" differs from app/__version__.py "%s"\n' "${VERSION_NUM}" "${APP_VERSION}" >&2
+  die "Tag version \"${VERSION_NUM}\" does not match app/__version__.py \"${APP_VERSION}\". Update __version__ first."
 fi
 
 # ── Validate source directories ────────────────────────────────────────
@@ -157,7 +157,8 @@ else
   git tag "${VERSION}" 2>/dev/null || true
   if [ -n "${PUSH_REMOTE}" ]; then
     printf 'Pushing tag %s to %s\n' "${VERSION}" "${PUSH_REMOTE}"
-    git push "${PUSH_REMOTE}" "${VERSION}"
+    # Tolerate already-pushed tag so a retry after transient gh failure works.
+    git push "${PUSH_REMOTE}" "${VERSION}" 2>/dev/null || true
   fi
 
   RELEASE_NOTES="$(cat <<NOTES

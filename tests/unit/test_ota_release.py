@@ -213,3 +213,23 @@ def test_publish_ota_script_references_expected_elements():
     assert "potato_sha256" in script
     assert "build_helpers.sh" in script
     assert "__version__" in script
+
+
+def test_publish_ota_script_rejects_version_mismatch():
+    """Script must hard-error when tag version differs from app/__version__.py."""
+    script = (REPO_ROOT / "bin" / "publish_ota_release.sh").read_text(encoding="utf-8")
+    # The version mismatch block must call die, not just warn
+    mismatch_idx = script.index("VERSION_NUM}")
+    # Find the next conditional block after the comparison
+    block = script[mismatch_idx:mismatch_idx + 300]
+    assert "die " in block, "Version mismatch must be a hard error (die), not a warning"
+
+
+def test_publish_ota_script_tolerates_existing_remote_tag():
+    """Tag push must not abort the script if the tag already exists on the remote."""
+    script = (REPO_ROOT / "bin" / "publish_ota_release.sh").read_text(encoding="utf-8")
+    # The git push for tags must have error tolerance (|| true) for retry safety
+    push_section = script[script.index("Pushing tag"):]
+    push_line_end = push_section.index("\n", push_section.index("git push"))
+    push_line = push_section[:push_line_end]
+    assert "|| true" in push_line or "2>/dev/null" in push_line

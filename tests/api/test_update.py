@@ -53,6 +53,22 @@ def test_update_check_returns_200_on_success(runtime, monkeypatch):
     assert body["latest_version"] == "0.5.0"
 
 
+def test_update_check_returns_409_during_active_execution(runtime):
+    """Server must refuse check during active update to prevent update.json overwrite."""
+    write_execution_state(runtime, execution_state="applying", target_version="0.5.0")
+    runtime.enable_orchestrator = True
+    app = create_app(runtime=runtime, enable_orchestrator=True)
+    app.dependency_overrides[get_runtime] = lambda: runtime
+
+    with TestClient(app) as c:
+        response = c.post("/internal/update/check")
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["checked"] is False
+    assert body["reason"] == "update_in_progress"
+
+
 def test_status_includes_update_key_with_default_shape(client, monkeypatch):
     monkeypatch.setattr("app.main.check_llama_health", _healthy_false)
     response = client.get("/status")

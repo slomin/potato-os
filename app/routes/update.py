@@ -13,17 +13,19 @@ try:
     from app.deps import get_runtime
     from app.runtime_state import RuntimeConfig
     from app.update_state import (
+        EXECUTION_ACTIVE_STATES,
         build_update_status,
         check_for_update,
         is_newer,
         is_update_safe,
+        read_execution_state,
         read_update_state,
     )
     from app.__version__ import __version__
 except ModuleNotFoundError:
     from deps import get_runtime  # type: ignore[no-redef]
     from runtime_state import RuntimeConfig  # type: ignore[no-redef]
-    from update_state import build_update_status, check_for_update, is_newer, is_update_safe, read_update_state  # type: ignore[no-redef]
+    from update_state import EXECUTION_ACTIVE_STATES, build_update_status, check_for_update, is_newer, is_update_safe, read_execution_state, read_update_state  # type: ignore[no-redef]
     from __version__ import __version__  # type: ignore[no-redef]
 
 router = APIRouter()
@@ -49,6 +51,12 @@ async def update_check(
         return JSONResponse(
             status_code=409,
             content={"checked": False, "reason": "orchestrator_disabled"},
+        )
+
+    if read_execution_state(runtime_cfg) in EXECUTION_ACTIVE_STATES:
+        return JSONResponse(
+            status_code=409,
+            content={"checked": False, "reason": "update_in_progress"},
         )
 
     await check_for_update(runtime_cfg)

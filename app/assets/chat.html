@@ -17,6 +17,7 @@
       <section class="sidebar-section">
         <h2 class="brand">Potato OS</h2>
         <p id="sidebarNote" class="sidebar-note"></p>
+        <button id="updateCheckBtn" class="ghost-btn update-check-btn" type="button">Check for updates</button>
         <div class="status-summary">
           <div id="statusText" class="status-card">Checking status...</div>
           <div id="statusActions" class="status-actions" hidden>
@@ -28,6 +29,18 @@
           <p id="downloadPromptHint" class="download-prompt-hint">Auto-download starts in 5:00.</p>
           <div class="download-prompt-actions">
             <button id="startDownloadBtn" class="ghost-btn" type="button">Start download now</button>
+          </div>
+        </div>
+        <div id="updateCard" class="update-card" hidden>
+          <p id="updateCardTitle" class="update-card-title">Update available</p>
+          <p id="updateCardHint" class="update-card-hint"></p>
+          <div id="updateCardProgress" class="update-card-progress" hidden>
+            <div id="updateCardProgressBar" class="update-card-progress-bar"></div>
+          </div>
+          <div class="update-card-actions">
+            <button id="updateStartBtn" class="ghost-btn" type="button" hidden>Install update</button>
+            <button id="updateNotesBtn" class="ghost-btn" type="button" hidden>Release notes</button>
+            <button id="updateRetryBtn" class="ghost-btn" type="button" hidden>Retry</button>
           </div>
         </div>
         <div id="systemRuntimeCard" class="status-card runtime-card">
@@ -386,6 +399,7 @@
   <link rel="modulepreload" href="/assets/model-switcher.js">
   <link rel="modulepreload" href="/assets/status.js">
   <link rel="modulepreload" href="/assets/runtime-ui.js">
+  <link rel="modulepreload" href="/assets/update-ui.js">
   <link rel="modulepreload" href="/assets/messages.js">
   <link rel="modulepreload" href="/assets/image-handler.js">
   <link rel="modulepreload" href="/assets/settings-ui.js">

@@ -5,6 +5,7 @@ import { formatBytes, formatPercent, formatClockMHz, normalizePercent, percentFr
 import { registerAppendMessage, saveActiveSession, clearChatState, startNewChat, deleteSession, deleteAllSessions, loadSessionIntoView, initSessionManager, renderSessionList } from "./session-manager.js";
 import { isLocalModelConnected, findResumableFailedModel, renderDownloadPrompt } from "./status.js";
 import { setModelUploadStatus, setLlamaRuntimeSwitchStatus, setLlamaRuntimeSwitchButtonState, setLlamaMemoryLoadingStatus, setLlamaMemoryLoadingButtonState, setLargeModelOverrideStatus, setLargeModelOverrideButtonState, setPowerCalibrationStatus, setPowerCalibrationButtonsState, setPowerCalibrationLiveStatus } from "./runtime-ui.js";
+import { setUpdateCheckInFlight, setUpdateStartInFlight, renderUpdateCard, registerUpdateCallbacks } from "./update-ui.js";
 import { registerOpenEditMessageModal, getMessagesBox, isMessagesPinned, setMessagesPinnedState, hasActiveMessageSelection, handleMessagesChanged, appendMessage, updateMessage, setMessageProcessingState, setMessageMeta, setMessageActionsVisible, removeMessage } from "./messages.js";
 import { registerImageUiCallbacks, cancelPendingImageWork, clearPendingImage, handleImageSelected, buildUserMessageContent, buildUserBubblePayload, openImagePicker } from "./image-handler.js";
 import { registerSettingsCallbacks, activeRuntimeVisionCapability, showTextOnlyImageBlockedState, resolveSelectedSettingsModel, selectedModelHasUnsavedChanges, blockModelSelectionChange, renderSettingsWorkspace, bindSettingsModal, setModelUrlStatus, formatModelUrlStatus } from "./settings-ui.js";
@@ -830,6 +831,123 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
     }
 
 
+    // ── Update UI actions ──────────────────────────────────────────────
+
+    async function checkForUpdate() {
+      if (appState.updateCheckInFlight) return;
+      appState.updateCheckInFlight = true;
+      setUpdateCheckInFlight(true);
+      try {
+        const res = await fetch("/internal/update/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+        });
+        if (res.status === 409) {
+          const body = await res.json().catch(() => ({}));
+          appendMessage("assistant", `Updates are not available (${body?.reason || "orchestrator disabled"}).`);
+          return;
+        }
+        if (!res.ok) {
+          appendMessage("assistant", `Could not check for updates (HTTP ${res.status}).`);
+          return;
+        }
+        await _shell.pollStatus();
+      } catch (err) {
+        appendMessage("assistant", `Could not check for updates: ${err}`);
+      } finally {
+        appState.updateCheckInFlight = false;
+        setUpdateCheckInFlight(false);
+      }
+    }
+
+    async function startUpdate() {
+      if (appState.updateStartInFlight) return;
+      appState.updateStartInFlight = true;
+      setUpdateStartInFlight(true);
+      try {
+        const res = await fetch("/internal/update/start", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 409 || !body?.started) {
+          const reasons = {
+            orchestrator_disabled: "Updates are not available (orchestrator disabled).",
+            no_update_available: "No update available. Try checking again.",
+            no_tarball_url: "No download URL found for this update. Try checking again.",
+            download_active: "A model download is in progress. Wait for it to finish.",
+            update_in_progress: "An update is already in progress.",
+          };
+          appendMessage("assistant", reasons[body?.reason] || `Could not start update (${body?.reason || "unknown"}).`);
+          return;
+        }
+        await _shell.pollStatus();
+      } catch (err) {
+        appendMessage("assistant", `Could not start update: ${err}`);
+      } finally {
+        appState.updateStartInFlight = false;
+        setUpdateStartInFlight(false);
+      }
+    }
+
+    function showUpdateReleaseNotes() {
+      const notes = appState.latestStatus?.update?.release_notes;
+      if (notes) {
+        appendMessage("assistant", notes);
+      } else {
+        appendMessage("assistant", "No release notes available.");
+      }
+    }
+
+    function stopUpdateReconnectWatch() {
+      if (appState.updateReconnectTimer) {
+        window.clearTimeout(appState.updateReconnectTimer);
+        appState.updateReconnectTimer = null;
+      }
+      appState.updateReconnectActive = false;
+      appState.updateReconnectAttempts = 0;
+    }
+
+    async function stepUpdateReconnectWatch() {
+      if (!appState.updateReconnectActive) return;
+      appState.updateReconnectAttempts += 1;
+      const statusPayload = await _shell.pollStatus({ timeoutMs: RUNTIME_RECONNECT_TIMEOUT_MS });
+      const updateState = String(statusPayload?.update?.state || "idle");
+      if (updateState === "idle") {
+        stopUpdateReconnectWatch();
+        const version = String(statusPayload?.update?.current_version || "");
+        setComposerActivity(version ? `Update complete! Now running v${version}.` : "Update complete!");
+        window.setTimeout(() => {
+          if (!appState.updateReconnectActive && !appState.requestInFlight) {
+            setComposerActivity("");
+          }
+        }, 3000);
+        return;
+      }
+      if (updateState === "failed") {
+        stopUpdateReconnectWatch();
+        setComposerActivity("");
+        appendMessage("assistant", "Update may not have applied correctly. Check the version in the sidebar.");
+        return;
+      }
+      if (appState.updateReconnectAttempts >= RUNTIME_RECONNECT_MAX_ATTEMPTS) {
+        stopUpdateReconnectWatch();
+        setComposerActivity("");
+        appendMessage("assistant", "Reconnection is taking longer than expected. The update may still be completing.");
+        return;
+      }
+      appState.updateReconnectTimer = window.setTimeout(stepUpdateReconnectWatch, RUNTIME_RECONNECT_INTERVAL_MS);
+    }
+
+    function startUpdateReconnectWatch() {
+      stopUpdateReconnectWatch();
+      appState.updateReconnectActive = true;
+      appState.updateReconnectAttempts = 0;
+      setComposerActivity("Potato OS is restarting after update. Reconnecting...");
+      stepUpdateReconnectWatch();
+    }
+
+
     // classifyPi5MemoryTier, setSidebarNote, setStatus, pollStatus, toggleTheme — extracted to shell.js
 
 export function init(shellApi) {
@@ -864,6 +982,9 @@ export function init(shellApi) {
     });
     registerChatEngineCallbacks({
       focusPromptInput, pollStatus,
+    });
+    registerUpdateCallbacks({
+      onRestartPending: startUpdateReconnectWatch,
     });
     initSessionManager().catch(() => {});
 
@@ -932,6 +1053,10 @@ export function init(shellApi) {
       }
     });
     document.getElementById("resetRuntimeBtn").addEventListener("click", resetRuntimeHeavy);
+    document.getElementById("updateCheckBtn").addEventListener("click", checkForUpdate);
+    document.getElementById("updateStartBtn").addEventListener("click", startUpdate);
+    document.getElementById("updateRetryBtn").addEventListener("click", startUpdate);
+    document.getElementById("updateNotesBtn").addEventListener("click", showUpdateReleaseNotes);
     document.getElementById("attachImageBtn").addEventListener("click", openImagePicker);
     document.getElementById("cancelBtn").addEventListener("click", cancelCurrentWork);
     document.getElementById("clearImageBtn").addEventListener("click", (event) => {

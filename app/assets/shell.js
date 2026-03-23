@@ -4,6 +4,7 @@ import { appState, defaultSettings, STATUS_POLL_TIMEOUT_MS } from "./state.js";
 import { formatCountdownSeconds } from "./utils.js";
 import { isLocalModelConnected, updateLlamaIndicator, renderDownloadPrompt, renderStatusActions, renderCompatibilityWarnings, formatSidebarStatusDetail, findResumableFailedModel } from "./status.js";
 import { setRuntimeDetailsExpanded, renderSystemRuntime, renderLlamaRuntimeStatus, renderUploadState } from "./runtime-ui.js";
+import { renderUpdateCard } from "./update-ui.js";
 import { populateModelSwitcher, openModelSwitcher, closeModelSwitcher, toggleModelSwitcher } from "./model-switcher.js";
 import { loadSettings, saveSettings, renderSettingsWorkspace, closeSettingsModal, closeLegacySettingsModal, setSettingsModalOpen } from "./settings-ui.js";
 import { setSendEnabled } from "./chat-engine.js";
@@ -169,6 +170,7 @@ import { init as initChatApp } from "./chat.js";
       renderCompatibilityWarnings(statusPayload);
       renderLlamaRuntimeStatus(statusPayload);
       renderSystemRuntime(statusPayload?.system);
+      renderUpdateCard(statusPayload?.update);
       renderSettingsWorkspace(statusPayload);
       renderUploadState(statusPayload);
       setSendEnabled();
@@ -261,6 +263,12 @@ import { init as initChatApp } from "./chat.js";
             gpu_clock_v3d_hz: null,
             updated_at_unix: null,
             throttling: { any_current: false, current_flags: [], history_flags: [] },
+          },
+          update: {
+            available: false,
+            state: "idle",
+            deferred: false,
+            progress: { phase: null, percent: 0, error: null },
           },
         };
         document.getElementById("statusText").textContent = `Status error: ${statusErrText}`;

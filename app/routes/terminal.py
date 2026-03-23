@@ -1,4 +1,13 @@
-"""Web terminal — WebSocket endpoint backed by a real PTY session."""
+"""Web terminal — WebSocket endpoint backed by a real PTY session.
+
+Security model: the terminal shares Potato OS's existing unauthenticated LAN
+trust model.  There is no user login or session auth — the same as chat,
+settings, model management, and SSH (pi:raspberry).  The per-boot token and
+Origin check guard against cross-site WebSocket hijacking and act as a light
+"page-loaded" speed bump, but they do not constitute real authorization against
+a determined LAN client (the token is published in the HTML served by GET /).
+App-wide authentication is tracked separately.
+"""
 
 from __future__ import annotations
 

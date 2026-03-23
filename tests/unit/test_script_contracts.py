@@ -237,37 +237,79 @@ def test_orchestrator_allows_llama_restart_during_download():
 def test_install_openclaw_checks_potato_prerequisite():
     script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
     assert "/opt/potato" in script
-    assert "potato.service" in script
+
+
+def test_install_openclaw_requires_root():
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "id -u" in script
+
+
+def test_install_openclaw_detects_real_user():
+    """Must use SUDO_USER to target the real user, not root."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "SUDO_USER" in script
+    assert "logname" in script
 
 
 def test_install_openclaw_installs_nodejs():
     script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
-    assert "nodesource.com/setup_24.x" in script
+    assert "nodesource.com/setup_" in script
     assert "apt-get install" in script
     assert "nodejs" in script
 
 
-def test_install_openclaw_deploys_config():
+def test_install_openclaw_pins_version():
+    """Must pin to a specific version, not @latest."""
     script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
-    assert "openclaw/openclaw.json" in script
-    assert ".openclaw/openclaw.json" in script
-    assert "openclaw/workspace/AGENTS.md" in script
-    assert "openclaw/workspace/SOUL.md" in script
+    assert "OPENCLAW_VERSION=" in script
+    assert "openclaw@${OPENCLAW_VERSION}" in script
+    assert "@latest" not in script
 
 
-def test_install_openclaw_disables_skills_on_disk():
+def test_install_openclaw_embeds_config_as_heredoc():
+    """Config must be embedded in the script, not copied from external files."""
     script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
-    assert "SKILL.md.disabled" in script
-    assert "healthcheck" in script
-    assert "node-connect" in script
-    assert "skill-creator" in script
-    assert "weather" in script
+    # Should contain the config inline, not reference external files
+    assert "openclaw.json" in script
+    assert "127.0.0.1:1983/v1" in script
+    assert "potato/local" in script
+    assert "skipBootstrap" in script
+    # Must NOT reference the openclaw/ directory
+    assert 'cp "${REPO_ROOT}/openclaw/' not in script
 
 
-def test_install_openclaw_sets_gateway_port_3080():
+def test_install_openclaw_configurable_context_budget():
+    """Context budget values must be overridable via env vars."""
     script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
-    assert "3080" in script
-    assert "18789" in script
+    assert "POTATO_CONTEXT_WINDOW" in script
+    assert "POTATO_MAX_TOKENS" in script
+    assert "POTATO_BOOTSTRAP_MAX" in script
+    assert "POTATO_COMPACTION_RESERVE" in script
+
+
+def test_install_openclaw_dynamic_origins():
+    """allowedOrigins must be built dynamically from hostname and IPs."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "hostname -I" in script
+    assert "allowedOrigins" in script
+    # Must NOT have hardcoded potato.local in the allowedOrigins
+    assert '"http://potato.local:' not in script
+
+
+def test_install_openclaw_disables_all_skills():
+    """Must glob ALL SKILL.md files, not a hardcoded list."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert ".disabled" in script
+    assert "find" in script
+    assert 'SKILL.md' in script
+    # Must NOT have a hardcoded skill list
+    assert "OPENCLAW_SKILLS_TO_DISABLE" not in script
+
+
+def test_install_openclaw_stock_port():
+    """Must use stock OpenClaw port 18789."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "OPENCLAW_PORT=18789" in script
 
 
 def test_install_openclaw_enables_linger():
@@ -275,16 +317,34 @@ def test_install_openclaw_enables_linger():
     assert "loginctl enable-linger" in script
 
 
+def test_install_openclaw_generates_gateway_token():
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "openssl rand" in script
+    assert "GATEWAY_TOKEN" in script
+
+
+def test_uninstall_openclaw_detects_real_user():
+    script = Path("bin/uninstall_openclaw.sh").read_text(encoding="utf-8")
+    assert "SUDO_USER" in script
+    assert "logname" in script
+
+
 def test_uninstall_openclaw_removes_service():
     script = Path("bin/uninstall_openclaw.sh").read_text(encoding="utf-8")
-    assert "systemctl --user disable --now openclaw-gateway" in script
+    assert "disable --now openclaw-gateway" in script
     assert "openclaw-gateway.service" in script
 
 
-def test_uninstall_openclaw_restores_skills():
+def test_uninstall_openclaw_restores_all_skills():
+    """Must glob ALL .disabled files, not a hardcoded list."""
     script = Path("bin/uninstall_openclaw.sh").read_text(encoding="utf-8")
     assert "SKILL.md.disabled" in script
-    assert "SKILL.md" in script
+    assert "find" in script
+
+
+def test_uninstall_openclaw_removes_config():
+    script = Path("bin/uninstall_openclaw.sh").read_text(encoding="utf-8")
+    assert ".openclaw" in script
 
 
 def test_uninstall_dev_handles_openclaw():

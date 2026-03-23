@@ -1,178 +1,255 @@
 #!/usr/bin/env bash
+# Self-contained OpenClaw installer for Potato OS.
+# Designed to be run as: curl -fsSL <raw-url> | sudo bash
+#
+# All config is embedded — no external files needed.
+# Context budget is tuned for 16k local models, overridable via env vars.
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ── Constants ──────────────────────────────────────────────────────────────────
+OPENCLAW_VERSION="${POTATO_OPENCLAW_VERSION:-2026.3.22}"
+OPENCLAW_PORT=18789
+REQUIRED_NODE_MAJOR=22
+TARGET_NODE_MAJOR=24
 TARGET_ROOT="${POTATO_TARGET_ROOT:-/opt/potato}"
-OPENCLAW_PORT="${OPENCLAW_PORT:-3080}"
-OPENCLAW_SKILLS_TO_DISABLE="healthcheck node-connect skill-creator weather"
 
-run_sudo() {
-  if [ "${EUID}" -eq 0 ]; then
-    "$@"
-    return
-  fi
-  if [ -n "${PI_PASSWORD:-}" ]; then
-    printf '%s\n' "${PI_PASSWORD}" | sudo -S -p '' "$@"
-    return
-  fi
-  sudo "$@"
-}
+# ── Configurable context budget ────────────────────────────────────────────────
+# Tuned for 16k context windows. Override via env vars for larger models.
+CONTEXT_WINDOW="${POTATO_CONTEXT_WINDOW:-16384}"
+MAX_TOKENS="${POTATO_MAX_TOKENS:-4096}"
+BOOTSTRAP_MAX="${POTATO_BOOTSTRAP_MAX:-400}"
+BOOTSTRAP_TOTAL="${POTATO_BOOTSTRAP_TOTAL:-1200}"
+COMPACTION_RESERVE="${POTATO_COMPACTION_RESERVE:-8000}"
+COMPACTION_KEEP_RECENT="${POTATO_COMPACTION_KEEP_RECENT:-4000}"
+SKILLS_PROMPT_CHARS="${POTATO_SKILLS_PROMPT:-0}"
 
-# ---------------------------------------------------------------------------
-# Phase 1: Prerequisites
-# ---------------------------------------------------------------------------
+# ── User detection ─────────────────────────────────────────────────────────────
+# When piped through `sudo bash`, SUDO_USER gives us the real caller.
+REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
+REAL_HOME="$(eval echo "~${REAL_USER}")"
+
+# ── Preflight checks ──────────────────────────────────────────────────────────
+
+if [ "$(id -u)" -ne 0 ]; then
+  printf 'Error: this script must be run as root (use sudo).\n' >&2
+  exit 1
+fi
+
+if [ "$(uname -s)" != "Linux" ]; then
+  printf 'Error: this installer is for Linux (Raspberry Pi) only.\n' >&2
+  exit 1
+fi
 
 if [ ! -d "${TARGET_ROOT}" ]; then
   printf 'Error: Potato OS not found at %s. Install Potato OS first.\n' "${TARGET_ROOT}" >&2
   exit 1
 fi
 
-if ! systemctl list-unit-files potato.service >/dev/null 2>&1; then
-  printf 'Error: potato.service not found. Install Potato OS first.\n' >&2
-  exit 1
-fi
+printf '=== OpenClaw installer for Potato OS ===\n'
+printf 'User: %s  Home: %s  Version: %s\n\n' "${REAL_USER}" "${REAL_HOME}" "${OPENCLAW_VERSION}"
 
-if [ "$(uname -m)" != "aarch64" ]; then
-  printf 'Warning: expected aarch64, got %s. OpenClaw Pi support is ARM64 only.\n' "$(uname -m)" >&2
-fi
-
-printf '=== OpenClaw installer for Potato OS ===\n\n'
-
-# ---------------------------------------------------------------------------
-# Phase 2: Node.js 24
-# ---------------------------------------------------------------------------
+# ── Phase 1: Node.js ──────────────────────────────────────────────────────────
 
 NEED_NODEJS=0
 if ! command -v node >/dev/null 2>&1; then
   NEED_NODEJS=1
-elif [ "$(node --version | sed 's/v//' | cut -d. -f1)" -lt 24 ]; then
-  NEED_NODEJS=1
+else
+  NODE_MAJOR="$(node --version | sed 's/v//' | cut -d. -f1)"
+  if [ "${NODE_MAJOR}" -lt "${REQUIRED_NODE_MAJOR}" ]; then
+    NEED_NODEJS=1
+  fi
 fi
 
 if [ "${NEED_NODEJS}" = "1" ]; then
-  printf '[1/8] Installing Node.js 24...\n'
-  NODESOURCE_SCRIPT="$(mktemp)"
-  curl -fsSL https://deb.nodesource.com/setup_24.x -o "${NODESOURCE_SCRIPT}"
-  run_sudo bash "${NODESOURCE_SCRIPT}"
-  rm -f "${NODESOURCE_SCRIPT}"
-  run_sudo apt-get install -y nodejs
+  printf '[1/7] Installing Node.js %s...\n' "${TARGET_NODE_MAJOR}"
+  curl -fsSL "https://deb.nodesource.com/setup_${TARGET_NODE_MAJOR}.x" | bash -
+  apt-get install -y nodejs
 else
-  printf '[1/8] Node.js %s already installed, skipping.\n' "$(node --version)"
+  printf '[1/7] Node.js %s found, skipping.\n' "$(node --version)"
 fi
 
 # lsof is required by OpenClaw gateway for stale-pid detection
 if ! command -v lsof >/dev/null 2>&1; then
-  run_sudo apt-get install -y lsof
+  apt-get install -y lsof
 fi
 
-# ---------------------------------------------------------------------------
-# Phase 3: OpenClaw
-# ---------------------------------------------------------------------------
+# ── Phase 2: OpenClaw ────────────────────────────────────────────────────────
 
-if ! command -v openclaw >/dev/null 2>&1; then
-  printf '[2/8] Installing OpenClaw...\n'
-  run_sudo npm install -g openclaw@latest
-else
-  printf '[2/8] OpenClaw %s already installed, skipping.\n' "$(openclaw --version 2>/dev/null | head -1)"
+if command -v openclaw >/dev/null 2>&1; then
+  INSTALLED="$(openclaw --version 2>/dev/null | head -1 || echo unknown)"
+  printf '[2/7] OpenClaw %s found, upgrading to %s...\n' "${INSTALLED}" "${OPENCLAW_VERSION}"
 fi
+printf '[2/7] Installing OpenClaw %s...\n' "${OPENCLAW_VERSION}"
+npm install -g "openclaw@${OPENCLAW_VERSION}"
 
-# ---------------------------------------------------------------------------
-# Phase 4: Deploy config
-# ---------------------------------------------------------------------------
+# ── Phase 3: Deploy config ────────────────────────────────────────────────────
 
-printf '[3/8] Deploying OpenClaw config...\n'
-mkdir -p "${HOME}/.openclaw/workspace"
+printf '[3/7] Deploying Potato OS config...\n'
+OPENCLAW_DIR="${REAL_HOME}/.openclaw"
+WORKSPACE_DIR="${OPENCLAW_DIR}/workspace"
+mkdir -p "${WORKSPACE_DIR}"
 
-cp "${REPO_ROOT}/openclaw/openclaw.json" "${HOME}/.openclaw/openclaw.json"
-cp "${REPO_ROOT}/openclaw/workspace/AGENTS.md" "${HOME}/.openclaw/workspace/AGENTS.md"
-cp "${REPO_ROOT}/openclaw/workspace/SOUL.md" "${HOME}/.openclaw/workspace/SOUL.md"
-
-# Create empty bootstrap files to prevent OpenClaw from generating defaults
-for f in TOOLS.md IDENTITY.md USER.md HEARTBEAT.md BOOTSTRAP.md MEMORY.md; do
-  : > "${HOME}/.openclaw/workspace/${f}"
+# Build dynamic allowedOrigins from actual hostname + IPs
+ORIGINS="\"http://localhost:${OPENCLAW_PORT}\", \"http://127.0.0.1:${OPENCLAW_PORT}\""
+PI_HOSTNAME="$(hostname 2>/dev/null || true)"
+if [ -n "${PI_HOSTNAME}" ]; then
+  ORIGINS="${ORIGINS}, \"http://${PI_HOSTNAME}:${OPENCLAW_PORT}\""
+fi
+for ip in $(hostname -I 2>/dev/null || true); do
+  ip="$(echo "${ip}" | tr -d '[:space:]')"
+  [ -n "${ip}" ] && ORIGINS="${ORIGINS}, \"http://${ip}:${OPENCLAW_PORT}\""
 done
 
 # Generate a fresh gateway token
 GATEWAY_TOKEN="$(openssl rand -hex 24)"
-openclaw config set gateway.auth.token "${GATEWAY_TOKEN}" 2>/dev/null
-openclaw config set gateway.mode local 2>/dev/null
 
-# ---------------------------------------------------------------------------
-# Phase 5: Disable bundled skills on disk
-# ---------------------------------------------------------------------------
+cat > "${OPENCLAW_DIR}/openclaw.json" <<OCEOF
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "potato": {
+        "baseUrl": "http://127.0.0.1:1983/v1",
+        "apiKey": "not-needed",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "local",
+            "name": "Potato OS Local Model",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": ${CONTEXT_WINDOW},
+            "maxTokens": ${MAX_TOKENS}
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": { "primary": "potato/local" },
+      "skipBootstrap": true,
+      "bootstrapMaxChars": ${BOOTSTRAP_MAX},
+      "bootstrapTotalMaxChars": ${BOOTSTRAP_TOTAL},
+      "bootstrapPromptTruncationWarning": "off",
+      "memorySearch": { "enabled": false },
+      "compaction": {
+        "mode": "safeguard",
+        "reserveTokens": ${COMPACTION_RESERVE},
+        "keepRecentTokens": ${COMPACTION_KEEP_RECENT}
+      }
+    }
+  },
+  "tools": {
+    "profile": "minimal"
+  },
+  "gateway": {
+    "port": ${OPENCLAW_PORT},
+    "mode": "local",
+    "bind": "lan",
+    "controlUi": {
+      "allowedOrigins": [${ORIGINS}],
+      "allowInsecureAuth": true,
+      "dangerouslyDisableDeviceAuth": true
+    },
+    "auth": {
+      "mode": "token",
+      "token": "${GATEWAY_TOKEN}"
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": { "enabled": true }
+      }
+    }
+  },
+  "skills": {
+    "allowBundled": [],
+    "limits": { "maxSkillsPromptChars": ${SKILLS_PROMPT_CHARS} }
+  }
+}
+OCEOF
 
-printf '[4/8] Disabling bundled skills...\n'
-OPENCLAW_SKILLS_DIR="$(npm root -g)/openclaw/skills"
-for skill in ${OPENCLAW_SKILLS_TO_DISABLE}; do
-  if [ -f "${OPENCLAW_SKILLS_DIR}/${skill}/SKILL.md" ]; then
-    run_sudo mv "${OPENCLAW_SKILLS_DIR}/${skill}/SKILL.md" \
-                "${OPENCLAW_SKILLS_DIR}/${skill}/SKILL.md.disabled"
-    printf '  disabled: %s\n' "${skill}"
-  fi
+# Workspace SOUL — keep agent replies short to save tokens
+cat > "${WORKSPACE_DIR}/SOUL.md" <<'SOULEOF'
+Calm, terse, practical.
+SOULEOF
+
+# Create empty bootstrap files to prevent OpenClaw from generating defaults
+for f in AGENTS.md TOOLS.md IDENTITY.md USER.md HEARTBEAT.md BOOTSTRAP.md MEMORY.md; do
+  : > "${WORKSPACE_DIR}/${f}"
 done
 
-# ---------------------------------------------------------------------------
-# Phase 6: Performance tuning
-# ---------------------------------------------------------------------------
+chown -R "${REAL_USER}:${REAL_USER}" "${OPENCLAW_DIR}"
 
-printf '[5/8] Configuring performance optimizations...\n'
+# ── Phase 4: Disable ALL bundled skills ───────────────────────────────────────
+
+printf '[4/7] Disabling all bundled skills...\n'
+SKILLS_DIR="$(npm root -g)/openclaw/skills"
+DISABLED_COUNT=0
+if [ -d "${SKILLS_DIR}" ]; then
+  while IFS= read -r skill_file; do
+    mv "${skill_file}" "${skill_file}.disabled"
+    DISABLED_COUNT=$((DISABLED_COUNT + 1))
+  done < <(find "${SKILLS_DIR}" -name "SKILL.md" -not -name "*.disabled" 2>/dev/null)
+fi
+printf '  disabled %d skills\n' "${DISABLED_COUNT}"
+
+# ── Phase 5: Performance tuning ───────────────────────────────────────────────
+
+printf '[5/7] Configuring performance optimizations...\n'
 mkdir -p /var/tmp/openclaw-compile-cache
+chown "${REAL_USER}:${REAL_USER}" /var/tmp/openclaw-compile-cache
 
-if ! grep -q 'NODE_COMPILE_CACHE' "${HOME}/.bashrc" 2>/dev/null; then
-  cat >> "${HOME}/.bashrc" <<'PERF'
+BASHRC="${REAL_HOME}/.bashrc"
+if ! grep -q 'NODE_COMPILE_CACHE' "${BASHRC}" 2>/dev/null; then
+  cat >> "${BASHRC}" <<'PERFEOF'
+
 # OpenClaw performance (added by install_openclaw.sh)
 export NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
 export OPENCLAW_NO_RESPAWN=1
-PERF
+PERFEOF
+  chown "${REAL_USER}:${REAL_USER}" "${BASHRC}"
 fi
 
-# ---------------------------------------------------------------------------
-# Phase 7: Systemd setup
-# ---------------------------------------------------------------------------
+# ── Phase 6: Systemd gateway service ─────────────────────────────────────────
 
-printf '[6/8] Setting up systemd gateway service...\n'
-run_sudo loginctl enable-linger "$(whoami)"
+printf '[6/7] Setting up systemd gateway service...\n'
+loginctl enable-linger "${REAL_USER}"
 
-# Let OpenClaw create the service unit
-openclaw gateway install 2>/dev/null || true
+# Let OpenClaw create its own service unit (run as the real user)
+su - "${REAL_USER}" -c "openclaw gateway install --port ${OPENCLAW_PORT} --token '${GATEWAY_TOKEN}' 2>/dev/null" || true
 
-SERVICE_FILE="${HOME}/.config/systemd/user/openclaw-gateway.service"
+SERVICE_DIR="${REAL_HOME}/.config/systemd/user"
+SERVICE_FILE="${SERVICE_DIR}/openclaw-gateway.service"
 if [ -f "${SERVICE_FILE}" ]; then
-  # Patch port from default 18789 to configured port
-  sed -i "s/--port 18789/--port ${OPENCLAW_PORT}/g" "${SERVICE_FILE}"
-  sed -i "s/OPENCLAW_GATEWAY_PORT=18789/OPENCLAW_GATEWAY_PORT=${OPENCLAW_PORT}/g" "${SERVICE_FILE}"
-
-  # Add performance env vars if not already present
+  # Add performance env vars if not present
   if ! grep -q 'NODE_COMPILE_CACHE' "${SERVICE_FILE}"; then
     sed -i "/\[Service\]/a Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache\nEnvironment=OPENCLAW_NO_RESPAWN=1" "${SERVICE_FILE}"
   fi
-
-  systemctl --user daemon-reload
-  systemctl --user enable openclaw-gateway
+  su - "${REAL_USER}" -c "systemctl --user daemon-reload && systemctl --user enable --now openclaw-gateway"
 fi
 
-# ---------------------------------------------------------------------------
-# Phase 8: Start and verify
-# ---------------------------------------------------------------------------
+# ── Phase 7: Verify ──────────────────────────────────────────────────────────
 
-printf '[7/8] Starting OpenClaw gateway (this takes ~55s on Pi)...\n'
-systemctl --user restart openclaw-gateway
-sleep 55
+printf '[7/7] Waiting for gateway to start (this takes ~55s on Pi)...\n'
+READY=0
+for i in $(seq 1 70); do
+  if su - "${REAL_USER}" -c "curl -sf http://127.0.0.1:${OPENCLAW_PORT}/ >/dev/null 2>&1"; then
+    READY=1
+    break
+  fi
+  sleep 1
+  [ $((i % 10)) -eq 0 ] && printf '  still waiting (%ds)...\n' "${i}"
+done
 
-if ss -tlnp 2>/dev/null | grep -q ":${OPENCLAW_PORT}"; then
-  printf '[8/8] OpenClaw is running!\n\n'
+printf '\n'
+if [ "${READY}" = "1" ]; then
+  printf '✓ OpenClaw is running!\n\n'
 else
-  printf '[8/8] Gateway may still be starting. Check with: ss -tlnp | grep %s\n\n' "${OPENCLAW_PORT}"
+  printf '⏳ Gateway may still be starting. Check: systemctl --user status openclaw-gateway\n\n'
 fi
 
-DASHBOARD_URL="$(openclaw dashboard --no-open 2>/dev/null | grep -oE 'http://[^ ]+' | head -1 || true)"
-if [ -n "${DASHBOARD_URL}" ]; then
-  # Replace localhost with potato.local for LAN access
-  LAN_URL="$(printf '%s' "${DASHBOARD_URL}" | sed "s|127.0.0.1|potato.local|g")"
-  printf 'Dashboard: %s\n' "${LAN_URL}"
-else
-  printf 'Dashboard: http://potato.local:%s/#token=%s\n' "${OPENCLAW_PORT}" "${GATEWAY_TOKEN}"
-fi
-
-printf 'Test:      openclaw agent --local --agent main --message "hi"\n'
-printf '\nNote: gateway takes ~55s to start on Pi after reboot.\n'
+printf 'Dashboard:  http://%s:%s/#token=%s\n' "${PI_HOSTNAME:-potato.local}" "${OPENCLAW_PORT}" "${GATEWAY_TOKEN}"
+printf 'Test:       su - %s -c "openclaw agent --local --agent main --message hi"\n' "${REAL_USER}"
+printf '\nContext budget: %s window / %s max tokens (override with POTATO_CONTEXT_WINDOW / POTATO_MAX_TOKENS)\n' "${CONTEXT_WINDOW}" "${MAX_TOKENS}"

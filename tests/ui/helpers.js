@@ -149,6 +149,17 @@ function makeStatusPayload(overrides = {}) {
     llama_server: { healthy: true, running: true, url: "http://127.0.0.1:8080" },
     backend: { mode: "llama", active: "llama", fallback_active: false },
     system: { available: false, cpu_cores_percent: [] },
+    update: {
+      available: false,
+      current_version: "0.4.0",
+      latest_version: null,
+      release_notes: null,
+      checked_at_unix: null,
+      state: "idle",
+      deferred: false,
+      defer_reason: null,
+      progress: { phase: null, percent: 0, error: null },
+    },
     llama_runtime: {
       current: { family: "ik_llama", llama_cpp_commit: "abc12345", profile: "pi5-opt", has_server_binary: true },
       available_runtimes: [

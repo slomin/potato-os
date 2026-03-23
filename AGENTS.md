@@ -26,9 +26,10 @@ Service definitions in `systemd/`. Nginx config in `nginx/`. Image build in `ima
 Tests are organized under `tests/`:
 - `tests/api/`: HTTP/API behavior tests (pytest).
 - `tests/unit/`: Python and shell-script logic tests (pytest).
-- `tests/ui/`: Playwright E2E tests — split into 8 feature-scoped spec files:
+- `tests/ui/`: Playwright E2E tests — split into 9 feature-scoped spec files:
   - `settings.spec.js`, `chat.spec.js`, `image.spec.js`, `download.spec.js`
   - `runtime.spec.js`, `model-switcher.spec.js`, `sessions.spec.js`, `bootstrap.spec.js`
+  - `update.spec.js`
 - `tests/ui/helpers.js`: Shared test utilities (`waitUntilReady`, `makeStatusPayload`, etc.).
 - `tests/e2e/`: Pi smoke/uninstall flows over SSH.
 

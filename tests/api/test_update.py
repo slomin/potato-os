@@ -11,6 +11,11 @@ from app.__version__ import __version__
 from app.main import create_app, get_runtime
 from app.update_state import write_execution_state
 
+# Derive test versions from the real app version so tests don't break on bumps.
+_major, _minor, _patch = (int(x) for x in __version__.split("-")[0].split("."))
+TEST_NEWER_VERSION = f"{_major}.{_minor + 1}.0"
+TEST_CURRENT_VERSION = __version__
+
 
 def test_update_check_returns_409_when_orchestrator_disabled(client):
     response = client.post("/internal/update/check")
@@ -31,9 +36,9 @@ def test_update_check_returns_200_on_success(runtime, monkeypatch):
         state = {
             "available": True,
             "current_version": __version__,
-            "latest_version": "0.5.0",
+            "latest_version": TEST_NEWER_VERSION,
             "release_notes": "notes",
-            "release_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+            "release_url": f"https://github.com/slomin/potato-os/releases/tag/v{TEST_NEWER_VERSION}",
             "tarball_url": None,
             "checked_at_unix": 1711000000,
             "error": None,
@@ -50,7 +55,7 @@ def test_update_check_returns_200_on_success(runtime, monkeypatch):
     body = response.json()
     assert body["checked"] is True
     assert body["available"] is True
-    assert body["latest_version"] == "0.5.0"
+    assert body["latest_version"] == TEST_NEWER_VERSION
 
 
 def test_update_check_returns_409_during_active_execution(runtime):
@@ -90,9 +95,9 @@ def test_status_update_populated_after_check(runtime, monkeypatch):
     state = {
         "available": True,
         "current_version": __version__,
-        "latest_version": "0.5.0",
+        "latest_version": TEST_NEWER_VERSION,
         "release_notes": "notes",
-        "release_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+        "release_url": f"https://github.com/slomin/potato-os/releases/tag/v{TEST_NEWER_VERSION}",
         "tarball_url": None,
         "checked_at_unix": 1711000000,
         "error": None,
@@ -109,7 +114,7 @@ def test_status_update_populated_after_check(runtime, monkeypatch):
     assert response.status_code == 200
     update = response.json()["update"]
     assert update["available"] is True
-    assert update["latest_version"] == "0.5.0"
+    assert update["latest_version"] == TEST_NEWER_VERSION
     assert update["checked_at_unix"] == 1711000000
 
 
@@ -157,7 +162,7 @@ def test_update_start_returns_409_when_no_update_available(runtime, monkeypatch)
     assert response.json()["reason"] == "no_update_available"
 
 
-def _patch_version(monkeypatch, version: str = "0.4.0") -> None:
+def _patch_version(monkeypatch, version: str = TEST_CURRENT_VERSION) -> None:
     monkeypatch.setattr("app.update_state.__version__", version)
     monkeypatch.setattr("app.routes.update.__version__", version)
 
@@ -165,8 +170,8 @@ def _patch_version(monkeypatch, version: str = "0.4.0") -> None:
 def test_update_start_returns_409_when_no_tarball_url(runtime, monkeypatch):
     state = {
         "available": True,
-        "current_version": "0.4.0",
-        "latest_version": "0.5.0",
+        "current_version": TEST_CURRENT_VERSION,
+        "latest_version": TEST_NEWER_VERSION,
         "tarball_url": None,
         "checked_at_unix": 1711000000,
         "error": None,
@@ -188,8 +193,8 @@ def test_update_start_returns_409_when_no_tarball_url(runtime, monkeypatch):
 def test_update_start_returns_409_when_download_active(runtime, monkeypatch):
     state = {
         "available": True,
-        "current_version": "0.4.0",
-        "latest_version": "0.5.0",
+        "current_version": TEST_CURRENT_VERSION,
+        "latest_version": TEST_NEWER_VERSION,
         "tarball_url": "https://example.com/tarball.tar.gz",
         "checked_at_unix": 1711000000,
         "error": None,
@@ -215,8 +220,8 @@ def test_update_start_returns_409_when_download_active(runtime, monkeypatch):
 def test_update_start_returns_409_when_update_already_running(runtime, monkeypatch):
     state = {
         "available": True,
-        "current_version": "0.4.0",
-        "latest_version": "0.5.0",
+        "current_version": TEST_CURRENT_VERSION,
+        "latest_version": TEST_NEWER_VERSION,
         "tarball_url": "https://example.com/tarball.tar.gz",
         "checked_at_unix": 1711000000,
         "error": None,
@@ -240,14 +245,14 @@ def test_update_start_rejects_stale_available_after_upgrade(runtime, monkeypatch
     """P3: stale available=true in state should not allow redundant update."""
     state = {
         "available": True,
-        "current_version": "0.4.0",
-        "latest_version": "0.5.0",
+        "current_version": TEST_CURRENT_VERSION,
+        "latest_version": TEST_NEWER_VERSION,
         "tarball_url": "https://example.com/tarball.tar.gz",
         "checked_at_unix": 1711000000,
         "error": None,
     }
     runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
-    _patch_version(monkeypatch, "0.5.0")
+    _patch_version(monkeypatch, TEST_NEWER_VERSION)
 
     runtime.enable_orchestrator = True
     app = create_app(runtime=runtime, enable_orchestrator=True)
@@ -263,8 +268,8 @@ def test_update_start_rejects_stale_available_after_upgrade(runtime, monkeypatch
 def test_update_start_returns_200_and_starts(runtime, monkeypatch):
     state = {
         "available": True,
-        "current_version": "0.4.0",
-        "latest_version": "0.5.0",
+        "current_version": TEST_CURRENT_VERSION,
+        "latest_version": TEST_NEWER_VERSION,
         "tarball_url": "https://example.com/tarball.tar.gz",
         "checked_at_unix": 1711000000,
         "error": None,

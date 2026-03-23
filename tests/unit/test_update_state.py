@@ -15,6 +15,7 @@ import httpx
 import pytest
 import respx
 
+from app.__version__ import __version__ as APP_VERSION
 from app.update_state import (
     EXECUTION_ACTIVE_STATES,
     GITHUB_RELEASES_LATEST_URL,
@@ -36,6 +37,13 @@ from app.update_state import (
     staging_dir,
     write_execution_state,
 )
+
+# Test version constants — derived from the real app version so tests
+# don't break on release bumps.
+_major, _minor, _patch = (int(x) for x in APP_VERSION.split("-")[0].split("."))
+TEST_CURRENT_VERSION = APP_VERSION
+TEST_NEWER_VERSION = f"{_major}.{_minor + 1}.0"
+TEST_OLDER_VERSION = f"{_major}.{_minor}.{max(_patch - 1, 0)}-pre-alpha"
 
 
 # ---------------------------------------------------------------------------
@@ -195,10 +203,10 @@ def test_build_update_status_survives_non_string_latest_version(runtime):
 def test_build_update_status_populated_from_state(runtime):
     state = {
         "available": True,
-        "current_version": "0.3.6-pre-alpha",
-        "latest_version": "0.5.0",
+        "current_version": TEST_OLDER_VERSION,
+        "latest_version": TEST_NEWER_VERSION,
         "release_notes": "Bug fixes",
-        "release_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+        "release_url": f"https://github.com/slomin/potato-os/releases/tag/v{TEST_NEWER_VERSION}",
         "tarball_url": None,
         "checked_at_unix": 1711000000,
         "error": None,
@@ -206,7 +214,7 @@ def test_build_update_status_populated_from_state(runtime):
     runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
     result = build_update_status(runtime)
     assert result["available"] is True
-    assert result["latest_version"] == "0.5.0"
+    assert result["latest_version"] == TEST_NEWER_VERSION
     assert result["release_notes"] == "Bug fixes"
     assert result["checked_at_unix"] == 1711000000
 
@@ -251,13 +259,13 @@ def test_build_update_status_recomputes_availability_from_live_version(runtime, 
 def test_build_update_status_uses_live_version_not_cached(runtime, monkeypatch):
     state = {
         "available": False,
-        "current_version": "0.3.6-pre-alpha",
-        "latest_version": "0.5.0",
+        "current_version": TEST_OLDER_VERSION,
+        "latest_version": TEST_NEWER_VERSION,
         "checked_at_unix": 1711000000,
         "error": None,
     }
     runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
-    # State was written by old build that thought 0.5.0 wasn't newer (bug).
+    # State was written by old build that thought newer wasn't newer (bug).
     # Live version is still old — should recompute as available.
     monkeypatch.setattr("app.update_state.__version__", "0.3.6-pre-alpha")
     result = build_update_status(runtime)
@@ -305,13 +313,13 @@ async def test_check_for_update_writes_state_on_success(runtime):
             return_value=httpx.Response(
                 200,
                 json={
-                    "tag_name": "v0.5.0",
+                    "tag_name": f"v{TEST_NEWER_VERSION}",
                     "body": "Release notes here",
-                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+                    "html_url": f"https://github.com/slomin/potato-os/releases/tag/v{TEST_NEWER_VERSION}",
                     "assets": [
                         {
-                            "name": "potato-os-0.5.0.tar.gz",
-                            "browser_download_url": "https://github.com/slomin/potato-os/releases/download/v0.5.0/potato-os-0.5.0.tar.gz",
+                            "name": f"potato-os-{TEST_NEWER_VERSION}.tar.gz",
+                            "browser_download_url": f"https://github.com/slomin/potato-os/releases/download/v{TEST_NEWER_VERSION}/potato-os-{TEST_NEWER_VERSION}.tar.gz",
                         }
                     ],
                 },
@@ -320,7 +328,7 @@ async def test_check_for_update_writes_state_on_success(runtime):
         result = await check_for_update(runtime)
 
     assert result["available"] is True
-    assert result["latest_version"] == "0.5.0"
+    assert result["latest_version"] == TEST_NEWER_VERSION
     assert result["release_notes"] == "Release notes here"
     assert result["error"] is None
     assert result["checked_at_unix"] > 0
@@ -329,15 +337,15 @@ async def test_check_for_update_writes_state_on_success(runtime):
 
 @pytest.mark.anyio
 async def test_check_for_update_not_available_when_same_version(runtime, monkeypatch):
-    monkeypatch.setattr("app.update_state.__version__", "0.5.0")
+    monkeypatch.setattr("app.update_state.__version__", TEST_NEWER_VERSION)
     with respx.mock(assert_all_called=True) as router:
         router.get(GITHUB_RELEASES_LATEST_URL).mock(
             return_value=httpx.Response(
                 200,
                 json={
-                    "tag_name": "v0.5.0",
+                    "tag_name": f"v{TEST_NEWER_VERSION}",
                     "body": "",
-                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+                    "html_url": f"https://github.com/slomin/potato-os/releases/tag/v{TEST_NEWER_VERSION}",
                     "assets": [],
                 },
             )

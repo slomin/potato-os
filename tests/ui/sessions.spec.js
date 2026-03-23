@@ -96,8 +96,7 @@ test("delete session removes it from sidebar and starts new chat if active", asy
   await expect(page.locator(".message-row")).toHaveCount(0);
 });
 
-test("image messages show placeholder after session restore", async ({ page }) => {
-  // Intercept chat with a reply
+test("image messages survive session restore", async ({ page }) => {
   await page.route("**/v1/chat/completions", (route) => fulfillStreamingChat(route, { content: "Nice image" }));
   await waitUntilReady(page);
   await page.locator("#runtimeViewToggle").click();
@@ -113,15 +112,43 @@ test("image messages show placeholder after session restore", async ({ page }) =
   await page.locator("#newChatBtn").click();
   await page.locator(".chat-session-item").first().click();
 
-  // Image bubble should show placeholder, not the original data URL
+  // Image should be preserved with real data URL after restore
   const userBubble = page.locator(".message-row.user .message-bubble").first();
   await expect(userBubble).toContainText("Describe this cat");
-  // Should NOT have a full data: URL image displayed
   const hasDataUrl = await page.evaluate(() => {
     const imgs = document.querySelectorAll(".message-row.user .message-bubble img");
     return Array.from(imgs).some((img) => img.src.startsWith("data:"));
   });
-  expect(hasDataUrl).toBe(false);
+  expect(hasDataUrl).toBe(true);
+});
+
+test("assistant stats survive session restore", async ({ page }) => {
+  const timings = {
+    prompt_n: 10,
+    prompt_ms: 200,
+    predicted_n: 50,
+    predicted_ms: 2000,
+    predicted_per_second: 25.0,
+  };
+  await page.route("**/v1/chat/completions", (route) =>
+    fulfillStreamingChat(route, { content: "Stats reply", timings })
+  );
+  await waitUntilReady(page);
+  await page.locator("#runtimeViewToggle").click();
+
+  await sendAndWaitForReply(page, "Show me stats");
+
+  // Stats should be visible after initial reply
+  const metaEl = page.locator(".message-row.assistant .message-meta").first();
+  await expect(metaEl).toContainText("tok/sec");
+
+  // Switch away and back
+  await page.locator("#newChatBtn").click();
+  await page.locator(".chat-session-item").first().click();
+
+  // Stats should still be visible after restore
+  const restoredMeta = page.locator(".message-row.assistant .message-meta").first();
+  await expect(restoredMeta).toContainText("tok/sec");
 });
 
 test("editing a message in a restored session works correctly", async ({ page }) => {

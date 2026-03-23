@@ -257,8 +257,8 @@ def test_chat_ui_uses_continuous_chat_history_in_openai_messages_format():
     assert "appState.chatHistory.push(userMessage);" in CHAT_UI
     assert CHAT_ENGINE_JS.index("reqBody.messages.push(userMessage);") < CHAT_ENGINE_JS.index("appState.chatHistory.push(userMessage);")
     assert "const finalAssistantText = assistantText.trim() || formatReasoningOnlyMessage(assistantReasoningText);" in CHAT_UI
-    assert "appState.chatHistory.push({ role: \"assistant\", content: finalAssistantText });" in CHAT_UI
-    assert "appState.chatHistory.push({ role: \"assistant\", content: msg });" in CHAT_UI
+    assert "appState.chatHistory.push({ role: \"assistant\", content: finalAssistantText, meta: statsText });" in CHAT_UI
+    assert "appState.chatHistory.push({ role: \"assistant\", content: msg, meta: statsText });" in CHAT_UI
 
 
 def test_chat_ui_formats_download_sizes_and_shows_model_filename_in_settings():

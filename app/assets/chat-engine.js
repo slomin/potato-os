@@ -652,12 +652,13 @@ import { saveActiveSession } from "./session-manager.js";
           }
           const finalAssistantText = assistantText.trim() || formatReasoningOnlyMessage(assistantReasoningText);
           updateMessage(activeAssistantView, finalAssistantText, { showActions: true });
-          appState.chatHistory.push({ role: "assistant", content: finalAssistantText });
           const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
           if (requestCtx.stoppedByUser) {
             streamStats.finish_reason = "cancelled";
           }
-          setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs));
+          const statsText = formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs);
+          appState.chatHistory.push({ role: "assistant", content: finalAssistantText, meta: statsText });
+          setMessageMeta(activeAssistantView, statsText);
           recordPrefillMetric(
             requestCtx.prefillBucket,
             resolvePromptPrefillMs(streamStats, requestCtx.firstTokenLatencyMs),
@@ -675,10 +676,11 @@ import { saveActiveSession } from "./session-manager.js";
         const message = body?.choices?.[0]?.message || {};
         const messageContent = typeof message?.content === "string" ? message.content.trim() : "";
         const msg = messageContent || formatReasoningOnlyMessage(message?.reasoning_content) || JSON.stringify(body);
-        appState.chatHistory.push({ role: "assistant", content: msg });
         updateMessage(activeAssistantView, msg, { showActions: true });
         const elapsedSeconds = Math.max(0, (performance.now() - requestStartMs) / 1000);
-        setMessageMeta(activeAssistantView, formatAssistantStats(body, elapsedSeconds, requestCtx.firstTokenLatencyMs));
+        const statsText = formatAssistantStats(body, elapsedSeconds, requestCtx.firstTokenLatencyMs);
+        appState.chatHistory.push({ role: "assistant", content: msg, meta: statsText });
+        setMessageMeta(activeAssistantView, statsText);
         recordPrefillMetric(
           requestCtx.prefillBucket,
           resolvePromptPrefillMs(body, requestCtx.firstTokenLatencyMs),
@@ -694,7 +696,8 @@ import { saveActiveSession } from "./session-manager.js";
             if (!partial) {
               updateMessage(activeAssistantView, "(stopped)", { showActions: true });
             } else {
-              appState.chatHistory.push({ role: "assistant", content: partial });
+              const cancelStatsText = formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs);
+              appState.chatHistory.push({ role: "assistant", content: partial, meta: cancelStatsText });
             }
             streamStats.finish_reason = "cancelled";
             setMessageMeta(activeAssistantView, formatAssistantStats(streamStats, elapsedSeconds, requestCtx.firstTokenLatencyMs));

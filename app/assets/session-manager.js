@@ -2,11 +2,16 @@
 
 import { appState, SESSIONS_DB_NAME, SESSIONS_DB_VERSION, SESSIONS_STORE, ACTIVE_SESSION_KEY, SESSION_TITLE_MAX_LENGTH, SESSION_LIST_MAX_VISIBLE } from "./state.js";
 
-// Late-bound reference to appendMessage (set by chat.js during init to avoid circular deps)
+// Late-bound references (set by chat.js during init to avoid circular deps)
 let _appendMessage = null;
+let _setMessageMeta = null;
 
 export function registerAppendMessage(fn) {
   _appendMessage = fn;
+}
+
+export function registerSetMessageMeta(fn) {
+  _setMessageMeta = fn;
 }
 
 function generateId() {
@@ -136,7 +141,7 @@ export async function saveActiveSession() {
     title,
     createdAt: existingMeta?.createdAt || now,
     updatedAt: now,
-    messages: stripImagesForPersistence(appState.chatHistory),
+    messages: appState.chatHistory.map((m) => ({ ...m })),
   };
   await putSession(session);
   const metaIdx = appState.sessionIndex.findIndex((s) => s.id === appState.activeSessionId);
@@ -166,15 +171,19 @@ export function restoreMessagesFromHistory(messages) {
     const msg = messages[i];
     appState.chatHistory.push(sanitized[i]);
     if (msg.role === "user") {
-      const hasStrippedImage = Array.isArray(msg.content) &&
-        msg.content.some((p) => p?.type === "image_url" && p?.image_url?.url === "[stripped]");
+      const imagePart = Array.isArray(msg.content)
+        ? msg.content.find((p) => p?.type === "image_url")
+        : null;
+      const imageUrl = imagePart?.image_url?.url || "";
+      const hasRealImage = imageUrl.startsWith("data:");
+      const hasStrippedImage = imageUrl === "[stripped]";
       const textContent = Array.isArray(msg.content)
         ? (msg.content.find((p) => p?.type === "text")?.text || "")
         : String(msg.content || "");
       const baseHistoryLength = historyIndex;
       const userView = _appendMessage("user", textContent, {
-        imageName: hasStrippedImage ? "image" : "",
-        imageDataUrl: hasStrippedImage ? "" : "",
+        imageName: (hasRealImage || hasStrippedImage) ? "image" : "",
+        imageDataUrl: hasRealImage ? imageUrl : "",
       });
       historyIndex++;
       let assistantView = null;
@@ -182,6 +191,9 @@ export function restoreMessagesFromHistory(messages) {
         i++;
         appState.chatHistory.push(sanitized[i]);
         assistantView = _appendMessage("assistant", String(messages[i].content || ""));
+        if (_setMessageMeta && messages[i].meta) {
+          _setMessageMeta(assistantView, messages[i].meta);
+        }
         historyIndex++;
       }
       const turn = { baseHistoryLength, userText: textContent, userView, assistantView };

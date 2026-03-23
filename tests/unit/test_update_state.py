@@ -485,6 +485,48 @@ async def test_check_for_update_picks_ota_over_runtime_tarball(runtime):
     assert result["tarball_url"] == "https://example.com/ota.tar.gz"
 
 
+@pytest.mark.anyio
+async def test_check_for_update_preserves_execution_state(runtime):
+    """check_for_update() must not overwrite execution_* fields from an active update."""
+    # Simulate an in-progress update
+    write_execution_state(
+        runtime,
+        execution_state="downloading",
+        phase="downloading",
+        percent=42,
+        target_version="0.5.0",
+        started_at_unix=1711000100,
+    )
+    with respx.mock(assert_all_called=True) as router:
+        router.get(GITHUB_RELEASES_LATEST_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "tag_name": "v0.6.0",
+                    "body": "new notes",
+                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.6.0",
+                    "assets": [
+                        {
+                            "name": "potato-os-0.6.0.tar.gz",
+                            "browser_download_url": "https://example.com/ota.tar.gz",
+                        }
+                    ],
+                },
+            )
+        )
+        await check_for_update(runtime)
+
+    # Execution fields must survive the check
+    state = read_update_state(runtime)
+    assert state["execution_state"] == "downloading"
+    assert state["execution_percent"] == 42
+    assert state["execution_target_version"] == "0.5.0"
+    assert state["execution_started_at_unix"] == 1711000100
+    # Check fields should also be updated
+    assert state["latest_version"] == "0.6.0"
+    assert state["checked_at_unix"] > 0
+
+
 # ---------------------------------------------------------------------------
 # is_update_safe
 # ---------------------------------------------------------------------------

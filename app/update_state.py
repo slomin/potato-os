@@ -229,7 +229,12 @@ async def check_for_update(runtime: RuntimeConfig) -> dict[str, Any]:
         logger.warning("Unexpected error during update check", exc_info=True)
         result["error"] = "unknown_error"
 
-    _atomic_write_json(runtime.update_state_path, result)
+    # Merge check-phase fields into existing state so execution_* fields
+    # written by run_update() are preserved.  Without this, a check during
+    # an active download/stage/apply would overwrite the execution state.
+    existing = read_update_state(runtime) or {}
+    existing.update(result)
+    _atomic_write_json(runtime.update_state_path, existing)
     return result
 
 

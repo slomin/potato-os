@@ -280,10 +280,16 @@ fi
 
 # ── Phase 7: Verify ──────────────────────────────────────────────────────────
 
-printf '[7/7] Waiting for gateway to start (this takes ~55s on Pi)...\n'
+printf '[7/7] Waiting for gateway to start...\n'
 READY=0
-for i in $(seq 1 70); do
+for i in $(seq 1 90); do
   if curl -sf "http://127.0.0.1:${OPENCLAW_PORT}/" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  # Gateway returns 503 while loading — that counts as "up" too
+  HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${OPENCLAW_PORT}/" 2>/dev/null || echo 000)"
+  if [ "${HTTP_CODE}" = "503" ]; then
     READY=1
     break
   fi
@@ -291,8 +297,22 @@ for i in $(seq 1 70); do
   [ $((i % 10)) -eq 0 ] && printf '  still waiting (%ds)...\n' "${i}"
 done
 
-printf '\n'
+# Restart once to ensure the gateway picks up all assets cleanly.
 if [ "${READY}" = "1" ]; then
+  run_as_user systemctl --user restart openclaw-gateway
+  printf '  restarting for clean asset load...\n'
+  sleep 5
+  # Wait for the restart to complete
+  for i in $(seq 1 30); do
+    if curl -sf "http://127.0.0.1:${OPENCLAW_PORT}/" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+fi
+
+printf '\n'
+if curl -sf "http://127.0.0.1:${OPENCLAW_PORT}/" >/dev/null 2>&1; then
   printf '✓ OpenClaw is running!\n\n'
 else
   printf '⏳ Gateway may still be starting. Check: systemctl --user status openclaw-gateway\n\n'

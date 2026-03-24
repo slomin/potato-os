@@ -917,12 +917,13 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
       if (updateState === "idle") {
         stopUpdateReconnectWatch();
         const version = String(statusPayload?.update?.current_version || "");
-        setComposerActivity(version ? `Update complete! Now running v${version}.` : "Update complete!");
+        setComposerActivity(version ? `Update complete! Now running v${version}. Reloading...` : "Update complete! Reloading...");
+        // Guard: skip reload if the user is mid-chat (submitted a prompt or
+        // typing a draft). They'll get fresh assets on their next manual refresh.
         window.setTimeout(() => {
-          if (!appState.updateReconnectActive && !appState.requestInFlight) {
-            setComposerActivity("");
-          }
-        }, 3000);
+          const hasInput = document.querySelector("#userPrompt")?.value?.trim();
+          if (!appState.requestInFlight && !hasInput) window.location.reload();
+        }, 2000);
         return;
       }
       if (updateState === "failed") {

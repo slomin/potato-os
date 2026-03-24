@@ -367,7 +367,9 @@ run_build() {
       info "Generating Raspberry Pi Imager manifest (this may take a minute for xz decompression)..."
       rm -f "${output_dir}/potato-${variant}.rpi-imager-manifest"
       cp -f "${repo_root}/bin/assets/${POTATO_ICON_FILENAME}" "${output_dir}/${POTATO_ICON_FILENAME}"
-      generate_potato_manifest "${out_image}" "${output_dir}/potato-${variant}.rpi-imager-manifest" "${output_dir}/${POTATO_ICON_FILENAME}" "${variant}" \
+      local _app_ver
+      _app_ver="$(python3 -c "import sys; sys.path.insert(0,'${repo_root}'); from app.__version__ import __version__; print(__version__)" 2>/dev/null || true)"
+      generate_potato_manifest "${out_image}" "${output_dir}/potato-${variant}.rpi-imager-manifest" "${output_dir}/${POTATO_ICON_FILENAME}" "${variant}" "${_app_ver:+v${_app_ver}}" \
         || die "Manifest generation failed for ${out_image}"
       info "Manifest generated: ${output_dir}/potato-${variant}.rpi-imager-manifest"
       ;;

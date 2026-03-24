@@ -20,9 +20,11 @@ printf 'User: %s  Home: %s\n\n' "${REAL_USER}" "${REAL_HOME}"
 # ── Phase 1: Stop and remove systemd service ──────────────────────────────────
 
 printf '[1/5] Stopping OpenClaw gateway...\n'
-su - "${REAL_USER}" -c "systemctl --user disable --now openclaw-gateway 2>/dev/null" || true
+REAL_UID="$(id -u "${REAL_USER}")"
+USER_BUS_ENV="XDG_RUNTIME_DIR=/run/user/${REAL_UID} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${REAL_UID}/bus"
+su - "${REAL_USER}" -c "${USER_BUS_ENV} systemctl --user disable --now openclaw-gateway 2>/dev/null" || true
 rm -f "${REAL_HOME}/.config/systemd/user/openclaw-gateway.service"
-su - "${REAL_USER}" -c "systemctl --user daemon-reload 2>/dev/null" || true
+su - "${REAL_USER}" -c "${USER_BUS_ENV} systemctl --user daemon-reload 2>/dev/null" || true
 
 # ── Phase 2: Restore disabled skills ──────────────────────────────────────────
 

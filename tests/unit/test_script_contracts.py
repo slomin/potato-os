@@ -306,11 +306,14 @@ def test_install_openclaw_disables_all_skills():
 
 
 def test_install_openclaw_preserves_existing_config():
-    """Re-running the installer must not overwrite existing config."""
+    """Re-running the installer must not overwrite existing config but must migrate Potato fixes."""
     script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
     assert "openclaw.json" in script
     # Must check if config exists before writing
     assert "-f" in script  # file existence test
+    # Must migrate .local origin and image input on existing configs
+    assert ".local:" in script
+    assert "migrated" in script
 
 
 def test_install_openclaw_advertises_vision():

@@ -89,10 +89,25 @@ WORKSPACE_DIR="${OPENCLAW_DIR}/workspace"
 mkdir -p "${WORKSPACE_DIR}"
 
 # Preserve existing config on upgrades — only deploy on fresh install.
+# Potato-owned compatibility fixes are migrated in-place on upgrades.
 if [ -f "${OPENCLAW_DIR}/openclaw.json" ]; then
-  printf '[3/7] Existing OpenClaw config found, preserving.\n'
-  # Re-read the existing token so we can print the dashboard URL at the end.
+  printf '[3/7] Existing OpenClaw config found, applying Potato migrations...\n'
   GATEWAY_TOKEN="$(grep -oP '"token"\s*:\s*"\K[^"]+' "${OPENCLAW_DIR}/openclaw.json" 2>/dev/null || echo unknown)"
+  CONFIG="${OPENCLAW_DIR}/openclaw.json"
+
+  # Migration: add .local mDNS origin if missing
+  PI_HOSTNAME="$(hostname 2>/dev/null || true)"
+  if [ -n "${PI_HOSTNAME}" ]; then
+    MDNS_ORIGIN="http://${PI_HOSTNAME}.local:${OPENCLAW_PORT}"
+    if ! grep -q "${MDNS_ORIGIN}" "${CONFIG}" 2>/dev/null; then
+      sed -i "s|\"allowedOrigins\": \[|\"allowedOrigins\": [\"${MDNS_ORIGIN}\", |" "${CONFIG}" && printf '  migrated: added %s to allowedOrigins\n' "${MDNS_ORIGIN}"
+    fi
+  fi
+
+  # Migration: add image input if model is text-only
+  if grep -q '"input": \["text"\]' "${CONFIG}" 2>/dev/null; then
+    sed -i 's/"input": \["text"\]/"input": ["text", "image"]/' "${CONFIG}" && printf '  migrated: enabled image input for vision models\n'
+  fi
 else
   printf '[3/7] Deploying Potato OS config (fresh install)...\n'
 

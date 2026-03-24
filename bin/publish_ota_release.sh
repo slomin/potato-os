@@ -94,6 +94,10 @@ if [ -f "${REPO_ROOT}/requirements.txt" ]; then
   cp "${REPO_ROOT}/requirements.txt" "${PREFIX}/requirements.txt"
 fi
 
+if [ -f "${REPO_ROOT}/LICENSE" ]; then
+  cp "${REPO_ROOT}/LICENSE" "${PREFIX}/LICENSE"
+fi
+
 if [ -f "${REPO_ROOT}/THIRD_PARTY_NOTICES.md" ]; then
   cp "${REPO_ROOT}/THIRD_PARTY_NOTICES.md" "${PREFIX}/THIRD_PARTY_NOTICES.md"
 fi

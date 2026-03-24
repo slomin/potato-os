@@ -918,10 +918,11 @@ import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setCo
         stopUpdateReconnectWatch();
         const version = String(statusPayload?.update?.current_version || "");
         setComposerActivity(version ? `Update complete! Now running v${version}. Reloading...` : "Update complete! Reloading...");
-        // Guard: skip reload if the user submitted a prompt during the wait.
-        // They'll get fresh assets on their next manual refresh.
+        // Guard: skip reload if the user is mid-chat (submitted a prompt or
+        // typing a draft). They'll get fresh assets on their next manual refresh.
         window.setTimeout(() => {
-          if (!appState.requestInFlight) window.location.reload();
+          const hasInput = document.querySelector("#userPrompt")?.value?.trim();
+          if (!appState.requestInFlight && !hasInput) window.location.reload();
         }, 2000);
         return;
       }

@@ -372,3 +372,49 @@ test("skips reload if a request is in flight after update", async ({ page }) => 
   await page.waitForTimeout(3000);
   expect(reloadFired).toBe(false);
 });
+
+test("skips reload if user has unsaved input after update", async ({ page }) => {
+  let transitionToIdle = false;
+  const restartPending = makeUpdatePayload({
+    available: true,
+    current_version: "0.4.0",
+    latest_version: "0.5.0",
+    state: "restart_pending",
+    progress: { phase: null, percent: 100, error: null },
+  });
+  const updateDone = makeUpdatePayload({
+    available: false,
+    current_version: "0.5.0",
+    latest_version: "0.5.0",
+    state: "idle",
+    progress: { phase: null, percent: 0, error: null },
+  });
+
+  await page.route("**/status", (route) => {
+    const payload = transitionToIdle ? updateDone : restartPending;
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+  });
+
+  await page.goto("/");
+  await waitForStatusApplied(page);
+
+  // Type into the composer but do NOT submit — just a draft
+  await page.locator("#userPrompt").fill("I'm still typing this...");
+
+  // Now let the update complete
+  transitionToIdle = true;
+
+  // Track navigations from this point
+  let reloadFired = false;
+  page.on("load", () => { reloadFired = true; });
+
+  // Wait for update success message
+  await expect(page.locator("#composerActivity")).toContainText(/update complete/i, { timeout: 10000 });
+
+  // Wait past the 2s reload window — reload should be skipped
+  await page.waitForTimeout(3000);
+  expect(reloadFired).toBe(false);
+
+  // Draft should still be there
+  await expect(page.locator("#userPrompt")).toHaveValue("I'm still typing this...");
+});

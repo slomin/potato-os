@@ -97,6 +97,21 @@ def read_update_state(runtime: RuntimeConfig) -> dict[str, Any] | None:
         return None
 
 
+def read_first_boot_update_done(runtime: RuntimeConfig) -> bool:
+    """Return True if the one-time first-boot update check has completed."""
+    state = read_update_state(runtime)
+    if state is None:
+        return False
+    return bool(state.get("first_boot_update_done", False))
+
+
+def mark_first_boot_update_done(runtime: RuntimeConfig) -> None:
+    """Set the first-boot update sentinel so it never runs again."""
+    existing = read_update_state(runtime) or {}
+    existing["first_boot_update_done"] = True
+    _atomic_write_json(runtime.update_state_path, existing)
+
+
 def _is_download_active(runtime: RuntimeConfig) -> bool:
     """Return True if a model download is in progress (not errored, not complete)."""
     progress = read_download_progress(runtime)

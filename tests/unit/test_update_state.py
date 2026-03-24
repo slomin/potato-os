@@ -1090,3 +1090,51 @@ async def test_signal_service_restart_raises_on_failure(runtime, monkeypatch):
     monkeypatch.setattr("asyncio.create_subprocess_exec", _mock_subprocess_exec)
     with pytest.raises(RuntimeError, match="failed"):
         await signal_service_restart(runtime)
+
+
+# ---------------------------------------------------------------------------
+# First-boot auto-update sentinel
+# ---------------------------------------------------------------------------
+
+
+def test_read_first_boot_update_done_false_when_no_state(runtime):
+    from app.update_state import read_first_boot_update_done
+
+    assert read_first_boot_update_done(runtime) is False
+
+
+def test_read_first_boot_update_done_false_when_missing_field(runtime):
+    from app.update_state import read_first_boot_update_done
+
+    runtime.update_state_path.write_text(json.dumps({"available": False}), encoding="utf-8")
+    assert read_first_boot_update_done(runtime) is False
+
+
+def test_read_first_boot_update_done_true_when_set(runtime):
+    from app.update_state import read_first_boot_update_done
+
+    runtime.update_state_path.write_text(
+        json.dumps({"first_boot_update_done": True}), encoding="utf-8"
+    )
+    assert read_first_boot_update_done(runtime) is True
+
+
+def test_mark_first_boot_update_done_creates_state(runtime):
+    from app.update_state import mark_first_boot_update_done, read_first_boot_update_done
+
+    mark_first_boot_update_done(runtime)
+    assert read_first_boot_update_done(runtime) is True
+
+
+def test_mark_first_boot_update_done_preserves_existing_state(runtime):
+    from app.update_state import mark_first_boot_update_done
+
+    runtime.update_state_path.write_text(
+        json.dumps({"available": True, "latest_version": "0.6.0"}), encoding="utf-8"
+    )
+    mark_first_boot_update_done(runtime)
+
+    state = read_update_state(runtime)
+    assert state["first_boot_update_done"] is True
+    assert state["available"] is True
+    assert state["latest_version"] == "0.6.0"

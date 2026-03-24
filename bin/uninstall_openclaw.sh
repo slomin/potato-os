@@ -34,7 +34,7 @@ _run_as_user systemctl --user daemon-reload 2>/dev/null || true
 # ── Phase 2: Restore disabled skills ──────────────────────────────────────────
 
 printf '[2/5] Restoring disabled skills...\n'
-SKILLS_DIR="$(npm root -g 2>/dev/null)/openclaw/skills"
+SKILLS_DIR="$(npm root -g 2>/dev/null || true)/openclaw/skills"
 RESTORED=0
 if [ -d "${SKILLS_DIR}" ]; then
   while IFS= read -r disabled_file; do

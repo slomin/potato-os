@@ -23,12 +23,28 @@ OPENCLAW_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
 OPENCLAW_HOME="$(eval echo "~${OPENCLAW_USER}")"
 if command -v openclaw &>/dev/null; then
   OC_UID="$(id -u "${OPENCLAW_USER}" 2>/dev/null || echo 1000)"
-  sudo -u "${OPENCLAW_USER}" XDG_RUNTIME_DIR="/run/user/${OC_UID}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${OC_UID}/bus" \
-    systemctl --user disable --now openclaw-gateway 2>/dev/null || true
-  rm -f "${OPENCLAW_HOME}/.config/systemd/user/openclaw-gateway.service"
-  sudo -u "${OPENCLAW_USER}" XDG_RUNTIME_DIR="/run/user/${OC_UID}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${OC_UID}/bus" \
-    systemctl --user daemon-reload 2>/dev/null || true
-  rm -rf "${OPENCLAW_HOME}/.openclaw"
+
+  # Helper: run a command as the OpenClaw user with D-Bus env vars.
+  # Handles the PI_PASSWORD automation path that run_sudo supports.
+  _oc_run() {
+    local _oc_cmd=(sudo -u "${OPENCLAW_USER}" \
+      XDG_RUNTIME_DIR="/run/user/${OC_UID}" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${OC_UID}/bus" "$@")
+    if [ "${EUID}" -eq 0 ]; then
+      "${_oc_cmd[@]}"
+      return
+    fi
+    if [ -n "${PI_PASSWORD:-}" ]; then
+      printf '%s\n' "${PI_PASSWORD}" | sudo -S -p '' "${_oc_cmd[@]}"
+      return
+    fi
+    "${_oc_cmd[@]}"
+  }
+
+  _oc_run systemctl --user disable --now openclaw-gateway 2>/dev/null || true
+  run_sudo rm -f "${OPENCLAW_HOME}/.config/systemd/user/openclaw-gateway.service"
+  _oc_run systemctl --user daemon-reload 2>/dev/null || true
+  run_sudo rm -rf "${OPENCLAW_HOME}/.openclaw"
 fi
 
 run_sudo systemctl disable --now potato.service potato-firstboot.service potato-runtime-reset.service || true

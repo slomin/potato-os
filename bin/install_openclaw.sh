@@ -265,18 +265,42 @@ run_as_user() {
 }
 
 # Let OpenClaw create its own service unit
-run_as_user openclaw gateway install --port "${OPENCLAW_PORT}" --token "${GATEWAY_TOKEN}" 2>/dev/null || true
+if ! run_as_user openclaw gateway install --port "${OPENCLAW_PORT}" --token "${GATEWAY_TOKEN}" 2>/dev/null; then
+  printf '  warning: openclaw gateway install command failed, creating service manually...\n'
+fi
 
 SERVICE_DIR="${REAL_HOME}/.config/systemd/user"
 SERVICE_FILE="${SERVICE_DIR}/openclaw-gateway.service"
-if [ -f "${SERVICE_FILE}" ]; then
-  # Add performance env vars if not present
-  if ! grep -q 'NODE_COMPILE_CACHE' "${SERVICE_FILE}"; then
-    sed -i "/\[Service\]/a Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache\nEnvironment=OPENCLAW_NO_RESPAWN=1" "${SERVICE_FILE}"
-  fi
-  run_as_user systemctl --user daemon-reload
-  run_as_user systemctl --user enable --now openclaw-gateway
+
+# If openclaw gateway install didn't create the unit, write one ourselves.
+if [ ! -f "${SERVICE_FILE}" ]; then
+  mkdir -p "${SERVICE_DIR}"
+  cat > "${SERVICE_FILE}" <<SVCEOF
+[Unit]
+Description=OpenClaw Gateway
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$(command -v openclaw) gateway run --port ${OPENCLAW_PORT} --token ${GATEWAY_TOKEN}
+Restart=on-failure
+RestartSec=5
+Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
+Environment=OPENCLAW_NO_RESPAWN=1
+
+[Install]
+WantedBy=default.target
+SVCEOF
+  chown "${REAL_USER}:${REAL_USER}" "${SERVICE_FILE}"
 fi
+
+# Add performance env vars if not present (for units created by openclaw itself)
+if ! grep -q 'NODE_COMPILE_CACHE' "${SERVICE_FILE}"; then
+  sed -i "/\[Service\]/a Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache\nEnvironment=OPENCLAW_NO_RESPAWN=1" "${SERVICE_FILE}"
+fi
+
+run_as_user systemctl --user daemon-reload
+run_as_user systemctl --user enable --now openclaw-gateway
 
 # ── Phase 7: Verify ──────────────────────────────────────────────────────────
 

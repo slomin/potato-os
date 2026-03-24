@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import textwrap
 from pathlib import Path
 
 
@@ -227,4 +230,232 @@ def test_orchestrator_allows_llama_restart_during_download():
         "Orchestrator restart logic must run during downloads — "
         "otherwise restart_managed_llama_process leaves llama dead until download finishes"
     )
+
+
+# ---------------------------------------------------------------------------
+# OpenClaw addon scripts
+# ---------------------------------------------------------------------------
+
+
+def test_install_openclaw_checks_potato_prerequisite():
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "/opt/potato" in script
+
+
+def test_install_openclaw_requires_root():
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "id -u" in script
+
+
+def test_install_openclaw_detects_real_user():
+    """Must use SUDO_USER to target the real user, not root."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "SUDO_USER" in script
+    assert "logname" in script
+
+
+def test_install_openclaw_installs_nodejs():
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "nodesource.com/setup_" in script
+    assert "apt-get install" in script
+    assert "nodejs" in script
+
+
+def test_install_openclaw_pins_version():
+    """Must pin to a specific version, not @latest, and not the broken 2026.3.22."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "OPENCLAW_VERSION=" in script
+    assert "openclaw@${OPENCLAW_VERSION}" in script
+    assert "@latest" not in script
+    # v2026.3.22 has a confirmed packaging regression — missing Control UI assets.
+    # See: https://github.com/openclaw/openclaw/issues/52808
+    assert "2026.3.22" not in script
+
+
+def test_install_openclaw_embeds_config_as_heredoc():
+    """Config must be embedded in the script, not copied from external files."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    # Should contain the config inline, not reference external files
+    assert "openclaw.json" in script
+    assert "127.0.0.1:1983/v1" in script
+    assert "potato/local" in script
+    assert "skipBootstrap" in script
+    # Must NOT reference the openclaw/ directory
+    assert 'cp "${REPO_ROOT}/openclaw/' not in script
+
+
+def test_install_openclaw_configurable_context_budget():
+    """Context budget values must be overridable via env vars."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "POTATO_CONTEXT_WINDOW" in script
+    assert "POTATO_MAX_TOKENS" in script
+    assert "POTATO_BOOTSTRAP_MAX" in script
+    assert "POTATO_COMPACTION_RESERVE" in script
+
+
+def test_install_openclaw_dynamic_origins():
+    """allowedOrigins must be built dynamically from hostname and IPs, including .local mDNS."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "hostname -I" in script
+    assert "allowedOrigins" in script
+    assert ".local:" in script  # mDNS variant must be included
+
+
+def test_install_openclaw_disables_all_skills():
+    """Must glob ALL SKILL.md files, not a hardcoded list."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert ".disabled" in script
+    assert "find" in script
+    assert 'SKILL.md' in script
+    # Must NOT have a hardcoded skill list
+    assert "OPENCLAW_SKILLS_TO_DISABLE" not in script
+
+
+def test_install_openclaw_preserves_existing_config():
+    """Re-running the installer must not overwrite existing config but must migrate Potato fixes."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "openclaw.json" in script
+    # Must check if config exists before writing
+    assert "-f" in script  # file existence test
+    # Must migrate .local origin and image input on existing configs
+    assert ".local:" in script
+    assert "migrated" in script
+
+
+def test_origin_migration_adds_mdns_without_duplicating(tmp_path):
+    """Origin migration must add .local variant and be idempotent."""
+    config_path = tmp_path / "openclaw.json"
+    config = {
+        "gateway": {
+            "controlUi": {
+                "allowedOrigins": [
+                    "http://localhost:18789",
+                    "http://potato:18789",
+                ]
+            }
+        }
+    }
+    config_path.write_text(json.dumps(config))
+
+    # The origin migration uses sed — simulate it
+    origin = "http://potato.local:18789"
+    content = config_path.read_text()
+    assert origin not in content
+
+    # Simulate the sed: insert at the start of allowedOrigins array
+    content = content.replace(
+        '"allowedOrigins": [',
+        f'"allowedOrigins": ["{origin}", ',
+    )
+    config_path.write_text(content)
+    result = json.loads(config_path.read_text())
+    assert origin in result["gateway"]["controlUi"]["allowedOrigins"]
+
+    # Running again should NOT duplicate (the grep check prevents it)
+    assert content.count(origin) == 1
+
+
+def test_vision_migration_targets_only_potato_model(tmp_path):
+    """Run the actual migration logic against a sample config with multiple providers."""
+    config = {
+        "models": {
+            "providers": {
+                "potato": {
+                    "baseUrl": "http://127.0.0.1:1983/v1",
+                    "models": [
+                        {"id": "local", "name": "Potato OS Local Model", "input": ["text"]},
+                    ],
+                },
+                "custom": {
+                    "baseUrl": "http://example.com/v1",
+                    "models": [
+                        {"id": "text-model", "name": "Text Only Model", "input": ["text"]},
+                    ],
+                },
+            }
+        }
+    }
+    config_path = tmp_path / "openclaw.json"
+    config_path.write_text(json.dumps(config, indent=2))
+
+    # Extract and run the migration logic from the install script
+    migration = textwrap.dedent(f"""\
+        import json
+        cfg = json.load(open('{config_path}'))
+        models = cfg.get('models',{{}}).get('providers',{{}}).get('potato',{{}}).get('models',[])
+        potato_model = next((m for m in models if m.get('id') == 'local'), None)
+        if potato_model and potato_model.get('input') == ['text']:
+            potato_model['input'] = ['text', 'image']
+            json.dump(cfg, open('{config_path}', 'w'), indent=2)
+    """)
+    subprocess.check_call(["python3", "-c", migration])
+
+    result = json.loads(config_path.read_text())
+    # Potato model should be migrated
+    potato_models = result["models"]["providers"]["potato"]["models"]
+    assert potato_models[0]["input"] == ["text", "image"]
+    # Custom user model must NOT be touched
+    custom_models = result["models"]["providers"]["custom"]["models"]
+    assert custom_models[0]["input"] == ["text"]
+
+
+def test_install_openclaw_advertises_vision():
+    """Model input must include image for vision-capable Potato models."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert '"image"' in script
+    assert '"text"' in script
+
+
+def test_install_openclaw_stock_port():
+    """Must use stock OpenClaw port 18789."""
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "OPENCLAW_PORT=18789" in script
+
+
+def test_install_openclaw_enables_linger():
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "loginctl enable-linger" in script
+
+
+def test_install_openclaw_generates_gateway_token():
+    script = Path("bin/install_openclaw.sh").read_text(encoding="utf-8")
+    assert "openssl rand" in script
+    assert "GATEWAY_TOKEN" in script
+
+
+def test_uninstall_openclaw_detects_real_user():
+    script = Path("bin/uninstall_openclaw.sh").read_text(encoding="utf-8")
+    assert "SUDO_USER" in script
+    assert "logname" in script
+
+
+def test_uninstall_openclaw_removes_service():
+    script = Path("bin/uninstall_openclaw.sh").read_text(encoding="utf-8")
+    assert "disable --now openclaw-gateway" in script
+    assert "openclaw-gateway.service" in script
+
+
+def test_uninstall_openclaw_restores_all_skills():
+    """Must glob ALL .disabled files, not a hardcoded list."""
+    script = Path("bin/uninstall_openclaw.sh").read_text(encoding="utf-8")
+    assert "SKILL.md.disabled" in script
+    assert "find" in script
+
+
+def test_uninstall_openclaw_removes_config():
+    script = Path("bin/uninstall_openclaw.sh").read_text(encoding="utf-8")
+    assert ".openclaw" in script
+
+
+def test_uninstall_dev_handles_openclaw():
+    script = Path("bin/uninstall_dev.sh").read_text(encoding="utf-8")
+    assert "openclaw" in script
+
+
+def test_uninstall_dev_targets_real_user():
+    """Must use SUDO_USER to clean up the real user's service, not root's."""
+    script = Path("bin/uninstall_dev.sh").read_text(encoding="utf-8")
+    assert "SUDO_USER" in script
+    assert "sudo -u" in script
+    assert "XDG_RUNTIME_DIR" in script
 

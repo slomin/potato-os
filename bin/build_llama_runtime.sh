@@ -312,6 +312,11 @@ cat > "${slot_dir}/runtime.json" <<EOF
 }
 EOF
 
+# Include upstream LICENSE in the runtime slot for redistribution compliance.
+if [ -f "${SOURCE_DIR}/LICENSE" ]; then
+  cp "${SOURCE_DIR}/LICENSE" "${slot_dir}/LICENSE"
+fi
+
 printf '\n=== Built runtime: %s ===\n' "${FAMILY}"
 printf 'Slot: %s\n' "${slot_dir}"
 printf 'Commit: %s\n' "${commit}"

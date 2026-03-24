@@ -169,6 +169,12 @@ build_stage_payload() {
   rsync -a "${repo_root}/nginx/" "${potato_root}/nginx/"
   install -m 0644 "${repo_root}/requirements.txt" "${potato_root}/app/requirements.txt"
 
+  for _notice_file in LICENSE THIRD_PARTY_NOTICES.md; do
+    if [ -f "${repo_root}/${_notice_file}" ]; then
+      install -m 0644 "${repo_root}/${_notice_file}" "${potato_root}/${_notice_file}"
+    fi
+  done
+
   local bundle_src
   bundle_src="$(resolve_llama_bundle_src "${repo_root}")"
   if [ -z "${bundle_src}" ] || [ ! -x "${bundle_src}/bin/llama-server" ] || [ ! -d "${bundle_src}/lib" ]; then

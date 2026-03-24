@@ -133,4 +133,5 @@ See [Building Images](docs/building-images.md) for prerequisites, variants, flas
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE) for details.
+Apache License 2.0. See [LICENSE](LICENSE) for details. Third-party component
+attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

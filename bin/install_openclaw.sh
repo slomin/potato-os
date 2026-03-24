@@ -342,6 +342,7 @@ else
   printf '⏳ Gateway may still be starting. Check: systemctl --user status openclaw-gateway\n\n'
 fi
 
-printf 'Dashboard:  http://%s:%s/#token=%s\n' "${PI_HOSTNAME:-potato.local}" "${OPENCLAW_PORT}" "${GATEWAY_TOKEN}"
+DASHBOARD_HOST="${PI_HOSTNAME:-potato}.local"
+printf 'Dashboard:  http://%s:%s/#token=%s\n' "${DASHBOARD_HOST}" "${OPENCLAW_PORT}" "${GATEWAY_TOKEN}"
 printf 'Test:       su - %s -c "openclaw agent --local --agent main --message hi"\n' "${REAL_USER}"
 printf '\nContext budget: %s window / %s max tokens (override with POTATO_CONTEXT_WINDOW / POTATO_MAX_TOKENS)\n' "${CONTEXT_WINDOW}" "${MAX_TOKENS}"

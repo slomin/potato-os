@@ -111,8 +111,9 @@ log_stage "Syncing repository to Pi (excluding local heavy artifacts)..."
 SSHPASS="${PI_PASSWORD}" sshpass -e rsync "${rsync_flags[@]}" "${rsync_progress_flags[@]}" \
   -e "ssh ${PI_SSH_OPTIONS}" \
   --exclude '.git' --exclude '.venv' --exclude '__pycache__' --exclude 'references/' \
-  --exclude 'models/' --exclude 'node_modules/' --exclude 'output/' --exclude '.cache/' \
-  --exclude 'test-results/' --exclude 'playwright-report/' --exclude '.pytest_cache/' \
+  --exclude 'models/' --exclude 'projectors/' --exclude 'node_modules/' --exclude 'output/' \
+  --exclude '.cache/' --exclude 'test-results/' --exclude 'playwright-report/' \
+  --exclude '.pytest_cache/' \
   "${PROJECT_ROOT}/" "${PI_USER}@${PI_HOST}:/tmp/potato-os/"
 report_stage_time "Repository sync" "${stage_started_at}"
 

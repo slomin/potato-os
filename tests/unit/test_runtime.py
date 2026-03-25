@@ -26,6 +26,7 @@ from app.runtime_state import (
     _estimate_power_from_cpu_load,
     _parse_psi_memory_lines,
     _parse_zram_mm_stat,
+    _parse_llama_rss_from_proc_status,
     _read_psi_memory,
     _read_zram_mm_stat,
     ensure_compatible_runtime,
@@ -1164,3 +1165,54 @@ def test_snapshot_includes_memory_pressure_and_zram_compression(monkeypatch):
     assert snapshot["memory_pressure"]["some_avg10"] == pytest.approx(1.5)
     assert snapshot["zram_compression"]["available"] is True
     assert snapshot["zram_compression"]["compression_ratio"] == pytest.approx(2.66)
+
+
+# ── llama-server RSS parser tests ─────────────────────────────────────
+
+
+SAMPLE_PROC_STATUS_LLAMA = """\
+Name:	llama-server
+Umask:	0022
+State:	S (sleeping)
+Tgid:	6611
+Pid:	6611
+VmPeak:	12005584 kB
+VmSize:	12005584 kB
+VmRSS:	7340032 kB
+RssAnon:	622592 kB
+RssFile:	6717440 kB
+RssShmem:	0 kB
+VmData:	1048576 kB
+VmStk:	8192 kB
+"""
+
+
+def test_parse_llama_rss_extracts_all_fields():
+    result = _parse_llama_rss_from_proc_status(SAMPLE_PROC_STATUS_LLAMA)
+
+    assert result["available"] is True
+    assert result["rss_bytes"] == 7340032 * 1024
+    assert result["rss_anon_bytes"] == 622592 * 1024
+    assert result["rss_file_bytes"] == 6717440 * 1024
+
+
+def test_parse_llama_rss_handles_empty_string():
+    result = _parse_llama_rss_from_proc_status("")
+
+    assert result["available"] is False
+    assert result["rss_bytes"] is None
+    assert result["rss_anon_bytes"] is None
+    assert result["rss_file_bytes"] is None
+
+
+def test_parse_llama_rss_handles_missing_fields():
+    result = _parse_llama_rss_from_proc_status("Name:\tllama-server\nPid:\t6611\n")
+
+    assert result["available"] is False
+    assert result["rss_bytes"] is None
+
+
+def test_parse_llama_rss_handles_none():
+    result = _parse_llama_rss_from_proc_status(None)
+
+    assert result["available"] is False

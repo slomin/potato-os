@@ -558,7 +558,7 @@ test("pressure row appears when PSI data available", async ({ page }) => {
 });
 
 
-test("pressure row hidden when PSI unavailable", async ({ page }) => {
+test("pressure row shows dash when PSI unavailable", async ({ page }) => {
   await page.route("**/status", async (route) => {
     await route.fulfill({
       status: 200,
@@ -587,7 +587,8 @@ test("pressure row hidden when PSI unavailable", async ({ page }) => {
   });
   await page.goto("/");
   await waitForStatusApplied(page);
-  await expect(page.locator("#runtimeDetailPressureRow")).toBeHidden();
+  await expect(page.locator("#runtimeDetailPressureRow")).toBeVisible();
+  await expect(page.locator("#runtimeDetailPressureValue")).toHaveText("--");
 });
 
 

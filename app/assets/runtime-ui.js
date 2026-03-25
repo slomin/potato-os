@@ -116,30 +116,44 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
       if (cpuClockDetail) cpuClockDetail.textContent = cpuClock;
       applyRuntimeMetricSeverity(cpuClockDetail, percentFromRatio(systemPayload?.cpu_clock_arm_hz, _cpuMaxHz(systemPayload)));
 
-      const memUsed = formatBytes(systemPayload?.memory_used_bytes);
       const memTotal = formatBytes(systemPayload?.memory_total_bytes);
-      const memAvailable = Number(systemPayload?.memory_available_bytes);
+      const memTotalBytes = Number(systemPayload?.memory_total_bytes);
+      const llamaRss = systemPayload?.llama_rss;
+      const llamaRssBytes = Number(llamaRss?.rss_bytes);
+      const llamaFileBytes = Number(llamaRss?.rss_file_bytes);
       if (memoryDetail) {
-        if (Number.isFinite(memAvailable) && memAvailable > 0) {
-          memoryDetail.textContent = `${formatBytes(memAvailable)} available (${memUsed} used / ${memTotal})`;
+        if (llamaRss?.available === true && Number.isFinite(llamaRssBytes) && llamaRssBytes > 0) {
+          const rssPercent = Number.isFinite(memTotalBytes) && memTotalBytes > 0
+            ? ` (${Math.round(llamaRssBytes / memTotalBytes * 100)}%)`
+            : "";
+          const modelPart = Number.isFinite(llamaFileBytes) && llamaFileBytes > 0
+            ? `, model ${formatBytes(llamaFileBytes)}`
+            : "";
+          memoryDetail.textContent = `${formatBytes(llamaRssBytes)}${rssPercent} resident${modelPart} / ${memTotal}`;
         } else {
-          const memPercent = formatPercent(systemPayload?.memory_percent, 0);
-          memoryDetail.textContent = `${memUsed} / ${memTotal} (${memPercent})`;
+          const memAvailable = Number(systemPayload?.memory_available_bytes);
+          const memUsed = formatBytes(systemPayload?.memory_used_bytes);
+          if (Number.isFinite(memAvailable) && memAvailable > 0) {
+            memoryDetail.textContent = `${formatBytes(memAvailable)} available (${memUsed} used / ${memTotal})`;
+          } else {
+            const memPercent = formatPercent(systemPayload?.memory_percent, 0);
+            memoryDetail.textContent = `${memUsed} / ${memTotal} (${memPercent})`;
+          }
         }
       }
       applyMemoryPressureSeverity(memoryDetail, systemPayload);
 
       const pressure = systemPayload?.memory_pressure;
+      if (pressureRow) pressureRow.style.display = "";
       if (pressure?.available === true) {
-        if (pressureRow) pressureRow.style.display = "";
         const fullAvg10 = Number(pressure.full_avg10);
         const someAvg10 = Number(pressure.some_avg10);
         const psiValue = (Number.isFinite(fullAvg10) && fullAvg10 > 0) ? fullAvg10 : (Number.isFinite(someAvg10) ? someAvg10 : 0);
         if (pressureDetail) pressureDetail.textContent = `${psiValue.toFixed(1)}%`;
         applyRuntimeMetricSeverity(pressureDetail, fullAvg10 > 10 ? 100 : fullAvg10 > 0 ? 80 : someAvg10 > 10 ? 70 : 0);
       } else {
-        if (pressureRow) pressureRow.style.display = "none";
         if (pressureDetail) pressureDetail.textContent = "--";
+        applyRuntimeMetricSeverity(pressureDetail, Number.NaN);
       }
 
       const swapUsed = formatBytes(systemPayload?.swap_used_bytes);

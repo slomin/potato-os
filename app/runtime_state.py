@@ -1075,6 +1075,7 @@ def default_system_metrics_snapshot() -> dict[str, Any]:
         "memory_percent": None,
         "memory_pressure": _default_psi_memory(),
         "zram_compression": _default_zram_compression(),
+        "llama_rss": _default_llama_rss(),
         "swap_label": "swap",
         "swap_total_bytes": 0,
         "swap_used_bytes": 0,
@@ -1428,6 +1429,53 @@ def _read_zram_mm_stat() -> dict[str, Any]:
     return _parse_zram_mm_stat(raw)
 
 
+def _default_llama_rss() -> dict[str, Any]:
+    return {
+        "available": False,
+        "rss_bytes": None,
+        "rss_anon_bytes": None,
+        "rss_file_bytes": None,
+    }
+
+
+def _parse_llama_rss_from_proc_status(raw: str | None) -> dict[str, Any]:
+    result = _default_llama_rss()
+    if not raw:
+        return result
+
+    fields = {}
+    for line in raw.splitlines():
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        val = val.strip()
+        if val.endswith(" kB"):
+            try:
+                fields[key.strip()] = int(val[:-3]) * 1024
+            except (ValueError, TypeError):
+                pass
+
+    if "VmRSS" not in fields:
+        return result
+
+    result["available"] = True
+    result["rss_bytes"] = fields.get("VmRSS")
+    result["rss_anon_bytes"] = fields.get("RssAnon")
+    result["rss_file_bytes"] = fields.get("RssFile")
+    return result
+
+
+def _read_llama_rss(pid: int | None) -> dict[str, Any]:
+    if pid is None or pid <= 0:
+        return _default_llama_rss()
+    path = Path(f"/proc/{pid}/status")
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return _default_llama_rss()
+    return _parse_llama_rss_from_proc_status(raw)
+
+
 def _collect_static_platform_info_uncached() -> dict[str, Any]:
     kernel_info = _read_kernel_version_info()
     return {
@@ -1551,7 +1599,7 @@ def build_power_estimate_status(runtime: RuntimeConfig, power_snapshot: Any) -> 
     return payload
 
 
-def collect_system_metrics_snapshot() -> dict[str, Any]:
+def collect_system_metrics_snapshot(*, llama_pid: int | None = None) -> dict[str, Any]:
     snapshot = default_system_metrics_snapshot()
     snapshot["updated_at_unix"] = int(time.time())
     now_unix = int(snapshot["updated_at_unix"])
@@ -1617,6 +1665,11 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
     if zram.get("available"):
         metrics_collected = True
 
+    llama_rss = _read_llama_rss(llama_pid)
+    snapshot["llama_rss"] = llama_rss
+    if llama_rss.get("available"):
+        metrics_collected = True
+
     temp_c = _parse_vcgencmd_temp(_run_vcgencmd("measure_temp"))
     if temp_c is None:
         temp_c = _read_sysfs_temp()
@@ -1660,7 +1713,9 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
 async def system_metrics_loop(app: FastAPI) -> None:
     while True:
         try:
-            app.state.system_metrics_snapshot = collect_system_metrics_snapshot()
+            proc = getattr(app.state, "llama_process", None)
+            llama_pid = proc.pid if proc is not None and proc.returncode is None else None
+            app.state.system_metrics_snapshot = collect_system_metrics_snapshot(llama_pid=llama_pid)
             await asyncio.sleep(2)
         except asyncio.CancelledError:
             raise

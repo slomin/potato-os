@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import stat
+import subprocess
 import tarfile
 import time
 from pathlib import Path
@@ -386,6 +387,58 @@ def _find_update_root(extracted_dir: Path) -> Path:
     )
 
 
+def _find_unwritable(base_dir: Path) -> list[Path]:
+    """Return paths under app/ and bin/ that the current process cannot write."""
+    bad: list[Path] = []
+    for dirname in UPDATE_APPLY_DIRS:
+        target = base_dir / dirname
+        if not target.exists():
+            continue
+        if not os.access(target, os.W_OK):
+            bad.append(target)
+        for child in target.rglob("*"):
+            if not os.access(child, os.W_OK):
+                bad.append(child)
+    return bad
+
+
+def _repair_ownership(base_dir: Path) -> bool:
+    """Attempt to fix ownership via sudo chown. Returns True on success."""
+    for dirname in UPDATE_APPLY_DIRS:
+        target = base_dir / dirname
+        if not target.exists():
+            continue
+        result = subprocess.run(
+            ["sudo", "-n", "chown", "-R", "potato:potato", str(target)],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "Ownership repair failed for %s: %s",
+                target,
+                result.stderr.decode(errors="replace").strip(),
+            )
+            return False
+    logger.info("Ownership repair succeeded for %s", base_dir)
+    return True
+
+
+def _ensure_target_writable(runtime: RuntimeConfig) -> None:
+    """Check target dirs are writable; attempt repair if not."""
+    bad = _find_unwritable(runtime.base_dir)
+    if not bad:
+        return
+    logger.warning("Found %d non-writable paths, attempting ownership repair", len(bad))
+    if _repair_ownership(runtime.base_dir):
+        bad = _find_unwritable(runtime.base_dir)
+    if bad:
+        raise PermissionError(
+            f"Ownership drift prevents OTA apply ({len(bad)} non-writable paths "
+            f"under {runtime.base_dir}). "
+            f"Fix with: sudo chown -R potato:potato {runtime.base_dir}"
+        )
+
+
 def _backup_live_dirs(runtime: RuntimeConfig, backup_dir: Path) -> None:
     """Snapshot current app/ and bin/ so they can be restored on failure."""
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -424,6 +477,7 @@ async def apply_staged_update(runtime: RuntimeConfig, staged_dir: Path) -> None:
     backup_dir = staging_dir(runtime) / "_backup"
 
     def _apply() -> None:
+        _ensure_target_writable(runtime)
         _backup_live_dirs(runtime, backup_dir)
         root = _find_update_root(staged_dir)
         for dirname in UPDATE_APPLY_DIRS:

@@ -76,5 +76,13 @@ potato ALL=(pi) NOPASSWD: ALL
 SUDOERS
 chmod 0440 /etc/sudoers.d/potato-terminal
 
+cat > /etc/sudoers.d/potato-ota-repair <<'SUDOERS'
+potato ALL=(root) NOPASSWD: /bin/chown -R potato\:potato /opt/potato/app
+potato ALL=(root) NOPASSWD: /usr/bin/chown -R potato\:potato /opt/potato/app
+potato ALL=(root) NOPASSWD: /bin/chown -R potato\:potato /opt/potato/bin
+potato ALL=(root) NOPASSWD: /usr/bin/chown -R potato\:potato /opt/potato/bin
+SUDOERS
+chmod 0440 /etc/sudoers.d/potato-ota-repair
+
 systemctl enable potato-firstboot.service potato.service nginx avahi-daemon ssh
 EOF

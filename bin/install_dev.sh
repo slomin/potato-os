@@ -123,7 +123,7 @@ if [ "${POTATO_ENFORCE_HOSTNAME}" = "1" ]; then
   fi
 
   hosts_tmp="$(mktemp)"
-  awk -v hostname="${POTATO_HOSTNAME}" '
+  run_sudo cat /etc/hosts | awk -v hostname="${POTATO_HOSTNAME}" '
     BEGIN { printed = 0 }
     /^127\.0\.1\.1[[:space:]]/ {
       if (!printed) {
@@ -138,7 +138,7 @@ if [ "${POTATO_ENFORCE_HOSTNAME}" = "1" ]; then
         print "127.0.1.1 " hostname ".local " hostname
       }
     }
-  ' /etc/hosts > "${hosts_tmp}"
+  ' > "${hosts_tmp}"
   run_sudo install -m 0644 "${hosts_tmp}" /etc/hosts
   rm -f "${hosts_tmp}"
 

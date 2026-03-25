@@ -112,7 +112,7 @@ def test_chat_ui_runtime_details_hide_compact_and_apply_metric_threshold_classes
     assert "runtime-metric-critical" in CHAT_UI
     assert "CPU_CLOCK_MAX_HZ_PI5" in CHAT_UI
     assert "GPU_CLOCK_MAX_HZ_PI5" in CHAT_UI
-    assert "applyRuntimeMetricSeverity(memoryDetail, systemPayload?.memory_percent);" in CHAT_UI
+    assert "applyMemoryPressureSeverity(memoryDetail, systemPayload);" in CHAT_UI
     assert "applyRuntimeMetricSeverity(swapDetail, systemPayload?.swap_percent);" in CHAT_UI
     assert "applyRuntimeMetricSeverity(tempDetail, tempValue);" in CHAT_UI
     assert 'case "tool_calls"' in CHAT_UI
@@ -338,12 +338,13 @@ def test_chat_ui_shows_pi_runtime_compact_with_details_toggle_above_settings():
     assert '>Bootloader</span>' in CHAT_UI
     assert '>Firmware</span>' in CHAT_UI
     assert "Performance" in CHAT_UI
-    assert "Memory &amp; storage" in CHAT_UI
+    assert 'aria-label="Memory"' in CHAT_UI
+    assert 'aria-label="Storage"' in CHAT_UI
     assert "Platform" in CHAT_UI
     assert '>zram</span>' in CHAT_UI
     assert "Power note:" not in CHAT_UI
     assert CHAT_HTML.index('id="runtimeDetailPower"') < CHAT_HTML.index('id="runtimeDetailCpuValue"')
-    assert "renderSystemRuntime(statusPayload?.system)" in CHAT_UI
+    assert "renderSystemRuntime(statusPayload?.system, statusPayload)" in CHAT_UI
     assert CHAT_HTML.index('id="systemRuntimeCard"') < CHAT_HTML.index('id="settingsModal"')
     assert 'id="settingsModelWorkspace"' in CHAT_UI
     assert 'id="settingsYamlPanel"' in CHAT_UI

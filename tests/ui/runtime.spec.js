@@ -133,7 +133,9 @@ test("runtime details apply threshold colors for clock, memory, swap, and temper
   await page.locator("#runtimeViewToggle").click();
 
   await expect(page.locator("#runtimeDetailCpuClockValue")).toHaveClass(/runtime-metric-critical/);
-  await expect(page.locator("#runtimeDetailMemoryValue")).toHaveClass(/runtime-metric-critical/);
+  // Memory severity uses relaxed fallback thresholds when PSI unavailable:
+  // 93.75% maps to "high" (>=90%), not "critical" (>=95%).
+  await expect(page.locator("#runtimeDetailMemoryValue")).toHaveClass(/runtime-metric-high/);
   await expect(page.locator("#runtimeDetailSwapValue")).toHaveClass(/runtime-metric-high/);
   await expect(page.locator("#runtimeDetailTempValue")).toHaveClass(/runtime-metric-high/);
 });
@@ -477,3 +479,294 @@ test("runtime dropdown shows all compatible runtimes on Pi 5 mock", async ({ pag
 });
 
 
+// ── Memory pressure diagnostics tests ─────────────────────────────────
+
+test("memory row shows RAM used as total minus free", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        system: {
+          available: true,
+          updated_at_unix: 1771778048,
+          cpu_percent: 10,
+          cpu_cores_percent: [10, 10, 10, 10],
+          cpu_clock_arm_hz: 1500000000,
+          memory_total_bytes: 8450000000,
+          memory_used_bytes: 1940000000,
+          memory_available_bytes: 6120000000,
+          memory_free_bytes: 284000000,
+          memory_percent: 23,
+          swap_total_bytes: 2000000000,
+          swap_used_bytes: 0,
+          swap_percent: 0,
+          temperature_c: 50,
+          gpu_clock_core_hz: 500000000,
+          gpu_clock_v3d_hz: 500000000,
+          throttling: { raw: "0x0", any_current: false, any_history: false, current_flags: [], history_flags: [] },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  // RAM used = total - free = 8.45 GB - 284 MB ≈ 8.17 GB (97%)
+  await expect(page.locator("#runtimeDetailMemoryValue")).toContainText("8.17 GB");
+  await expect(page.locator("#runtimeDetailMemoryValue")).toContainText("97%");
+  await expect(page.locator("#runtimeDetailMemoryValue")).toContainText("8.45 GB");
+});
+
+test("llama-server and model rows shown when llama_rss available", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        system: {
+          available: true,
+          updated_at_unix: 1771778048,
+          cpu_percent: 10,
+          cpu_cores_percent: [10, 10, 10, 10],
+          cpu_clock_arm_hz: 1500000000,
+          memory_total_bytes: 8450000000,
+          memory_used_bytes: 1940000000,
+          memory_free_bytes: 284000000,
+          memory_percent: 23,
+          llama_rss: {
+            available: true,
+            rss_bytes: 3760000000,
+            rss_anon_bytes: 622000000,
+            rss_file_bytes: 2400000000,
+          },
+          swap_total_bytes: 2000000000,
+          swap_used_bytes: 0,
+          swap_percent: 0,
+          temperature_c: 50,
+          gpu_clock_core_hz: 500000000,
+          gpu_clock_v3d_hz: 500000000,
+          throttling: { raw: "0x0", any_current: false, any_history: false, current_flags: [], history_flags: [] },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await expect(page.locator("#runtimeDetailLlamaRssRow")).toBeVisible();
+  await expect(page.locator("#runtimeDetailLlamaRssValue")).toContainText("3.76 GB");
+  await expect(page.locator("#runtimeDetailLlamaRssValue")).toContainText("44%");
+  await expect(page.locator("#runtimeDetailModelRamRow")).toBeVisible();
+  await expect(page.locator("#runtimeDetailModelRamValue")).toContainText("2.40 GB");
+});
+
+test("model in RAM uses rss_anon when no-mmap mode active", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        system: {
+          available: true,
+          updated_at_unix: 1771778048,
+          cpu_percent: 50,
+          cpu_cores_percent: [50, 50, 50, 50],
+          cpu_clock_arm_hz: 2400000000,
+          memory_total_bytes: 17000000000,
+          memory_used_bytes: 14000000000,
+          memory_free_bytes: 500000000,
+          memory_percent: 82,
+          llama_rss: {
+            available: true,
+            rss_bytes: 13500000000,
+            rss_anon_bytes: 13200000000,
+            rss_file_bytes: 300000000,
+          },
+          swap_total_bytes: 2000000000,
+          swap_used_bytes: 0,
+          swap_percent: 0,
+          temperature_c: 60,
+          gpu_clock_core_hz: 500000000,
+          gpu_clock_v3d_hz: 500000000,
+          throttling: { raw: "0x0", any_current: false, any_history: false, current_flags: [], history_flags: [] },
+        },
+        llama_runtime: {
+          current: { family: "ik_llama", llama_cpp_commit: "abc12345", profile: "pi5-opt", has_server_binary: true },
+          available_runtimes: [],
+          switch: { active: false, target_family: null, error: null },
+          memory_loading: { mode: "full_ram", label: "Full RAM", no_mmap_env: "1" },
+          large_model_override: { enabled: false },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  // In no-mmap mode, model lives in anon RSS (13.2 GB), not file RSS (300 MB)
+  await expect(page.locator("#runtimeDetailModelRamValue")).toContainText("13.2 GB");
+});
+
+
+test("pressure row appears when PSI data available", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        system: {
+          available: true,
+          updated_at_unix: 1771778048,
+          cpu_percent: 10,
+          cpu_cores_percent: [10, 10, 10, 10],
+          cpu_clock_arm_hz: 1500000000,
+          memory_total_bytes: 8000000000,
+          memory_used_bytes: 6000000000,
+          memory_available_bytes: 1800000000,
+          memory_percent: 75,
+          memory_pressure: {
+            available: true,
+            some_avg10: 5.2,
+            some_avg60: 2.1,
+            some_avg300: 0.8,
+            full_avg10: 0.0,
+            full_avg60: 0.0,
+            full_avg300: 0.0,
+          },
+          swap_total_bytes: 2000000000,
+          swap_used_bytes: 100000000,
+          swap_percent: 5,
+          temperature_c: 55,
+          gpu_clock_core_hz: 500000000,
+          gpu_clock_v3d_hz: 500000000,
+          throttling: { raw: "0x0", any_current: false, any_history: false, current_flags: [], history_flags: [] },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await expect(page.locator("#runtimeDetailPressureRow")).toBeVisible();
+  await expect(page.locator("#runtimeDetailPressureValue")).toHaveText("5.2%");
+});
+
+
+test("pressure row shows dash when PSI unavailable", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        system: {
+          available: true,
+          updated_at_unix: 1771778048,
+          cpu_percent: 10,
+          cpu_cores_percent: [10, 10, 10, 10],
+          cpu_clock_arm_hz: 1500000000,
+          memory_total_bytes: 8000000000,
+          memory_used_bytes: 2000000000,
+          memory_percent: 25,
+          memory_pressure: { available: false },
+          swap_total_bytes: 2000000000,
+          swap_used_bytes: 0,
+          swap_percent: 0,
+          temperature_c: 45,
+          gpu_clock_core_hz: 500000000,
+          gpu_clock_v3d_hz: 500000000,
+          throttling: { raw: "0x0", any_current: false, any_history: false, current_flags: [], history_flags: [] },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await expect(page.locator("#runtimeDetailPressureRow")).toBeVisible();
+  await expect(page.locator("#runtimeDetailPressureValue")).toHaveText("--");
+});
+
+
+test("zram row shows compression ratio when zram_compression available", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        system: {
+          available: true,
+          updated_at_unix: 1771778048,
+          cpu_percent: 10,
+          cpu_cores_percent: [10, 10, 10, 10],
+          cpu_clock_arm_hz: 1500000000,
+          memory_total_bytes: 8000000000,
+          memory_used_bytes: 6000000000,
+          memory_percent: 75,
+          swap_label: "zram",
+          swap_total_bytes: 2147483648,
+          swap_used_bytes: 119439360,
+          swap_percent: 5.6,
+          zram_compression: {
+            available: true,
+            orig_data_size: 119439360,
+            compr_data_size: 44892922,
+            mem_used_total: 51118080,
+            mem_limit: 2147483648,
+            compression_ratio: 2.7,
+          },
+          temperature_c: 55,
+          gpu_clock_core_hz: 500000000,
+          gpu_clock_v3d_hz: 500000000,
+          throttling: { raw: "0x0", any_current: false, any_history: false, current_flags: [], history_flags: [] },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await expect(page.locator("#runtimeDetailSwapValue")).toContainText("compressed");
+  await expect(page.locator("#runtimeDetailSwapValue")).toContainText("2.7x");
+  await expect(page.locator("#runtimeDetailSwapValue")).toContainText("2.15 GB");
+});
+
+
+test("memory severity uses PSI thresholds when pressure data available", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        system: {
+          available: true,
+          updated_at_unix: 1771778048,
+          cpu_percent: 80,
+          cpu_cores_percent: [80, 80, 80, 80],
+          cpu_clock_arm_hz: 2400000000,
+          memory_total_bytes: 8000000000,
+          memory_used_bytes: 7500000000,
+          memory_available_bytes: 300000000,
+          memory_percent: 93.75,
+          memory_pressure: {
+            available: true,
+            some_avg10: 25.0,
+            some_avg60: 18.0,
+            some_avg300: 10.0,
+            full_avg10: 15.0,
+            full_avg60: 8.0,
+            full_avg300: 3.0,
+          },
+          swap_total_bytes: 2000000000,
+          swap_used_bytes: 1800000000,
+          swap_percent: 90,
+          temperature_c: 85,
+          gpu_clock_core_hz: 500000000,
+          gpu_clock_v3d_hz: 500000000,
+          throttling: { raw: "0x0", any_current: false, any_history: false, current_flags: [], history_flags: [] },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  // full_avg10 > 10 → critical severity on memory row
+  await expect(page.locator("#runtimeDetailMemoryValue")).toHaveClass(/runtime-metric-critical/);
+  // Pressure row shows full_avg10 percentage (thrashing)
+  await expect(page.locator("#runtimeDetailPressureRow")).toBeVisible();
+  await expect(page.locator("#runtimeDetailPressureValue")).toHaveText("15.0%");
+});

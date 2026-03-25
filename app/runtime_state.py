@@ -1071,7 +1071,12 @@ def default_system_metrics_snapshot() -> dict[str, Any]:
         "cpu_clock_arm_hz": None,
         "memory_total_bytes": 0,
         "memory_used_bytes": 0,
+        "memory_available_bytes": 0,
+        "memory_free_bytes": 0,
         "memory_percent": None,
+        "memory_pressure": _default_psi_memory(),
+        "zram_compression": _default_zram_compression(),
+        "llama_rss": _default_llama_rss(),
         "swap_label": "swap",
         "swap_total_bytes": 0,
         "swap_used_bytes": 0,
@@ -1328,6 +1333,150 @@ def _read_swap_label() -> str:
     return "swap"
 
 
+def _default_psi_memory() -> dict[str, Any]:
+    return {
+        "available": False,
+        "some_avg10": None,
+        "some_avg60": None,
+        "some_avg300": None,
+        "full_avg10": None,
+        "full_avg60": None,
+        "full_avg300": None,
+    }
+
+
+def _parse_psi_memory_lines(raw: str) -> dict[str, Any]:
+    result = _default_psi_memory()
+    if not raw or not raw.strip():
+        return result
+
+    parsed_any = False
+    for line in raw.strip().splitlines():
+        parts = line.strip().split()
+        if len(parts) < 4:
+            continue
+        prefix = parts[0]
+        if prefix not in ("some", "full"):
+            continue
+        kvs = {}
+        for part in parts[1:]:
+            if "=" in part:
+                key, _, val = part.partition("=")
+                kvs[key] = val
+        for suffix in ("avg10", "avg60", "avg300"):
+            if suffix in kvs:
+                try:
+                    result[f"{prefix}_{suffix}"] = float(kvs[suffix])
+                    parsed_any = True
+                except (ValueError, TypeError):
+                    pass
+
+    result["available"] = parsed_any
+    return result
+
+
+def _read_psi_memory() -> dict[str, Any]:
+    path = Path("/proc/pressure/memory")
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return _default_psi_memory()
+    return _parse_psi_memory_lines(raw)
+
+
+def _default_zram_compression() -> dict[str, Any]:
+    return {
+        "available": False,
+        "orig_data_size": None,
+        "compr_data_size": None,
+        "mem_used_total": None,
+        "mem_limit": None,
+        "compression_ratio": None,
+    }
+
+
+def _parse_zram_mm_stat(raw: str) -> dict[str, Any]:
+    result = _default_zram_compression()
+    if not raw or not raw.strip():
+        return result
+
+    parts = raw.strip().split()
+    if len(parts) < 4:
+        return result
+
+    try:
+        orig = int(parts[0])
+        compr = int(parts[1])
+        mem_used = int(parts[2])
+        mem_limit = int(parts[3])
+    except (ValueError, IndexError):
+        return result
+
+    result["available"] = True
+    result["orig_data_size"] = orig
+    result["compr_data_size"] = compr
+    result["mem_used_total"] = mem_used
+    result["mem_limit"] = mem_limit
+    result["compression_ratio"] = round(orig / compr, 2) if compr > 0 else None
+    return result
+
+
+def _read_zram_mm_stat() -> dict[str, Any]:
+    path = Path("/sys/block/zram0/mm_stat")
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return _default_zram_compression()
+    return _parse_zram_mm_stat(raw)
+
+
+def _default_llama_rss() -> dict[str, Any]:
+    return {
+        "available": False,
+        "rss_bytes": None,
+        "rss_anon_bytes": None,
+        "rss_file_bytes": None,
+    }
+
+
+def _parse_llama_rss_from_proc_status(raw: str | None) -> dict[str, Any]:
+    result = _default_llama_rss()
+    if not raw:
+        return result
+
+    fields = {}
+    for line in raw.splitlines():
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        val = val.strip()
+        if val.endswith(" kB"):
+            try:
+                fields[key.strip()] = int(val[:-3]) * 1024
+            except (ValueError, TypeError):
+                pass
+
+    if "VmRSS" not in fields:
+        return result
+
+    result["available"] = True
+    result["rss_bytes"] = fields.get("VmRSS")
+    result["rss_anon_bytes"] = fields.get("RssAnon")
+    result["rss_file_bytes"] = fields.get("RssFile")
+    return result
+
+
+def _read_llama_rss(pid: int | None) -> dict[str, Any]:
+    if pid is None or pid <= 0:
+        return _default_llama_rss()
+    path = Path(f"/proc/{pid}/status")
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return _default_llama_rss()
+    return _parse_llama_rss_from_proc_status(raw)
+
+
 def _collect_static_platform_info_uncached() -> dict[str, Any]:
     kernel_info = _read_kernel_version_info()
     return {
@@ -1451,7 +1600,7 @@ def build_power_estimate_status(runtime: RuntimeConfig, power_snapshot: Any) -> 
     return payload
 
 
-def collect_system_metrics_snapshot() -> dict[str, Any]:
+def collect_system_metrics_snapshot(*, llama_pid: int | None = None) -> dict[str, Any]:
     snapshot = default_system_metrics_snapshot()
     snapshot["updated_at_unix"] = int(time.time())
     now_unix = int(snapshot["updated_at_unix"])
@@ -1492,6 +1641,8 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
                     snapshot["cpu_clock_arm_hz"] = int(round(freq_current_mhz * 1_000_000))
             snapshot["memory_total_bytes"] = int(memory.total)
             snapshot["memory_used_bytes"] = int(memory.used)
+            snapshot["memory_available_bytes"] = int(memory.available)
+            snapshot["memory_free_bytes"] = int(getattr(memory, "free", 0))
             snapshot["memory_percent"] = round(_safe_float(memory.percent), 2)
             snapshot["swap_label"] = _read_swap_label()
             snapshot["swap_total_bytes"] = int(swap.total)
@@ -1505,6 +1656,21 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
             metrics_collected = True
         except Exception:
             logger.exception("system metrics collection failed (psutil)")
+
+    psi = _read_psi_memory()
+    snapshot["memory_pressure"] = psi
+    if psi.get("available"):
+        metrics_collected = True
+
+    zram = _read_zram_mm_stat()
+    snapshot["zram_compression"] = zram
+    if zram.get("available"):
+        metrics_collected = True
+
+    llama_rss = _read_llama_rss(llama_pid)
+    snapshot["llama_rss"] = llama_rss
+    if llama_rss.get("available"):
+        metrics_collected = True
 
     temp_c = _parse_vcgencmd_temp(_run_vcgencmd("measure_temp"))
     if temp_c is None:
@@ -1549,7 +1715,9 @@ def collect_system_metrics_snapshot() -> dict[str, Any]:
 async def system_metrics_loop(app: FastAPI) -> None:
     while True:
         try:
-            app.state.system_metrics_snapshot = collect_system_metrics_snapshot()
+            proc = getattr(app.state, "llama_process", None)
+            llama_pid = proc.pid if proc is not None and proc.returncode is None else None
+            app.state.system_metrics_snapshot = collect_system_metrics_snapshot(llama_pid=llama_pid)
             await asyncio.sleep(2)
         except asyncio.CancelledError:
             raise

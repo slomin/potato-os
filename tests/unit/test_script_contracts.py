@@ -140,6 +140,7 @@ def test_install_script_uses_reference_llama_bundle_sync():
     assert '"127.0.1.1 " hostname ".local " hostname' in script
     assert "avahi-daemon.conf" in script
     assert "host-name=${POTATO_HOSTNAME}" in script
+    assert "run_sudo cat /etc/hosts" in script
     assert "potato-runtime-reset.service" in script
     assert "/etc/sudoers.d/potato-runtime-reset" in script
     assert "systemctl start --no-block potato-runtime-reset.service" in script

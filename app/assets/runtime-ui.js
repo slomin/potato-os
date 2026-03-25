@@ -27,7 +27,7 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
       }
     }
 
-    export function renderSystemRuntime(systemPayload) {
+    export function renderSystemRuntime(systemPayload, statusPayload) {
       const compact = document.getElementById("runtimeCompact");
       if (!compact) return;
 
@@ -144,7 +144,8 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
 
       const llamaRss = systemPayload?.llama_rss;
       const llamaRssBytes = Number(llamaRss?.rss_bytes);
-      const llamaFileBytes = Number(llamaRss?.rss_file_bytes);
+      const noMmap = statusPayload?.llama_runtime?.memory_loading?.no_mmap_env === "1";
+      const modelRamBytes = noMmap ? Number(llamaRss?.rss_anon_bytes) : Number(llamaRss?.rss_file_bytes);
       if (llamaRss?.available === true && Number.isFinite(llamaRssBytes) && llamaRssBytes > 0) {
         if (llamaRssRow) llamaRssRow.style.display = "";
         const llPct = Number.isFinite(memTotalBytes) && memTotalBytes > 0
@@ -153,8 +154,8 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
         if (llamaRssDetail) llamaRssDetail.textContent = `${formatBytes(llamaRssBytes)}${llPct}`;
         if (modelRamRow) modelRamRow.style.display = "";
         if (modelRamDetail) {
-          modelRamDetail.textContent = Number.isFinite(llamaFileBytes) && llamaFileBytes > 0
-            ? formatBytes(llamaFileBytes)
+          modelRamDetail.textContent = Number.isFinite(modelRamBytes) && modelRamBytes > 0
+            ? formatBytes(modelRamBytes)
             : "--";
         }
       } else {

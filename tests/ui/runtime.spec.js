@@ -559,6 +559,52 @@ test("llama-server and model rows shown when llama_rss available", async ({ page
   await expect(page.locator("#runtimeDetailModelRamValue")).toContainText("2.40 GB");
 });
 
+test("model in RAM uses rss_anon when no-mmap mode active", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        system: {
+          available: true,
+          updated_at_unix: 1771778048,
+          cpu_percent: 50,
+          cpu_cores_percent: [50, 50, 50, 50],
+          cpu_clock_arm_hz: 2400000000,
+          memory_total_bytes: 17000000000,
+          memory_used_bytes: 14000000000,
+          memory_free_bytes: 500000000,
+          memory_percent: 82,
+          llama_rss: {
+            available: true,
+            rss_bytes: 13500000000,
+            rss_anon_bytes: 13200000000,
+            rss_file_bytes: 300000000,
+          },
+          swap_total_bytes: 2000000000,
+          swap_used_bytes: 0,
+          swap_percent: 0,
+          temperature_c: 60,
+          gpu_clock_core_hz: 500000000,
+          gpu_clock_v3d_hz: 500000000,
+          throttling: { raw: "0x0", any_current: false, any_history: false, current_flags: [], history_flags: [] },
+        },
+        llama_runtime: {
+          current: { family: "ik_llama", llama_cpp_commit: "abc12345", profile: "pi5-opt", has_server_binary: true },
+          available_runtimes: [],
+          switch: { active: false, target_family: null, error: null },
+          memory_loading: { mode: "full_ram", label: "Full RAM", no_mmap_env: "1" },
+          large_model_override: { enabled: false },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  // In no-mmap mode, model lives in anon RSS (13.2 GB), not file RSS (300 MB)
+  await expect(page.locator("#runtimeDetailModelRamValue")).toContainText("13.2 GB");
+});
+
 
 test("pressure row appears when PSI data available", async ({ page }) => {
   await page.route("**/status", async (route) => {

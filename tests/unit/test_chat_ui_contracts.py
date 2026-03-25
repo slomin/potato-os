@@ -344,7 +344,7 @@ def test_chat_ui_shows_pi_runtime_compact_with_details_toggle_above_settings():
     assert '>zram</span>' in CHAT_UI
     assert "Power note:" not in CHAT_UI
     assert CHAT_HTML.index('id="runtimeDetailPower"') < CHAT_HTML.index('id="runtimeDetailCpuValue"')
-    assert "renderSystemRuntime(statusPayload?.system)" in CHAT_UI
+    assert "renderSystemRuntime(statusPayload?.system, statusPayload)" in CHAT_UI
     assert CHAT_HTML.index('id="systemRuntimeCard"') < CHAT_HTML.index('id="settingsModal"')
     assert 'id="settingsModelWorkspace"' in CHAT_UI
     assert 'id="settingsYamlPanel"' in CHAT_UI

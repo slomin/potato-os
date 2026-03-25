@@ -554,8 +554,7 @@ test("pressure row appears when PSI data available", async ({ page }) => {
   await page.goto("/");
   await waitForStatusApplied(page);
   await expect(page.locator("#runtimeDetailPressureRow")).toBeVisible();
-  await expect(page.locator("#runtimeDetailPressureValue")).toContainText("minimal");
-  await expect(page.locator("#runtimeDetailPressureValue")).toContainText("5.2");
+  await expect(page.locator("#runtimeDetailPressureValue")).toHaveText("5.2%");
 });
 
 
@@ -675,8 +674,7 @@ test("memory severity uses PSI thresholds when pressure data available", async (
   await waitForStatusApplied(page);
   // full_avg10 > 10 → critical severity on memory row
   await expect(page.locator("#runtimeDetailMemoryValue")).toHaveClass(/runtime-metric-critical/);
-  // Pressure row shows thrashing state
+  // Pressure row shows full_avg10 percentage (thrashing)
   await expect(page.locator("#runtimeDetailPressureRow")).toBeVisible();
-  await expect(page.locator("#runtimeDetailPressureValue")).toContainText("thrashing");
-  await expect(page.locator("#runtimeDetailPressureValue")).toContainText("15.0");
+  await expect(page.locator("#runtimeDetailPressureValue")).toHaveText("15.0%");
 });

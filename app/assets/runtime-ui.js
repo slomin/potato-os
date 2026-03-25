@@ -134,15 +134,8 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
         if (pressureRow) pressureRow.style.display = "";
         const fullAvg10 = Number(pressure.full_avg10);
         const someAvg10 = Number(pressure.some_avg10);
-        let pressureText = "none";
-        if (Number.isFinite(fullAvg10) && fullAvg10 > 0) {
-          pressureText = `thrashing (full ${fullAvg10.toFixed(1)}%)`;
-        } else if (Number.isFinite(someAvg10) && someAvg10 > 10) {
-          pressureText = `some stalls (${someAvg10.toFixed(1)}%)`;
-        } else if (Number.isFinite(someAvg10) && someAvg10 > 0) {
-          pressureText = `minimal (${someAvg10.toFixed(1)}%)`;
-        }
-        if (pressureDetail) pressureDetail.textContent = pressureText;
+        const psiValue = (Number.isFinite(fullAvg10) && fullAvg10 > 0) ? fullAvg10 : (Number.isFinite(someAvg10) ? someAvg10 : 0);
+        if (pressureDetail) pressureDetail.textContent = `${psiValue.toFixed(1)}%`;
         applyRuntimeMetricSeverity(pressureDetail, fullAvg10 > 10 ? 100 : fullAvg10 > 0 ? 80 : someAvg10 > 10 ? 70 : 0);
       } else {
         if (pressureRow) pressureRow.style.display = "none";

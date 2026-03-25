@@ -53,7 +53,7 @@ def test_register_model_url_returns_warning_for_large_model_on_unsupported_pi(ru
     monkeypatch.setattr("app.main.fetch_remote_content_length_bytes", _fake_size)
     monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
     monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
-    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda _r: 1)
+    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda: 1)
 
     with TestClient(app) as client:
         response = client.post(
@@ -91,7 +91,7 @@ def test_upload_returns_warning_for_large_model_on_unsupported_pi(runtime, monke
 
     monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
     monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
-    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda _r: 1)
+    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda: 1)
 
     with TestClient(app) as client:
         response = client.post(

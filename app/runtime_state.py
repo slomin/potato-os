@@ -210,7 +210,7 @@ def get_model_upload_max_bytes(runtime: RuntimeConfig) -> int | None:
             return parsed
         logger.warning("Invalid POTATO_MODEL_UPLOAD_MAX_BYTES=%r; falling back to auto limit", raw_override)
 
-    free_bytes = get_free_storage_bytes(runtime)
+    free_bytes = get_model_volume_free_bytes(runtime)
     if free_bytes is not None:
         return max(0, int(free_bytes * MODEL_UPLOAD_STORAGE_SAFETY_FRACTION))
     return None
@@ -331,19 +331,18 @@ async def ensure_compatible_runtime(runtime: RuntimeConfig) -> tuple[bool, str]:
     return True, "pi4_incompatible_runtime"
 
 
-def get_large_model_warn_threshold_bytes(runtime: RuntimeConfig) -> int:
+def get_large_model_warn_threshold_bytes() -> int:
     raw = os.getenv("POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES", "").strip()
-    if raw:
-        parsed = _safe_int(raw, default=-1)
-        if parsed > 0:
-            return parsed
-        logger.warning(
-            "Invalid POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES=%r; using default",
-            raw,
-        )
-    free_bytes = get_free_storage_bytes(runtime)
-    if free_bytes is not None:
-        return max(0, int(free_bytes * MODEL_UPLOAD_STORAGE_SAFETY_FRACTION))
+    if not raw:
+        return LARGE_MODEL_UNSUPPORTED_PI_WARN_BYTES_DEFAULT
+    parsed = _safe_int(raw, default=-1)
+    if parsed > 0:
+        return parsed
+    logger.warning(
+        "Invalid POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES=%r; using default %d",
+        raw,
+        LARGE_MODEL_UNSUPPORTED_PI_WARN_BYTES_DEFAULT,
+    )
     return LARGE_MODEL_UNSUPPORTED_PI_WARN_BYTES_DEFAULT
 
 
@@ -836,8 +835,8 @@ def build_large_model_compatibility(
         total_memory_bytes=total_memory_bytes,
         pi_model_name=pi_model_name,
     )
-    threshold_bytes = get_large_model_warn_threshold_bytes(runtime)
-    storage_free = get_free_storage_bytes(runtime)
+    threshold_bytes = get_large_model_warn_threshold_bytes()
+    storage_free = get_model_volume_free_bytes(runtime)
     override_enabled = (
         normalize_allow_unsupported_large_models(allow_override)
         if allow_override is not None
@@ -850,15 +849,15 @@ def build_large_model_compatibility(
         size_bytes = 0
 
     warnings: list[dict[str, Any]] = []
-    if size_bytes > threshold_bytes and not override_enabled:
+    if size_bytes > threshold_bytes and device_class != "pi5-16gb" and not override_enabled:
         filename = str(model_filename or runtime.model_path.name or "model.gguf")
         warnings.append(
             {
                 "code": "large_model_unsupported_pi_warning",
                 "severity": "warning",
                 "message": (
-                    f"{filename} ({size_bytes} bytes) may exceed available storage "
-                    f"({threshold_bytes} bytes usable). Upload or loading may fail."
+                    f"{filename} is larger than the unsupported-device warning threshold "
+                    f"({threshold_bytes} bytes). Qwen3.5-35B-A3B is validated on Raspberry Pi 5 16GB only."
                 ),
                 "model_filename": filename,
                 "model_size_bytes": size_bytes,
@@ -1765,6 +1764,20 @@ def get_free_storage_bytes(runtime: RuntimeConfig) -> int | None:
     if psutil is None:
         return None
     probe_path = runtime.base_dir if runtime.base_dir.exists() else Path("/")
+    try:
+        usage = psutil.disk_usage(str(probe_path))
+        return int(max(0, usage.free))
+    except OSError:
+        return None
+
+
+def get_model_volume_free_bytes(runtime: RuntimeConfig) -> int | None:
+    if psutil is None:
+        return None
+    model_dir = runtime.model_path.parent
+    probe_path = model_dir if model_dir.exists() else runtime.base_dir
+    if not probe_path.exists():
+        probe_path = Path("/")
     try:
         usage = psutil.disk_usage(str(probe_path))
         return int(max(0, usage.free))

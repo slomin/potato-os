@@ -634,44 +634,19 @@ def test_classify_runtime_device_identifies_other_pi():
     assert device == "other-pi"
 
 
-def test_large_model_warn_threshold_uses_storage(monkeypatch, runtime):
-    free_bytes = 20 * 1024 * 1024 * 1024
-    monkeypatch.setattr("app.runtime_state.get_free_storage_bytes", lambda _r: free_bytes)
+def test_large_model_warn_threshold_defaults_to_5gib(monkeypatch):
     monkeypatch.delenv("POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES", raising=False)
-    from app.runtime_state import MODEL_UPLOAD_STORAGE_SAFETY_FRACTION
-    assert get_large_model_warn_threshold_bytes(runtime) == int(free_bytes * MODEL_UPLOAD_STORAGE_SAFETY_FRACTION)
+    assert get_large_model_warn_threshold_bytes() == LARGE_MODEL_UNSUPPORTED_PI_WARN_BYTES_DEFAULT
 
 
-def test_large_model_warn_threshold_falls_back_when_storage_unavailable(monkeypatch, runtime):
-    monkeypatch.setattr("app.runtime_state.get_free_storage_bytes", lambda _r: None)
-    monkeypatch.delenv("POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES", raising=False)
-    assert get_large_model_warn_threshold_bytes(runtime) == LARGE_MODEL_UNSUPPORTED_PI_WARN_BYTES_DEFAULT
-
-
-def test_large_model_warn_threshold_honors_env_override(monkeypatch, runtime):
+def test_large_model_warn_threshold_honors_env_override(monkeypatch):
     monkeypatch.setenv("POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES", "12345")
-    assert get_large_model_warn_threshold_bytes(runtime) == 12345
+    assert get_large_model_warn_threshold_bytes() == 12345
 
 
-def test_build_large_model_compatibility_warns_when_exceeds_storage(monkeypatch, runtime):
-    monkeypatch.setattr("app.runtime_state.get_free_storage_bytes", lambda _r: 4 * 1024 * 1024 * 1024)
-    monkeypatch.delenv("POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES", raising=False)
-
-    payload = build_large_model_compatibility(
-        runtime,
-        model_filename="Qwen_Qwen3.5-35B-A3B-Q2_K_L.gguf",
-        model_size_bytes=6 * 1024 * 1024 * 1024,
-    )
-
-    assert payload["warnings"]
-    assert payload["warnings"][0]["code"] == "large_model_unsupported_pi_warning"
-
-
-def test_build_large_model_compatibility_no_warning_when_storage_ample(monkeypatch, runtime):
-    monkeypatch.setattr("app.runtime_state.get_free_storage_bytes", lambda _r: 50 * 1024 * 1024 * 1024)
+def test_build_large_model_compatibility_warns_on_unsupported_large_model(monkeypatch, runtime):
     monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 5 Model B Rev 1.0")
     monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
-    monkeypatch.delenv("POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES", raising=False)
 
     payload = build_large_model_compatibility(
         runtime,
@@ -680,13 +655,28 @@ def test_build_large_model_compatibility_no_warning_when_storage_ample(monkeypat
     )
 
     assert payload["device_class"] == "pi5-8gb"
+    assert payload["large_model_warn_threshold_bytes"] == LARGE_MODEL_UNSUPPORTED_PI_WARN_BYTES_DEFAULT
+    assert payload["warnings"]
+    assert "Pi 5 16GB" in payload["warnings"][0]["message"]
+
+
+def test_build_large_model_compatibility_no_warning_on_pi5_16gb(monkeypatch, runtime):
+    monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 5 Model B Rev 1.1")
+    monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 16 * 1024 * 1024 * 1024)
+
+    payload = build_large_model_compatibility(
+        runtime,
+        model_filename="Qwen_Qwen3.5-35B-A3B-Q2_K_L.gguf",
+        model_size_bytes=6 * 1024 * 1024 * 1024,
+    )
+
+    assert payload["device_class"] == "pi5-16gb"
     assert payload["warnings"] == []
 
 
 def test_build_large_model_compatibility_includes_storage_free_bytes(monkeypatch, runtime):
     free = 20 * 1024 * 1024 * 1024
-    monkeypatch.setattr("app.runtime_state.get_free_storage_bytes", lambda _r: free)
-    monkeypatch.delenv("POTATO_UNSUPPORTED_PI_LARGE_MODEL_WARN_BYTES", raising=False)
+    monkeypatch.setattr("app.runtime_state.get_model_volume_free_bytes", lambda _r: free)
 
     payload = build_large_model_compatibility(runtime, model_size_bytes=1)
 

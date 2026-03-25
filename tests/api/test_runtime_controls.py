@@ -147,7 +147,7 @@ def test_set_large_model_override_persists_without_restart(runtime, monkeypatch)
     app.dependency_overrides[get_runtime] = lambda: runtime
     monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
     monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
-    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda _r: 1)
+    monkeypatch.setattr("app.runtime_state.get_large_model_warn_threshold_bytes", lambda: 1)
     with runtime.model_path.open("wb") as handle:
         handle.seek((6 * 1024 * 1024 * 1024) - 1)
         handle.write(b"x")

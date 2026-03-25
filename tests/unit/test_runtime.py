@@ -674,6 +674,15 @@ def test_build_large_model_compatibility_no_warning_on_pi5_16gb(monkeypatch, run
     assert payload["warnings"] == []
 
 
+def test_build_large_model_compatibility_includes_storage_free_bytes(monkeypatch, runtime):
+    free = 20 * 1024 * 1024 * 1024
+    monkeypatch.setattr("app.runtime_state.get_model_volume_free_bytes", lambda _r: free)
+
+    payload = build_large_model_compatibility(runtime, model_size_bytes=1)
+
+    assert payload["storage_free_bytes"] == free
+
+
 def test_runtime_device_compatibility_pi4_ik_llama_incompatible():
     result = check_runtime_device_compatibility("pi4-8gb", "ik_llama")
     assert result["compatible"] is False

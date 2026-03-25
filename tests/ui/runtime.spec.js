@@ -770,3 +770,35 @@ test("memory severity uses PSI thresholds when pressure data available", async (
   await expect(page.locator("#runtimeDetailPressureRow")).toBeVisible();
   await expect(page.locator("#runtimeDetailPressureValue")).toHaveText("15.0%");
 });
+
+test("large-model warning is hidden when model fits within storage limits", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        model_present: true,
+        model: {
+          filename: "big-model-10gb.gguf",
+          settings: { temperature: 0.7, repeat_penalty: 1.1, top_k: 40, top_p: 0.95, min_p: 0.05, n_predict: 2048 },
+          capabilities: { vision: false, function_calling: false },
+          projector: null,
+        },
+        compatibility: {
+          device_class: "pi5-8gb",
+          pi_model_name: "Raspberry Pi 5 Model B Rev 1.0",
+          memory_total_bytes: 8 * 1024 * 1024 * 1024,
+          large_model_warn_threshold_bytes: 45 * 1024 * 1024 * 1024,
+          supported_target: "raspberry-pi-5-16gb",
+          override_enabled: false,
+          storage_free_bytes: 50 * 1024 * 1024 * 1024,
+          runtime_compatibility: { compatible: true },
+          warnings: [],
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await expect(page.locator("#compatibilityWarnings")).toBeHidden();
+});

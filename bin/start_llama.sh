@@ -286,6 +286,16 @@ pick_mmproj() {
 
   if [ -n "${MMPROJ_PATH}" ]; then
     [ -f "${MMPROJ_PATH}" ] || die "mmproj file not found: ${MMPROJ_PATH}"
+    # When Python passed the generic file and auto-download is available,
+    # try to replace it with a model-specific version (#136).
+    if [ "$(basename "${MMPROJ_PATH}")" = "mmproj-F16.gguf" ] \
+        && [ "${AUTO_DOWNLOAD_MMPROJ}" = "1" ] \
+        && model_is_qwen35_vision; then
+      if download_mmproj; then
+        return 0
+      fi
+      # Download failed (offline?) — keep using the generic as-is.
+    fi
     return 0
   fi
 
@@ -307,13 +317,10 @@ pick_mmproj() {
   fi
 
   if model_is_qwen35_vision; then
+    # 1. Try exact model-specific match (skip generic — handled below).
     while read -r candidate_base; do
       [ -n "${candidate_base}" ] || continue
-      # Skip stale generic when auto-download is on — it may belong to a
-      # different model (#136).
-      if [ "${candidate_base}" = "mmproj-F16.gguf" ] && [ "${AUTO_DOWNLOAD_MMPROJ}" = "1" ]; then
-        continue
-      fi
+      [ "${candidate_base}" = "mmproj-F16.gguf" ] && continue
       for candidate in "${mmproj_candidates[@]}"; do
         if [ "$(basename "${candidate}")" = "${candidate_base}" ]; then
           MMPROJ_PATH="${candidate}"
@@ -322,22 +329,24 @@ pick_mmproj() {
       done
     done < <(qwen35_mmproj_name_candidates | awk '!seen[$0]++')
 
+    # 2. No model-specific match — try auto-download before falling back.
+    #    download_mmproj saves with a model-specific local name (#136).
+    if [ "${AUTO_DOWNLOAD_MMPROJ}" = "1" ] && download_mmproj; then
+      return 0
+    fi
+
+    # 3. Offline fallback: accept only generic mmproj-F16.gguf.
+    #    Do NOT accept other models' specific projectors — they have
+    #    different embedding dimensions and would crash llama-server (#136).
     for candidate in "${mmproj_candidates[@]}"; do
       candidate_base="$(basename "${candidate}" | tr '[:upper:]' '[:lower:]')"
-      if [[ "${candidate_base}" == *qwen*3.5* ]]; then
-        compatible_candidates+=("${candidate}")
-      elif [[ "${candidate_base}" == mmproj-f16.gguf ]] && [ "${AUTO_DOWNLOAD_MMPROJ}" != "1" ]; then
-        # Accept generic only when auto-download is off (manual placement).
-        # When auto-download is on, the generic may be stale from a different
-        # model — skip it and let auto-download provide the right one (#136).
+      if [[ "${candidate_base}" == mmproj-f16.gguf ]]; then
         compatible_candidates+=("${candidate}")
       fi
     done
     if [ "${#compatible_candidates[@]}" -gt 0 ]; then
       mmproj_candidates=("${compatible_candidates[@]}")
       compatible_candidates=()
-    elif [ "${AUTO_DOWNLOAD_MMPROJ}" = "1" ] && download_mmproj; then
-      return 0
     else
       die "No compatible mmproj found for Qwen3.5 vision model (model: $(basename "${MODEL_PATH}"))."
     fi

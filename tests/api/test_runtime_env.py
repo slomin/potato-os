@@ -173,9 +173,7 @@ def test_runtime_env_disables_vl_projector_heuristic_when_vision_is_off(runtime)
 def test_runtime_env_enables_vl_projector_heuristic_when_vision_is_on(runtime):
     model_filename = "Qwen3.5-2B-Q4_K_M.gguf"
     model_path = runtime.base_dir / "models" / model_filename
-    # Use model-specific projector name — generic mmproj-F16.gguf is skipped
-    # when model-specific candidates exist (#136).
-    mmproj_path = runtime.base_dir / "models" / "mmproj-Qwen3.5-2B-f16.gguf"
+    mmproj_path = runtime.base_dir / "models" / "mmproj-F16.gguf"
     model_path.write_bytes(b"gguf")
     mmproj_path.write_bytes(b"mmproj")
     runtime.model_path = model_path
@@ -265,12 +263,12 @@ def test_runtime_env_enables_mmproj_auto_download_when_vision_on_and_no_mmproj(r
     assert "unsloth" in env["POTATO_HF_MMPROJ_REPO"] or "huggingface" in env["POTATO_HF_MMPROJ_REPO"].lower()
 
 
-def test_projector_status_skips_stale_generic_when_model_specific_candidates_exist(runtime):
-    """build_model_projector_status must NOT report present when only a stale
-    generic mmproj-F16.gguf exists and model-specific candidates are expected.
-    Regression test for #136."""
+def test_projector_status_reports_generic_truthfully_for_offline_compat(runtime):
+    """build_model_projector_status must report mmproj-F16.gguf as present even
+    when model-specific candidates exist — preserves offline upgrades where the
+    generic is the only file available. Shell handles upgrade at runtime (#136)."""
     models_dir = runtime.base_dir / "models"
-    (models_dir / "mmproj-F16.gguf").write_bytes(b"stale-2b-projector")
+    (models_dir / "mmproj-F16.gguf").write_bytes(b"generic-projector")
 
     model_4b = {
         "filename": "Qwen3.5-4B-Q4_K_M.gguf",
@@ -280,22 +278,24 @@ def test_projector_status_skips_stale_generic_when_model_specific_candidates_exi
     }
     status = build_model_projector_status(runtime, model_4b)
 
-    assert status["present"] is False, (
-        "Generic mmproj-F16.gguf must be skipped when model-specific candidates exist"
+    assert status["present"] is True, (
+        "Generic mmproj-F16.gguf must be reported as present for offline compat"
     )
-    assert status["filename"] is None or "F16" not in (status["filename"] or "")
+    assert status["filename"] == "mmproj-F16.gguf"
+    # Model-specific candidates must still be listed so the shell can try them
+    assert any(c != "mmproj-F16.gguf" for c in status["default_candidates"])
 
 
-def test_model_switch_does_not_reuse_stale_projector_in_runtime_env(runtime):
-    """After switching from 2B to 4B, _runtime_env must NOT set POTATO_MMPROJ_PATH
-    to the stale generic mmproj-F16.gguf. Regression test for #136."""
+def test_model_switch_passes_generic_with_auto_download_for_shell_upgrade(runtime):
+    """When only mmproj-F16.gguf exists after a model switch, _runtime_env must
+    still pass it as POTATO_MMPROJ_PATH (offline fallback) AND enable auto-download
+    so the shell can upgrade it to a model-specific file (#136)."""
     models_dir = runtime.base_dir / "models"
     model_2b = "Qwen3.5-2B-Q4_K_M.gguf"
     model_4b = "Qwen3.5-4B-Q4_K_M.gguf"
     (models_dir / model_2b).write_bytes(b"gguf")
     (models_dir / model_4b).write_bytes(b"gguf")
-    # Simulate: 2B projector was auto-downloaded as generic
-    (models_dir / "mmproj-F16.gguf").write_bytes(b"stale-2b-projector")
+    (models_dir / "mmproj-F16.gguf").write_bytes(b"generic-projector")
 
     runtime.model_path = models_dir / model_4b
     runtime.models_state_path.write_text(
@@ -337,12 +337,11 @@ def test_model_switch_does_not_reuse_stale_projector_in_runtime_env(runtime):
 
     env = _runtime_env(runtime)
 
-    # Must NOT pass the stale 2B projector to the 4B model
-    if "POTATO_MMPROJ_PATH" in env:
-        assert "mmproj-F16.gguf" not in env["POTATO_MMPROJ_PATH"], (
-            "Stale generic mmproj-F16.gguf must not be passed to a different model"
-        )
-    # Auto-download should still be enabled so start_llama.sh can fetch the right one
+    # Generic is passed as fallback — shell will try to upgrade it
+    assert "POTATO_MMPROJ_PATH" in env
+    assert env["POTATO_MMPROJ_PATH"].endswith("mmproj-F16.gguf")
+    # Auto-download must be enabled so the shell can upgrade
     assert env["POTATO_AUTO_DOWNLOAD_MMPROJ"] == "1"
+    assert "POTATO_HF_MMPROJ_REPO" in env
 
 

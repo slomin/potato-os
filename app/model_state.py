@@ -785,12 +785,7 @@ def build_model_projector_status(runtime: RuntimeConfig, model: dict[str, Any]) 
     resolved_name = configured_filename
     present = False
     resolved_path = None
-    has_model_specific = any(c != "mmproj-F16.gguf" for c in default_candidates)
     for candidate in search_names:
-        # Skip stale generic fallback when model-specific candidates exist —
-        # the generic file may belong to a different model (#136).
-        if candidate == "mmproj-F16.gguf" and has_model_specific and projector_mode != "custom":
-            continue
         candidate_path = runtime.base_dir / "models" / candidate
         if candidate_path.exists():
             present = True

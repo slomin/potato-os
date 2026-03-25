@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
 
+import pytest
+
 from tests.unit.conftest import REPO_ROOT
+
+requires_jq = pytest.mark.skipif(shutil.which("jq") is None, reason="jq not installed")
 
 
 def _build_fake_runtime_slot(slot_dir: Path, *, family: str = "ik_llama", commit: str = "abc12345", profile: str = "pi5-opt") -> dict:
@@ -120,6 +125,7 @@ def test_resolve_llama_bundle_src_explicit_env_var_overrides_everything(tmp_path
     assert bundle_src_line < slot_line, "BUNDLE_SRC check must come before slot check"
 
 
+@requires_jq
 def test_publish_runtime_dry_run_creates_tarball(tmp_path: Path):
     """--dry-run builds the tarball locally without publishing."""
     slot = tmp_path / "slot"
@@ -144,6 +150,7 @@ def test_publish_runtime_dry_run_creates_tarball(tmp_path: Path):
     assert any("runtime.json" in n for n in names)
 
 
+@requires_jq
 def test_publish_runtime_dry_run_rejects_missing_slot(tmp_path: Path):
     """Missing slot directory must cause a hard failure."""
     env = os.environ.copy()
@@ -159,6 +166,7 @@ def test_publish_runtime_dry_run_rejects_missing_slot(tmp_path: Path):
     assert result.returncode != 0
 
 
+@requires_jq
 def test_publish_runtime_dry_run_rejects_missing_server_binary(tmp_path: Path):
     """Slot without bin/llama-server must be rejected."""
     slot = tmp_path / "slot"

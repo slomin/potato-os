@@ -133,9 +133,9 @@ if [ "${FAMILY}" = "both" ]; then
   # Don't propagate POTATO_LLAMA_CPP_SOURCE into child invocations —
   # it's a single-family override that would wrongly apply to both.
   # Each child resolves its own default source dir.
-  POTATO_LLAMA_CPP_SOURCE= "${BASH_SOURCE[0]}" --family ik_llama "${build_args[@]}"
+  POTATO_LLAMA_CPP_SOURCE='' "${BASH_SOURCE[0]}" --family ik_llama "${build_args[@]}"
   printf '\n'
-  POTATO_LLAMA_CPP_SOURCE= "${BASH_SOURCE[0]}" --family llama_cpp "${build_args[@]}"
+  POTATO_LLAMA_CPP_SOURCE='' "${BASH_SOURCE[0]}" --family llama_cpp "${build_args[@]}"
   exit $?
 fi
 

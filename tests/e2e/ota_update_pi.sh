@@ -268,7 +268,6 @@ log_stage "Current version: ${ORIGINAL_VERSION}"
 # Snapshot the Pi's actual app/ and bin/ so we can restore exactly what was running
 PI_SNAPSHOT_DIR="$(mktemp -d)"
 log_stage "Snapshotting Pi app/ and bin/ to ${PI_SNAPSHOT_DIR}..."
-read -r -a SSH_SNAP_OPTS <<< "${PI_SSH_OPTIONS}"
 SSHPASS="${PI_PASSWORD}" sshpass -e rsync -az \
   -e "ssh ${PI_SSH_OPTIONS}" \
   "${PI_USER}@${PI_HOST}:/opt/potato/app/" "${PI_SNAPSHOT_DIR}/app/"

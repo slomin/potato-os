@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Shared build/release helper functions for Potato OS.
 # Source this file from build, image, and publish scripts.
 

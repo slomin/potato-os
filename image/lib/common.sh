@@ -103,7 +103,8 @@ resolve_mmproj_file_for_full() {
     return
   fi
 
-  local f16_target="${cache_dir}/$(basename "${url_f16%%\?*}")"
+  local f16_target
+  f16_target="${cache_dir}/$(basename "${url_f16%%\?*}")"
   download_to_cache "${url_f16}" "${f16_target}"
   printf '%s\n' "${f16_target}"
 }

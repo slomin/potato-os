@@ -1,5 +1,7 @@
+#!/usr/bin/env bash
 # Shared branding and device constants for Potato OS build/release scripts.
 # Source this file — do not hardcode these values in individual scripts.
+# shellcheck disable=SC2034  # variables are used by sourcing scripts
 
 POTATO_PROJECT_NAME="Potato OS"
 POTATO_IMAGER_TAGLINE="Local AI, No Cloud"

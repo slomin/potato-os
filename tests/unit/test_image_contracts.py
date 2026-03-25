@@ -86,24 +86,67 @@ def test_local_image_build_script_collects_artifacts_for_flash_test():
     assert "docker volume prune" in script
 
 
-def test_publish_image_release_script_validates_bundle_and_creates_release():
-    script = Path("bin/publish_image_release.sh").read_text(encoding="utf-8")
+def test_publish_image_release_dry_run_generates_manifest(tmp_path: Path):
+    """--dry-run validates the bundle and generates a manifest without publishing."""
+    import os
+    import subprocess
 
-    assert "set -euo pipefail" in script
-    assert "--version" in script
-    assert "--bundle-dir" in script
-    assert "--variant" in script
-    assert "--dry-run" in script
-    assert "gh release create" in script
-    assert "generate_potato_manifest" in script
-    assert "github.com/${GITHUB_REPO}/releases/download/${VERSION}" in script
-    assert "POTATO_ICON_FILENAME" in script
-    assert "SHA256SUMS" in script
-    assert ".rpi-imager-manifest" in script
-    assert "Raspberry Pi Imager" in script
-    assert "Content Repository" in script
-    assert "Use custom URL" in script
-    assert "app.__version__" in script
+    import lzma
+
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    img = bundle / "potato-lite-test.img.xz"
+    img.write_bytes(lzma.compress(b"\x00" * 1024))
+    icon_src = Path("bin/assets/potato-imager-icon.svg")
+    if icon_src.exists():
+        (bundle / "potato-imager-icon.svg").write_text(icon_src.read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        (bundle / "potato-imager-icon.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"><text>Potato OS</text></svg>')
+    (bundle / "SHA256SUMS").write_text("abcdef1234567890  potato-lite-test.img.xz\n")
+
+    env = os.environ.copy()
+    env["POTATO_GITHUB_REPO"] = "test/repo"
+    result = subprocess.run(
+        [
+            str(Path("bin/publish_image_release.sh").resolve()),
+            "--version", "v0.6.0",
+            "--bundle-dir", str(bundle),
+            "--variant", "lite",
+            "--dry-run",
+        ],
+        check=True,
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert "No release created" in result.stdout
+    assert "manifest" in result.stdout.lower() or "Manifest" in result.stdout
+
+
+def test_publish_image_release_dry_run_rejects_missing_image(tmp_path: Path):
+    """Empty bundle dir with no image must fail."""
+    import os
+    import subprocess
+
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    env = os.environ.copy()
+    env["POTATO_GITHUB_REPO"] = "test/repo"
+    result = subprocess.run(
+        [
+            str(Path("bin/publish_image_release.sh").resolve()),
+            "--version", "v0.6.0",
+            "--bundle-dir", str(bundle),
+            "--dry-run",
+        ],
+        check=False,
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
 
 
 def test_clean_image_build_artifacts_script_cleans_outputs_and_optional_caches():

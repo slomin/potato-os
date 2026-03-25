@@ -120,14 +120,61 @@ def test_resolve_llama_bundle_src_explicit_env_var_overrides_everything(tmp_path
     assert bundle_src_line < slot_line, "BUNDLE_SRC check must come before slot check"
 
 
-def test_publish_runtime_script_creates_tagged_release():
-    """Contract: publish_runtime.sh references the expected release workflow elements."""
-    script = (REPO_ROOT / "bin" / "publish_runtime.sh").read_text(encoding="utf-8")
-    assert "runtime.json" in script
-    assert "gh release create" in script
-    assert "runtime/" in script
-    assert "tar " in script or "tar\n" in script
-    assert "--family" in script
+def test_publish_runtime_dry_run_creates_tarball(tmp_path: Path):
+    """--dry-run builds the tarball locally without publishing."""
+    slot = tmp_path / "slot"
+    _build_fake_runtime_slot(slot, family="ik_llama", commit="abc12345", profile="pi5-opt")
+    env = os.environ.copy()
+    env["POTATO_GITHUB_REPO"] = "test/repo"
+    result = subprocess.run(
+        [str(REPO_ROOT / "bin" / "publish_runtime.sh"), "--family", "ik_llama", "--slot-dir", str(slot), "--dry-run"],
+        check=True,
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    tarball = tmp_path / "ik_llama-abc12345-pi5-opt.tar.gz"
+    assert tarball.exists(), f"tarball not found: {tarball}"
+    assert "Dry run" in result.stdout or "dry run" in result.stdout.lower()
+
+    with tarfile.open(str(tarball), "r:gz") as tar:
+        names = tar.getnames()
+    assert any("bin/llama-server" in n for n in names)
+    assert any("runtime.json" in n for n in names)
+
+
+def test_publish_runtime_dry_run_rejects_missing_slot(tmp_path: Path):
+    """Missing slot directory must cause a hard failure."""
+    env = os.environ.copy()
+    env["POTATO_GITHUB_REPO"] = "test/repo"
+    result = subprocess.run(
+        [str(REPO_ROOT / "bin" / "publish_runtime.sh"), "--family", "ik_llama", "--slot-dir", "/nonexistent", "--dry-run"],
+        check=False,
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+
+
+def test_publish_runtime_dry_run_rejects_missing_server_binary(tmp_path: Path):
+    """Slot without bin/llama-server must be rejected."""
+    slot = tmp_path / "slot"
+    slot.mkdir()
+    (slot / "runtime.json").write_text('{"commit":"abc","family":"ik_llama","profile":"pi5-opt"}')
+    env = os.environ.copy()
+    env["POTATO_GITHUB_REPO"] = "test/repo"
+    result = subprocess.run(
+        [str(REPO_ROOT / "bin" / "publish_runtime.sh"), "--family", "ik_llama", "--slot-dir", str(slot), "--dry-run"],
+        check=False,
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
 
 
 def test_runtime_release_lib_provides_download_helpers():

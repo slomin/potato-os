@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 import tarfile
 from pathlib import Path
@@ -190,40 +191,85 @@ def test_ota_checksum_file_format(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Script validation
+# Script validation — contract tests (keep for publish-path-only invariants)
 # ---------------------------------------------------------------------------
-
-
-def test_publish_ota_script_references_expected_elements():
-    """Contract: publish_ota_release.sh references expected packaging/publishing elements."""
-    script = (REPO_ROOT / "bin" / "publish_ota_release.sh").read_text(encoding="utf-8")
-    assert "potato-os-" in script
-    assert "tar " in script or "tar\n" in script
-    assert "gh release" in script
-    assert "--version" in script
-    assert "--dry-run" in script
-    assert "potato_sha256" in script
-    assert "build_helpers.sh" in script
-    assert "__version__" in script
-
-
-def test_publish_ota_script_rejects_version_mismatch():
-    """Script must hard-error when tag version differs from app/__version__.py."""
-    script = (REPO_ROOT / "bin" / "publish_ota_release.sh").read_text(encoding="utf-8")
-    # The version mismatch block must call die, not just warn
-    mismatch_idx = script.index("VERSION_NUM}")
-    # Find the next conditional block after the comparison
-    block = script[mismatch_idx:mismatch_idx + 300]
-    assert "die " in block, "Version mismatch must be a hard error (die), not a warning"
 
 
 def test_publish_ota_script_tolerates_existing_remote_tag():
     """Tag push must not abort the script if the tag already exists on the remote."""
     script = (REPO_ROOT / "bin" / "publish_ota_release.sh").read_text(encoding="utf-8")
-    # The git push for tags must have error tolerance (|| true) for retry safety
     push_section = script[script.index("Pushing tag"):]
     push_line_end = push_section.index("\n", push_section.index("git push"))
     push_line = push_section[:push_line_end]
     assert "|| true" in push_line or "2>/dev/null" in push_line
+
+
+# ---------------------------------------------------------------------------
+# Behavior-first dry-run tests
+# ---------------------------------------------------------------------------
+
+
+def test_publish_ota_dry_run_produces_tarball_and_checksum(tmp_path: Path):
+    """--dry-run builds the tarball and checksum without publishing."""
+    from app.__version__ import __version__
+
+    env = os.environ.copy()
+    env["POTATO_GITHUB_REPO"] = "test/repo"
+    result = subprocess.run(
+        [str(REPO_ROOT / "bin" / "publish_ota_release.sh"), "--version", f"v{__version__}", "--dry-run"],
+        check=True,
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    tarball = tmp_path / f"potato-os-{__version__}.tar.gz"
+    checksum = tmp_path / f"potato-os-{__version__}.tar.gz.sha256"
+    assert tarball.exists(), f"tarball not found: {tarball}"
+    assert checksum.exists(), f"checksum not found: {checksum}"
+    assert "Dry run complete" in result.stdout
+
+    import tarfile as tf
+
+    with tf.open(str(tarball), "r:gz") as tar:
+        names = tar.getnames()
+    assert any("app/" in n for n in names)
+    assert any("bin/" in n for n in names)
+
+    checksum_text = checksum.read_text(encoding="utf-8").strip()
+    assert f"potato-os-{__version__}.tar.gz" in checksum_text
+
+
+def test_publish_ota_dry_run_rejects_invalid_version(tmp_path: Path):
+    """Version without 'v' prefix must be rejected."""
+    env = os.environ.copy()
+    env["POTATO_GITHUB_REPO"] = "test/repo"
+    result = subprocess.run(
+        [str(REPO_ROOT / "bin" / "publish_ota_release.sh"), "--version", "0.6.0", "--dry-run"],
+        check=False,
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "must start with" in result.stderr.lower() or "must start with" in result.stdout.lower()
+
+
+def test_publish_ota_dry_run_rejects_version_mismatch(tmp_path: Path):
+    """Tag version that doesn't match app/__version__.py must fail."""
+    env = os.environ.copy()
+    env["POTATO_GITHUB_REPO"] = "test/repo"
+    result = subprocess.run(
+        [str(REPO_ROOT / "bin" / "publish_ota_release.sh"), "--version", "v99.99.99", "--dry-run"],
+        check=False,
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "does not match" in combined.lower() or "mismatch" in combined.lower()
 
 

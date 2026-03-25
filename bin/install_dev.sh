@@ -233,6 +233,16 @@ SUDOERS
 run_sudo install -m 0440 "${sudoers_terminal_tmp}" /etc/sudoers.d/potato-terminal
 rm -f "${sudoers_terminal_tmp}"
 
+sudoers_ota_tmp="$(mktemp)"
+cat > "${sudoers_ota_tmp}" <<'SUDOERS'
+potato ALL=(root) NOPASSWD: /bin/chown -R potato\:potato /opt/potato/app
+potato ALL=(root) NOPASSWD: /usr/bin/chown -R potato\:potato /opt/potato/app
+potato ALL=(root) NOPASSWD: /bin/chown -R potato\:potato /opt/potato/bin
+potato ALL=(root) NOPASSWD: /usr/bin/chown -R potato\:potato /opt/potato/bin
+SUDOERS
+run_sudo install -m 0440 "${sudoers_ota_tmp}" /etc/sudoers.d/potato-ota-repair
+rm -f "${sudoers_ota_tmp}"
+
 run_sudo systemctl daemon-reload
 run_sudo systemctl enable avahi-daemon nginx potato-firstboot.service potato.service
 run_sudo systemctl restart avahi-daemon nginx potato-firstboot.service potato.service

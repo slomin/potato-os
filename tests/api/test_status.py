@@ -146,6 +146,7 @@ def test_status_includes_large_model_warning_for_unsupported_pi(client, runtime,
     monkeypatch.setattr("app.main.check_llama_health", _healthy_true)
     monkeypatch.setattr("app.runtime_state._read_pi_device_model_name", lambda: "Raspberry Pi 4 Model B Rev 1.5")
     monkeypatch.setattr("app.runtime_state._detect_total_memory_bytes", lambda: 8 * 1024 * 1024 * 1024)
+    monkeypatch.setattr("app.runtime_state.get_free_storage_bytes", lambda _r: 4 * 1024 * 1024 * 1024)
     with runtime.model_path.open("wb") as handle:
         handle.seek((6 * 1024 * 1024 * 1024) - 1)
         handle.write(b"x")

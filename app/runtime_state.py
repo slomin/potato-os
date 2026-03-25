@@ -24,6 +24,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - optional on non-Pi dev hosts
     psutil = None  # type: ignore[assignment]
 
+MODEL_UPLOAD_STORAGE_SAFETY_FRACTION = 0.90
 MODEL_UPLOAD_LIMIT_8GB_BYTES = 8 * 1024 * 1024 * 1024
 MODEL_UPLOAD_LIMIT_16GB_BYTES = 16 * 1024 * 1024 * 1024
 MODEL_UPLOAD_PI_16GB_MEMORY_THRESHOLD_BYTES = 12 * 1024 * 1024 * 1024

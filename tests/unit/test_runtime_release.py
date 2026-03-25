@@ -120,20 +120,6 @@ def test_resolve_llama_bundle_src_explicit_env_var_overrides_everything(tmp_path
     assert bundle_src_line < slot_line, "BUNDLE_SRC check must come before slot check"
 
 
-def test_publish_runtime_script_has_valid_bash_syntax():
-    """publish_runtime.sh must parse without bash syntax errors."""
-    script_path = REPO_ROOT / "bin" / "publish_runtime.sh"
-    assert script_path.exists(), f"publish_runtime.sh not found at {script_path}"
-    subprocess.run(["bash", "-n", str(script_path)], check=True, cwd=REPO_ROOT)
-
-
-def test_runtime_release_lib_has_valid_bash_syntax():
-    """bin/lib/runtime_release.sh must parse without bash syntax errors."""
-    script_path = REPO_ROOT / "bin" / "lib" / "runtime_release.sh"
-    assert script_path.exists(), f"runtime_release.sh not found at {script_path}"
-    subprocess.run(["bash", "-n", str(script_path)], check=True, cwd=REPO_ROOT)
-
-
 def test_publish_runtime_script_creates_tagged_release():
     """Contract: publish_runtime.sh references the expected release workflow elements."""
     script = (REPO_ROOT / "bin" / "publish_runtime.sh").read_text(encoding="utf-8")

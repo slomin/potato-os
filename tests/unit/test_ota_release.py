@@ -194,13 +194,6 @@ def test_ota_checksum_file_format(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_publish_ota_script_has_valid_bash_syntax():
-    """bin/publish_ota_release.sh must parse without bash syntax errors."""
-    script_path = REPO_ROOT / "bin" / "publish_ota_release.sh"
-    assert script_path.exists(), f"publish_ota_release.sh not found at {script_path}"
-    subprocess.run(["bash", "-n", str(script_path)], check=True, cwd=REPO_ROOT)
-
-
 def test_publish_ota_script_references_expected_elements():
     """Contract: publish_ota_release.sh references expected packaging/publishing elements."""
     script = (REPO_ROOT / "bin" / "publish_ota_release.sh").read_text(encoding="utf-8")
@@ -234,8 +227,3 @@ def test_publish_ota_script_tolerates_existing_remote_tag():
     assert "|| true" in push_line or "2>/dev/null" in push_line
 
 
-def test_ota_update_e2e_script_has_valid_bash_syntax():
-    """tests/e2e/ota_update_pi.sh must parse without bash syntax errors."""
-    script_path = REPO_ROOT / "tests" / "e2e" / "ota_update_pi.sh"
-    assert script_path.exists(), f"ota_update_pi.sh not found at {script_path}"
-    subprocess.run(["bash", "-n", str(script_path)], check=True, cwd=REPO_ROOT)

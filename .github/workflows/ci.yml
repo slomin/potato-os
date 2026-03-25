@@ -24,6 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Install shellcheck and jq
+        run: sudo apt-get install -y shellcheck jq
+
       - name: Run unit and API tests
         run: python -m pytest -q -n auto tests/unit tests/api
 

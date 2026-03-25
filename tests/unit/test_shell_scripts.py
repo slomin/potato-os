@@ -8,36 +8,6 @@ from pathlib import Path
 from tests.unit.conftest import REPO_ROOT, write_stub
 
 
-def test_shell_scripts_have_valid_bash_syntax():
-    scripts = [
-        REPO_ROOT / "bin" / "run.sh",
-        REPO_ROOT / "bin" / "prepare_imager_bundle.sh",
-        REPO_ROOT / "bin" / "build_llama_bundle_pi5.sh",
-        REPO_ROOT / "bin" / "ensure_model.sh",
-        REPO_ROOT / "bin" / "start_llama.sh",
-        REPO_ROOT / "bin" / "reset_runtime.sh",
-        REPO_ROOT / "bin" / "firstboot.sh",
-        REPO_ROOT / "bin" / "install_dev.sh",
-        REPO_ROOT / "bin" / "uninstall_dev.sh",
-        REPO_ROOT / "bin" / "publish_runtime.sh",
-        REPO_ROOT / "bin" / "publish_image_release.sh",
-        REPO_ROOT / "bin" / "lib" / "runtime_release.sh",
-        REPO_ROOT / "image" / "build-lite.sh",
-        REPO_ROOT / "image" / "build-full.sh",
-        REPO_ROOT / "image" / "build-all.sh",
-        REPO_ROOT / "image" / "lib" / "common.sh",
-        REPO_ROOT / "image" / "stage-potato" / "prerun.sh",
-        REPO_ROOT / "image" / "stage-potato" / "00-potato" / "00-run.sh",
-        REPO_ROOT / "tests" / "e2e" / "smoke_pi.sh",
-        REPO_ROOT / "tests" / "e2e" / "stream_chat_pi.sh",
-        REPO_ROOT / "tests" / "e2e" / "vision_multi_image_pi.sh",
-        REPO_ROOT / "tests" / "e2e" / "uninstall_pi.sh",
-    ]
-
-    for script in scripts:
-        subprocess.run(["bash", "-n", str(script)], check=True, cwd=REPO_ROOT)
-
-
 def test_install_dev_reads_family_from_bundle_runtime_json_when_bundle_src_set():
     """When POTATO_LLAMA_BUNDLE_SRC is set, install_dev.sh must derive the family from the bundle's runtime.json."""
     script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")

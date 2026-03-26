@@ -39,8 +39,6 @@ Both hardware configurations filled the 48K context window to 99.4% (48,846/49,1
 | Gen speed (empty) | 8.8 t/s | 7.3 t/s |
 | Gen speed (full) | 1.5 t/s | 1.3 t/s |
 | Speed degradation | -83% | -82% |
-| Peak swap | 0 MB | 2,047 MB |
-| Temperature range | 57–63°C | 71–76°C |
 | Swap usage | None | 2 GB zram (peaked at 2,047 MB) |
 
 ## Generation Speed vs Context Fill
@@ -113,6 +111,28 @@ xychart-beta
 | 70 | 99.4% | 48,846 | 1.3 | 1.8 | 20.5s | 532s | 7,088 MB | 5,086 MB | 666 MB | 578 MB | 72°C |
 | 71 | — | shift | 1.4 | 1.7 | 30.2s | 773s | 6,815 MB | 4,996 MB | 610 MB | 536 MB | 71°C |
 
+## KV Cache Scaling
+
+KV cache scales linearly at **~50 MiB per 1K tokens** (q8_0/q8_0).
+
+| Context | K (q8_0) | V (q8_0) | Total | Source |
+|---------|----------|----------|-------|--------|
+| 16,384 | 408 MiB | 408 MiB | 816 MiB | Measured (round 1) |
+| 24,576 | 612 MiB | 612 MiB | 1,224 MiB | Measured (round 1) |
+| 32,768 | 816 MiB | 816 MiB | 1,632 MiB | Measured (round 1) |
+| 49,152 | 1,224 MiB | 1,224 MiB | 2,448 MiB | Measured (round 2) |
+
+## Prompt Caching
+
+Prompt caching (`cache_prompt=true`) works correctly on both hardware profiles.
+
+| Metric | Expected (no cache) | Observed |
+|--------|-------------------|----------|
+| prompt_n per turn | Full accumulated context (grows to 48K) | 33–51 tokens (constant) |
+| TTFT growth | Linear with context | Sub-linear (only new tokens processed) |
+
+The `prompt_n` field stays at 33–51 tokens throughout the conversation, confirming that llama-server reuses the KV cache prefix from the previous turn. Only the new assistant response + user message tokens are processed each turn.
+
 ## Key Observations
 
 ### Speed degradation is linear, not cliff-based
@@ -123,6 +143,8 @@ The 16 GB Pi never touched swap. Available memory stayed above 12.8 GB throughou
 
 ### Context shift behavior
 Both Pis hit context shift at exactly the same point (turn 71, n_past 48,846 → 25,346). The shift turn took significantly longer (712s on 16 GB, 773s on 8 GB) as the server reprocessed the truncated context.
+
+The shift evicts approximately half the non-kept tokens (`n_discard ≈ n_ctx/2`), adjusts RoPE position embeddings on the surviving KV entries, and continues generation. Post-shift, speed recovers to roughly the 50% fill level.
 
 ## Raw Data
 

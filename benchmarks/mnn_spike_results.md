@@ -55,20 +55,16 @@ MNN compiled cleanly on Pi 5 with `cmake` + `g++` 14.2.0.
 config:
     themeVariables:
         xyChart:
-            plotColorPalette: "#8b5cf6, #a78bfa, #2563eb, #f97316, #ef4444"
+            plotColorPalette: "#8b5cf6, #2563eb, #f97316"
 ---
 xychart-beta
     title "Decode Speed by Runtime + Model (tok/s, higher is better)"
     x-axis ["MNN 4t HQQ", "MNN 2t HQQ", "IK Q4_K_M", "IK BS 4.74bpw", "IK BS 3.87bpw"]
     y-axis "Tokens per second" 0 --> 7
-    bar [4.1, 0, 0, 0, 0]
-    bar [0, 4.5, 0, 0, 0]
-    bar [0, 0, 3.2, 0, 0]
-    bar [0, 0, 0, 5.0, 0]
-    bar [0, 0, 0, 0, 5.9]
+    bar [4.1, 4.5, 3.2, 5.0, 5.9]
 ```
 
-Purple: MNN — Blue: IK unsloth Q4_K_M — Orange: IK BS 4.74 bpw — Red: IK BS 3.87 bpw
+All results on same hardware (Pi 5 16GB). Labels identify runtime + quant.
 
 #### Model size vs decode speed
 
@@ -95,17 +91,13 @@ On Pi 5's bandwidth-constrained 32-bit bus, model size is the dominant factor �
 config:
     themeVariables:
         xyChart:
-            plotColorPalette: "#8b5cf6, #a78bfa, #2563eb, #f97316, #ef4444"
+            plotColorPalette: "#8b5cf6, #2563eb, #f97316"
 ---
 xychart-beta
     title "Prefill Speed by Runtime + Model (tok/s, higher is better)"
     x-axis ["MNN 4t HQQ", "MNN 2t HQQ", "IK Q4_K_M", "IK BS 4.74bpw", "IK BS 3.87bpw"]
     y-axis "Tokens per second" 0 --> 30
-    bar [27.6, 0, 0, 0, 0]
-    bar [0, 13.8, 0, 0, 0]
-    bar [0, 0, 11.0, 0, 0]
-    bar [0, 0, 0, 5.0, 0]
-    bar [0, 0, 0, 0, 6.0]
+    bar [27.6, 13.8, 11.0, 5.0, 6.0]
 ```
 
 MNN dominates prefill (compute-bound) but loses decode (memory-bandwidth-bound).
@@ -234,7 +226,7 @@ xychart-beta
     bar [42.5, 12.2]
 ```
 
-Blue: Pi 5 (32-bit bus, ~5 GB/s) — Orange: Snapdragon 8 Gen 2 (64-bit bus, ~17 GB/s). Prefill gap is 1.5x but decode gap is 3x — directly tracks the ~3x memory bandwidth difference.
+Each group has two bars — Blue: Pi 5 (32-bit LPDDR4X, ~5 GB/s) — Orange: Snapdragon 8 Gen 2 (64-bit LPDDR5X, ~17 GB/s). Prefill gap is modest (1.5x — compute-bound, both CPUs are capable). Decode gap is 3x — directly tracks the ~3x effective memory bandwidth difference, since decode streams the entire model per token.
 
 ## Qualitative assessment
 

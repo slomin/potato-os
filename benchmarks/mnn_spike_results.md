@@ -13,7 +13,8 @@ Refs #24
 | IK runtime | ik_llama (installed at /opt/potato/llama/) |
 | MNN model | taobao-mnn/Qwen3.5-4B-MNN (4-bit HQQ, quant_block=64, embed/act=fp16) |
 | IK model 1 | Qwen3.5-4B-Q4_K_M.gguf (2.6GB) |
-| IK model 2 | ByteShape Qwen3-4B-Instruct-2507-Q4_K_S-3.87bpw.gguf (1.9GB) |
+| IK model 2 | ByteShape Qwen3-4B-Instruct-2507-Q5_K_S-4.74bpw.gguf (2.3GB) |
+| IK model 3 | ByteShape Qwen3-4B-Instruct-2507-Q4_K_S-3.87bpw.gguf (1.9GB) |
 | Prompt | "Explain how a lighthouse lamp works in about 100 words." |
 | Max tokens | 128 |
 | Thinking mode | Disabled on all runtimes |
@@ -45,6 +46,58 @@ MNN compiled cleanly on Pi 5 with `cmake` + `g++` 14.2.0.
 
 *IK prefill numbers are noisy due to prompt caching on first request. Steady-state shown.
 
+#### Decode speed comparison
+
+```mermaid
+---
+config:
+    themeVariables:
+        xyChart:
+            plotColorPalette: "#2563eb"
+---
+xychart-beta
+    title "Decode Speed by Runtime + Model (tok/s, higher is better)"
+    x-axis ["MNN 4t", "MNN 2t", "IK Q4_K_M", "IK Q5_K_S", "IK Q4_K_S"]
+    y-axis "Tokens per second" 0 --> 7
+    bar [4.1, 4.5, 3.2, 5.0, 5.9]
+```
+
+#### Model size vs decode speed
+
+```mermaid
+---
+config:
+    themeVariables:
+        xyChart:
+            plotColorPalette: "#dc2626, #2563eb"
+---
+xychart-beta
+    title "Decode Speed vs Model Size — smaller model = faster decode on Pi 5"
+    x-axis "Model size (GB)" [1.9, 2.3, 2.5, 2.6]
+    y-axis "Decode tok/s" 0 --> 7
+    line [5.9, 5.0, 4.5, 3.2]
+```
+
+Red line: all runtimes plotted by model weight size. On Pi 5's bandwidth-constrained bus, model size is the dominant factor — runtime choice is secondary.
+
+#### Prefill speed comparison
+
+```mermaid
+---
+config:
+    themeVariables:
+        xyChart:
+            plotColorPalette: "#16a34a"
+---
+xychart-beta
+    title "Prefill Speed by Runtime + Model (tok/s, higher is better)"
+    x-axis ["MNN 4t", "MNN 2t", "IK Q4_K_M", "IK Q5_K_S", "IK Q4_K_S"]
+    y-axis "Tokens per second" 0 --> 30
+    bar [27.6, 13.8, 11.0, 5.0, 6.0]
+```
+
+MNN dominates prefill (compute-bound) but loses decode (memory-bandwidth-bound).
+
 ### MNN thread count sweep (Qwen3.5-4B-MNN, memory=low, precision=low)
 
 | Threads | Prefill tok/s | Decode tok/s |
@@ -56,6 +109,23 @@ MNN compiled cleanly on Pi 5 with `cmake` + `g++` 14.2.0.
 
 Decode improves with fewer threads (less bus contention), peaks at 2 threads (+11% over baseline).
 Prefill scales linearly with threads (compute-bound).
+
+```mermaid
+---
+config:
+    themeVariables:
+        xyChart:
+            plotColorPalette: "#2563eb, #dc2626"
+---
+xychart-beta
+    title "MNN Thread Count vs Throughput"
+    x-axis "Threads" [1, 2, 3, 4]
+    y-axis "Tokens per second" 0 --> 30
+    line [9.3, 13.8, 23.4, 27.6]
+    line [4.4, 4.5, 4.3, 4.1]
+```
+
+Blue: prefill (scales with threads) — Red: decode (peaks at 2 threads, bus-contention-limited)
 
 ### MNN config sweep (2 threads)
 
@@ -84,6 +154,23 @@ For reference, the same MNN model on Snapdragon 8 Gen 2 (LPDDR5X, 64-bit bus, i8
 |--------|--------------|-------------|------------|
 | Snapdragon 8 Gen 2 (OnePlus 12R) | 35 | 12 | 64-bit LPDDR5X |
 | **Pi 5 (BCM2712)** | **27.6** | **4.1** | **32-bit LPDDR4X** |
+
+```mermaid
+---
+config:
+    themeVariables:
+        xyChart:
+            plotColorPalette: "#2563eb, #dc2626"
+---
+xychart-beta
+    title "MNN Cross-Device: Pi 5 vs Snapdragon 8 Gen 2"
+    x-axis ["Prefill", "Decode"]
+    y-axis "Tokens per second" 0 --> 40
+    bar [27.6, 4.1]
+    bar [35.0, 12.0]
+```
+
+Blue: Pi 5 — Red: Snapdragon 8 Gen 2. Prefill gap is modest (1.3x) but decode gap is 3x — directly tracks the memory bandwidth difference.
 
 ## Qualitative assessment
 

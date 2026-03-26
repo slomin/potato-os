@@ -55,16 +55,20 @@ MNN compiled cleanly on Pi 5 with `cmake` + `g++` 14.2.0.
 config:
     themeVariables:
         xyChart:
-            plotColorPalette: "#8b5cf6, #2563eb, #f97316"
+            plotColorPalette: "#8b5cf6, #a78bfa, #2563eb, #f97316, #ef4444"
 ---
 xychart-beta
-    title "Decode Speed by Runtime + Model (tok/s, higher is better)"
+    title "Decode Speed (tok/s, higher is better)"
     x-axis ["MNN 4t HQQ", "MNN 2t HQQ", "IK Q4_K_M", "IK BS 4.74bpw", "IK BS 3.87bpw"]
-    y-axis "Tokens per second" 0 --> 7
-    bar [4.1, 4.5, 3.2, 5.0, 5.9]
+    y-axis "Tokens per second" 0.5 --> 7
+    bar [4.1, 0.01, 0.01, 0.01, 0.01]
+    bar [0.01, 4.5, 0.01, 0.01, 0.01]
+    bar [0.01, 0.01, 3.2, 0.01, 0.01]
+    bar [0.01, 0.01, 0.01, 5.0, 0.01]
+    bar [0.01, 0.01, 0.01, 0.01, 5.9]
 ```
 
-All results on same hardware (Pi 5 16GB). Labels identify runtime + quant.
+All results on same hardware (Pi 5 16GB).
 
 #### Model size vs decode speed
 
@@ -91,13 +95,17 @@ On Pi 5's bandwidth-constrained 32-bit bus, model size is the dominant factor â€
 config:
     themeVariables:
         xyChart:
-            plotColorPalette: "#8b5cf6, #2563eb, #f97316"
+            plotColorPalette: "#8b5cf6, #a78bfa, #2563eb, #f97316, #ef4444"
 ---
 xychart-beta
-    title "Prefill Speed by Runtime + Model (tok/s, higher is better)"
+    title "Prefill Speed (tok/s, higher is better)"
     x-axis ["MNN 4t HQQ", "MNN 2t HQQ", "IK Q4_K_M", "IK BS 4.74bpw", "IK BS 3.87bpw"]
-    y-axis "Tokens per second" 0 --> 30
-    bar [27.6, 13.8, 11.0, 5.0, 6.0]
+    y-axis "Tokens per second" 0.5 --> 30
+    bar [27.6, 0.01, 0.01, 0.01, 0.01]
+    bar [0.01, 13.8, 0.01, 0.01, 0.01]
+    bar [0.01, 0.01, 11.0, 0.01, 0.01]
+    bar [0.01, 0.01, 0.01, 5.0, 0.01]
+    bar [0.01, 0.01, 0.01, 0.01, 6.0]
 ```
 
 MNN dominates prefill (compute-bound) but loses decode (memory-bandwidth-bound).

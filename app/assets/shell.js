@@ -6,8 +6,9 @@ import { isLocalModelConnected, updateLlamaIndicator, renderDownloadPrompt, rend
 import { setRuntimeDetailsExpanded, renderSystemRuntime, renderLlamaRuntimeStatus, renderUploadState } from "./runtime-ui.js";
 import { renderUpdateCard } from "./update-ui.js";
 import { populateModelSwitcher, openModelSwitcher, closeModelSwitcher, toggleModelSwitcher } from "./model-switcher.js";
-import { loadSettings, saveSettings, renderSettingsWorkspace, closeSettingsModal, closeLegacySettingsModal, setSettingsModalOpen } from "./settings-ui.js";
+import { loadSettings, saveSettings, renderSettingsWorkspace, closeSettingsModal, closeLegacySettingsModal, setSettingsModalOpen, registerSettingsPlatformCallbacks } from "./settings-ui.js";
 import { setSendEnabled } from "./chat-engine.js";
+import { registerPlatformShell } from "./platform-controls.js";
 import { init as initChatApp } from "./chat.js";
 
 
@@ -361,6 +362,10 @@ import { init as initChatApp } from "./chat.js";
     const settings = loadSettings();
     applyTheme(settings.theme);
     setRuntimeDetailsExpanded(true);
+
+    // Register platform-level callbacks (work without chat)
+    registerPlatformShell({ pollStatus });
+    registerSettingsPlatformCallbacks({ setSidebarOpen, pollStatus });
 
     // Load and initialize chat app
     initChatApp({ pollStatus, setSidebarOpen, isMobileSidebarViewport, registerEscapeHandler, bindModelSwitcher });

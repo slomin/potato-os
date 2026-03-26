@@ -3,11 +3,17 @@
 import { appState, defaultSettings, settingsKey, DEFAULT_MODEL_VISION_SETTINGS } from "./state.js";
 import { formatBytes, postJson } from "./utils.js";
 import { formatModelStatusLabel } from "./status.js";
+import { flushPendingNoticeDismissal } from "./platform-notify.js";
 
-    let _ui = {};
+    let _platform = {};
+    let _chat = {};
 
-    export function registerSettingsCallbacks(callbacks) {
-      _ui = callbacks;
+    export function registerSettingsPlatformCallbacks(callbacks) {
+      _platform = callbacks;
+    }
+
+    export function registerSettingsChatCallbacks(callbacks) {
+      _chat = callbacks;
     }
 
     export function detectSystemTheme() {
@@ -180,11 +186,11 @@ import { formatModelStatusLabel } from "./status.js";
     export function showTextOnlyImageBlockedState(statusPayload = appState.latestStatus) {
       const notice = formatTextOnlyImageNotice(statusPayload);
       setComposerVisionNotice(notice);
-      if (_ui.setComposerActivity) _ui.setComposerActivity(notice);
-      if (_ui.setComposerStatusChip) _ui.setComposerStatusChip("Current model is text-only.", { phase: "image" });
-      if (_ui.hideComposerStatusChip) _ui.hideComposerStatusChip();
-      if (_ui.setCancelEnabled) _ui.setCancelEnabled(false);
-      if (_ui.focusPromptInput) _ui.focusPromptInput();
+      if (_chat.setComposerActivity) _chat.setComposerActivity(notice);
+      if (_chat.setComposerStatusChip) _chat.setComposerStatusChip("Current model is text-only.", { phase: "image" });
+      if (_chat.hideComposerStatusChip) _chat.hideComposerStatusChip();
+      if (_chat.setCancelEnabled) _chat.setCancelEnabled(false);
+      if (_chat.focusPromptInput) _chat.focusPromptInput();
     }
 
     export function renderComposerCapabilities(statusPayload = appState.latestStatus) {
@@ -203,8 +209,8 @@ import { formatModelStatusLabel } from "./status.js";
         clearBtn.disabled = appState.requestInFlight;
       }
       if (explicitTextOnly && appState.pendingImage) {
-        if (_ui.clearPendingImage) _ui.clearPendingImage();
-        if (_ui.setComposerActivity) _ui.setComposerActivity("Image removed.");
+        if (_chat.clearPendingImage) _chat.clearPendingImage();
+        if (_chat.setComposerActivity) _chat.setComposerActivity("Image removed.");
       }
     }
 
@@ -421,9 +427,10 @@ import { formatModelStatusLabel } from "./status.js";
       }
       if (appState.settingsModalOpen) {
         appState.settingsModalOpenedAtMs = performance.now();
-        if (_ui.setSidebarOpen) _ui.setSidebarOpen(false);
+        if (_platform.setSidebarOpen) _platform.setSidebarOpen(false);
       } else {
         closeLegacySettingsModal();
+        flushPendingNoticeDismissal();
       }
     }
 
@@ -439,7 +446,9 @@ import { formatModelStatusLabel } from "./status.js";
         backdrop.hidden = !appState.legacySettingsModalOpen;
       }
       if (appState.legacySettingsModalOpen) {
-        if (_ui.setSidebarOpen) _ui.setSidebarOpen(false);
+        if (_platform.setSidebarOpen) _platform.setSidebarOpen(false);
+      } else {
+        flushPendingNoticeDismissal();
       }
     }
 
@@ -820,7 +829,7 @@ import { formatModelStatusLabel } from "./status.js";
         }
         if (statusEl) statusEl.textContent = "YAML applied.";
         appState.settingsYamlLoaded = true;
-        if (_ui.pollStatus) await _ui.pollStatus();
+        if (_platform.pollStatus) await _platform.pollStatus();
       } catch (err) {
         if (statusEl) statusEl.textContent = `Could not apply YAML: ${err}`;
       } finally {
@@ -852,7 +861,7 @@ import { formatModelStatusLabel } from "./status.js";
         appState.displayedSettingsModelId = "";
         appState.modelSettingsStatusModelId = String(selectedModel?.id || "");
         if (statusEl) statusEl.textContent = "Model settings updated.";
-        if (_ui.pollStatus) await _ui.pollStatus();
+        if (_platform.pollStatus) await _platform.pollStatus();
       } catch (err) {
         if (statusEl) statusEl.textContent = `Could not save model settings: ${err}`;
       } finally {
@@ -880,7 +889,7 @@ import { formatModelStatusLabel } from "./status.js";
           button.dataset.projectorFilename = String(body?.projector_filename || "");
         }
         if (statusEl) statusEl.textContent = `Vision encoder ready: ${body?.projector_filename || "downloaded"}`;
-        if (_ui.pollStatus) await _ui.pollStatus();
+        if (_platform.pollStatus) await _platform.pollStatus();
       } catch (err) {
         if (statusEl) statusEl.textContent = `Could not download encoder: ${err}`;
       } finally {

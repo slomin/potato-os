@@ -16,7 +16,11 @@ CHAT_MESSAGES_JS = (WEB_ASSETS_DIR / "messages.js").read_text(encoding="utf-8") 
 CHAT_IMAGE_HANDLER_JS = (WEB_ASSETS_DIR / "image-handler.js").read_text(encoding="utf-8") if (WEB_ASSETS_DIR / "image-handler.js").exists() else ""
 CHAT_SETTINGS_UI_JS = (WEB_ASSETS_DIR / "settings-ui.js").read_text(encoding="utf-8") if (WEB_ASSETS_DIR / "settings-ui.js").exists() else ""
 CHAT_ENGINE_JS = (WEB_ASSETS_DIR / "chat-engine.js").read_text(encoding="utf-8") if (WEB_ASSETS_DIR / "chat-engine.js").exists() else ""
-CHAT_UI = CHAT_HTML + CHAT_CSS + CHAT_JS + SHELL_JS + CHAT_STATE_JS + CHAT_UTILS_JS + CHAT_SESSION_JS + CHAT_STATUS_JS + CHAT_RUNTIME_UI_JS + CHAT_MESSAGES_JS + CHAT_IMAGE_HANDLER_JS + CHAT_SETTINGS_UI_JS + CHAT_ENGINE_JS
+PLATFORM_API_JS = (WEB_ASSETS_DIR / "platform-api.js").read_text(encoding="utf-8") if (WEB_ASSETS_DIR / "platform-api.js").exists() else ""
+MODEL_API_JS = (WEB_ASSETS_DIR / "model-api.js").read_text(encoding="utf-8") if (WEB_ASSETS_DIR / "model-api.js").exists() else ""
+PLATFORM_CONTROLS_JS = (WEB_ASSETS_DIR / "platform-controls.js").read_text(encoding="utf-8") if (WEB_ASSETS_DIR / "platform-controls.js").exists() else ""
+PLATFORM_NOTIFY_JS = (WEB_ASSETS_DIR / "platform-notify.js").read_text(encoding="utf-8") if (WEB_ASSETS_DIR / "platform-notify.js").exists() else ""
+CHAT_UI = CHAT_HTML + CHAT_CSS + CHAT_JS + SHELL_JS + CHAT_STATE_JS + CHAT_UTILS_JS + CHAT_SESSION_JS + CHAT_STATUS_JS + CHAT_RUNTIME_UI_JS + CHAT_MESSAGES_JS + CHAT_IMAGE_HANDLER_JS + CHAT_SETTINGS_UI_JS + CHAT_ENGINE_JS + PLATFORM_API_JS + MODEL_API_JS + PLATFORM_CONTROLS_JS + PLATFORM_NOTIFY_JS
 
 
 def test_chat_ui_streaming_parses_sse_and_ignores_done_marker():
@@ -279,7 +283,7 @@ def test_chat_ui_supports_manual_or_idle_model_download_prompt():
     assert 'id="downloadPromptHint"' in CHAT_UI
     assert "function startModelDownload(" in CHAT_UI
     assert "function renderDownloadPrompt(" in CHAT_UI
-    assert 'fetch("/internal/start-model-download"' in CHAT_UI
+    assert "/internal/start-model-download" in CHAT_UI
     assert "Auto-download starts in" in CHAT_UI
     assert "statusPayload.download.auto_start_remaining_seconds" in CHAT_UI
     assert "Not enough free storage for this model." in CHAT_UI
@@ -294,7 +298,7 @@ def test_chat_ui_supports_heavy_runtime_reset_action_with_confirmation():
     assert "Unload model + clean memory + restart" in CHAT_UI
     assert "function resetRuntimeHeavy(" in CHAT_UI
     assert "window.confirm(" in CHAT_UI
-    assert 'fetch("/internal/reset-runtime"' in CHAT_UI
+    assert "/internal/reset-runtime" in CHAT_UI
     assert 'document.getElementById("resetRuntimeBtn").addEventListener("click", resetRuntimeHeavy);' in CHAT_UI
 
 
@@ -305,6 +309,7 @@ def test_chat_ui_runtime_reset_has_active_reconnect_polling():
     assert "Runtime reset in progress. Reconnecting..." in CHAT_UI
     assert "Runtime reconnected." in CHAT_UI
     assert "Model files on disk are unchanged." in CHAT_UI
+    # Status polling uses AbortController for timeouts
     assert "const controller = new AbortController();" in CHAT_UI
     assert "cache: \"no-store\"" in CHAT_UI
     assert "controller.abort();" in CHAT_UI
@@ -428,22 +433,22 @@ def test_chat_ui_model_manager_supports_model_delete_action():
 
 
 def test_chat_ui_insufficient_storage_shows_visible_error():
-    assert 'body?.reason === "insufficient_storage"' in CHAT_JS
-    # Must call appendMessage for a visible chat bubble, not just setComposerActivity
-    # Find the insufficient_storage block in startModelDownloadForModel and verify appendMessage
-    idx = CHAT_JS.index("startModelDownloadForModel")
-    block = CHAT_JS[idx:idx + 800]
-    assert "appendMessage(" in block
+    # Insufficient storage handling lives in platform-controls.js (extracted from chat.js)
+    assert "insufficient_storage" in PLATFORM_CONTROLS_JS
+    # Must show visible feedback (platform notice), not just setComposerActivity
+    idx = PLATFORM_CONTROLS_JS.index("startModelDownloadForModel")
+    block = PLATFORM_CONTROLS_JS[idx:idx + 800]
+    assert "showPlatformNotice(" in block
     assert "storage" in block.lower()
-    # Storage figures must come from the POST response body, not stale appState.latestStatus
-    assert "body?.free_bytes" in block
-    assert "body.required_bytes" in block
+    # Storage figures must come from the API response, not stale appState.latestStatus
+    assert "result.freeBytes" in block
+    assert "result.requiredBytes" in block
     # Same for startModelDownload
-    idx2 = CHAT_JS.index("async function startModelDownload()")
-    block2 = CHAT_JS[idx2:idx2 + 2000]
-    assert "appendMessage(" in block2
+    idx2 = PLATFORM_CONTROLS_JS.index("async function startModelDownload()")
+    block2 = PLATFORM_CONTROLS_JS[idx2:idx2 + 2000]
+    assert "showPlatformNotice(" in block2
     assert "insufficient_storage" in block2
-    assert "body?.free_bytes" in block2
+    assert "result.freeBytes" in block2
     # Settings UI should format insufficient_storage as human-readable text
     assert "insufficient_storage" in CHAT_SETTINGS_UI_JS
     assert "Insufficient storage" in CHAT_SETTINGS_UI_JS

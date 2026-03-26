@@ -96,7 +96,7 @@ test("check shows orchestrator-disabled message on 409", async ({ page }) => {
   await waitForStatusApplied(page);
 
   await page.locator("#updateCheckBtn").click();
-  await expect(page.locator("#messages")).toContainText(/orchestrator/i, { timeout: 5000 });
+  await expect(page.locator("#platformNotice")).toContainText(/orchestrator/i, { timeout: 5000 });
 });
 
 test("install button hidden when deferred due to active download", async ({ page }) => {
@@ -241,7 +241,7 @@ test("install button calls start endpoint", async ({ page }) => {
   expect(startCalled).toBe(true);
 });
 
-test("release notes displayed as chat message", async ({ page }) => {
+test("release notes displayed as platform notice", async ({ page }) => {
   const status = makeUpdatePayload({
     available: true,
     current_version: "0.4.0",
@@ -256,7 +256,7 @@ test("release notes displayed as chat message", async ({ page }) => {
   await waitForStatusApplied(page);
 
   await page.locator("#updateNotesBtn").click();
-  await expect(page.locator("#messages")).toContainText("Feature A", { timeout: 5000 });
+  await expect(page.locator("#platformNotice")).toContainText("Feature A", { timeout: 5000 });
 });
 
 test("check button disabled during active update execution", async ({ page }) => {

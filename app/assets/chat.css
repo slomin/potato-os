@@ -474,6 +474,19 @@
       padding: 2px 6px;
     }
 
+    .platform-notice {
+      padding: 8px 14px;
+      font-size: 13px;
+      line-height: 1.4;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--fg);
+    }
+    .platform-notice--success { background: color-mix(in srgb, #22c55e 12%, var(--panel)); }
+    .platform-notice--warn    { background: color-mix(in srgb, #eab308 12%, var(--panel)); }
+    .platform-notice--error   { background: color-mix(in srgb, #ef4444 12%, var(--panel)); }
+    .platform-notice--info    { background: var(--panel); }
+
     .chat-header h1 {
       margin: 0;
       font-size: 24px;

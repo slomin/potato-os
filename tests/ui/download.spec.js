@@ -234,11 +234,12 @@ test("insufficient storage download shows visible error message", async ({ page 
   await expect.poll(() => downloadCalls.length).toBeGreaterThan(0);
   await closeSettingsModal(page);
 
-  // A chat bubble should appear with a visible storage error including byte details from POST response
-  const messages = page.locator("#messages");
-  await expect(messages).toContainText("storage");
-  await expect(messages).toContainText("free");
-  await expect(messages).toContainText("needed");
+  // A platform notice should appear with a visible storage error including byte details from POST response
+  const notice = page.locator("#platformNotice");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("storage");
+  await expect(notice).toContainText("free");
+  await expect(notice).toContainText("needed");
 });
 
 test("shows sidebar resume button for failed download while another model is active", async ({ page }) => {

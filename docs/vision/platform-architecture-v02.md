@@ -2,18 +2,19 @@
 
 > **Status:** Proposal — everything here is subject to change.
 > **v0.1** was the initial MVP: a single-purpose chat UI on a Pi with a local llama runtime.
-> **v0.2** is the vision for what Potato OS becomes next: an agentic platform.
+> **v0.2** is the vision for what Potato OS becomes next.
 
 ## Vision
 
-Potato OS evolves from a single-purpose chat UI into a local AI operating system — autonomous agents running on Raspberry Pi hardware, powered by shared inference, kept alive by a self-healing supervisor.
+Potato OS is a local AI operating system for Raspberry Pi — a hobby project and a passion for making local AI accessible, fun, and truly yours.
 
-The core bet: AI agents need a home. Not a cloud subscription that disappears when the company pivots. Not a laptop that sleeps when you close the lid. A dedicated, always-on, local device that runs your agents 24/7 — in a closet, on a shelf, on your desk. A Pi in a closet is the primary deployment target.
+It exists because running AI locally should be easy, not a chore. You shouldn't need a CS degree to run a model on your own hardware, and you shouldn't have to pay a subscription or give up your privacy to use AI. Potato OS is for people who want to tinker, experiment, and own what they build.
 
-Everything flows from three principles:
-- **Local-first** — every cloud-dependent AI device has died (Humane, Limitless, Bee). Local inference is survival insurance.
-- **Agents, not chat** — chat is a demo. The real product is autonomous background agents doing work while you sleep.
-- **Shared inference is the scarce resource** — on constrained hardware, the model is the bottleneck. The entire architecture is designed around using it sparingly and sharing it fairly.
+Everything flows from a few core beliefs:
+- **Privacy** — your data, your models, your conversations. Nothing leaves your device unless you want it to.
+- **Freedom** — no one tells you what you can or can't do with your own AI. No content policies, no usage limits, no terms of service that change overnight.
+- **Affordability** — local AI shouldn't cost a fortune. A Raspberry Pi and an open model gets you surprisingly far. Potato OS is named after the hardware it runs on — making the most of modest setups.
+- **Fun** — this should be enjoyable. Easy to set up, easy to use, easy to tinker with. If it's not fun, something's wrong.
 
 ## Proposed Stack
 
@@ -28,7 +29,7 @@ Everything flows from three principles:
 │  └── Agentic mode (reasons via Inferno)              │
 │                                                      │
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐               │
-│  │  Chat   │  │  RIG A  │  │  RIG B  │               │
+│  │  Chat   │  │  App A  │  │  App B  │               │
 │  │ (demo)  │  │ (no UI) │  │(has UI) │               │
 │  └────┬────┘  └────┬────┘  └────┬────┘               │
 │       │            │            │                    │
@@ -54,13 +55,15 @@ Mother has one prime directive and follows it absolutely.
 
 She will wake subsystems before they're needed. She will reallocate resources without asking. She will bring Inferno back from the dead at 3 AM on a Tuesday. Inference is the priority. All other concerns are secondary.
 
-**Mother ships with Inferno, not with Potato.** She knows nothing about RIGs, the dashboard, or the Potato daemon. She is Inferno's guardian and works standalone — on a Pi running Potato, on a desktop GPU server with no Potato anywhere near it, on any device that runs Inferno. This is a hard architectural boundary.
+**Mother ships with Inferno, not with Potato.** She knows nothing about apps, the dashboard, or the Potato daemon. She is Inferno's guardian and works standalone — on a Pi running Potato, on a desktop GPU server with no Potato anywhere near it, on any device that runs Inferno. This is a hard architectural boundary.
 
 ### Prime Directive
 
 Preserve and restore inference capability. At minimum: one model loaded, Inferno responding to health checks, clients able to make inference requests. Mother does whatever it takes to maintain this.
 
 ### FDIR Loop
+
+FDIR originated in spacecraft systems engineering at NASA and ESA. Spacecraft operate in environments where human intervention takes minutes to hours (or is impossible), so onboard systems must autonomously detect faults, isolate the failing component, and recover without human input. Mother applies this same pattern to a Pi running unattended in a closet — same problem, smaller scale.
 
 ```
     ┌──────────┐
@@ -104,23 +107,25 @@ Example playbook:
 
 This mode is more powerful but less predictable. It's opt-in, not default. The deterministic playbook is the safety net that's always there.
 
+Mother can also ship with bundled knowledge — documentation about common failure modes, hardware quirks, and recovery procedures. In agentic mode, she consults these alongside live system data to make better diagnostic decisions.
+
 ### What Mother Is Not
 
-- Not a RIG manager — she doesn't know what RIGs are
+- Not an app manager — she doesn't know what apps are running
 - Not a network manager — she doesn't manage communications
-- Not part of Potato — she ships with Inferno
+- Not part of Potato OS — she ships with Inferno
 - Not a general-purpose supervisor — she has exactly one job
 
 ---
 
 ## Inferno — The Inference Orchestrator
 
-Not just "llama-server with a name." Inferno is a standalone inference service designed to be network-transparent from day one. It's the shared resource that every RIG consumes, and managing it well is the key to running multiple agents on constrained hardware.
+Not just "llama-server with a name." Inferno is a standalone inference service designed to be network-transparent from day one. It abstracts multiple inference backends — llama.cpp, ik_llama, MNN, tinygrad, and whatever else works — behind a unified API. Whatever backend performs best on the target hardware, Inferno uses it.
 
 ### Proposed Capabilities
 
 - **Model management** — load, unload, swap between models, advertise available models to the network
-- **Scheduler** — queue and prioritize inference requests from multiple concurrent RIGs. On a Pi with one model loaded, requests are serialized — the scheduler decides who goes next
+- **Scheduler** — queue and prioritize inference requests from multiple concurrent apps. On a Pi with one model loaded, requests are serialized — the scheduler decides who goes next
 - **Network-transparent** — runs on the same Pi or on a separate device on the LAN (later internet). The API is the same either way
 - **Multi-client** — multiple Potato OS instances can share one Inferno. A beefy desktop running Inferno can serve inference to a fleet of lightweight Pis
 - **Service discovery** — advertises itself and available models to the network so Potatoes can find it automatically
@@ -161,152 +166,68 @@ Scenario 3: Hybrid
 
 ### Design Principle
 
-Even when Inferno runs locally, RIGs talk to it through the same API as if it were remote. Local → remote becomes a configuration change, not an architecture change. A RIG developed on a laptop against a local Inferno deploys to a Pi talking to a remote Inferno with zero code changes.
+Even when Inferno runs locally, apps talk to it through the same API as if it were remote. Local → remote becomes a configuration change, not an architecture change. An app developed on a laptop against a local Inferno deploys to a Pi talking to a remote Inferno with zero code changes.
 
 ---
 
-## Potato — The OS Daemon
+## App Supervisor — The OS Daemon
 
-Potato is the operating system layer. It manages RIGs, maintains communications, serves the dashboard, and connects to Inferno (local or remote). It's the thing that makes a Pi into an agent platform rather than just a computer with an LLM on it.
+The App Supervisor is the Potato OS daemon that manages everything above the inference layer. It's what makes a Pi into a local AI platform rather than just a computer with an LLM on it.
 
-### What Potato Manages
+### What the App Supervisor Manages
 
-- **RIG lifecycle** — loads RIG manifests, starts RIG processes, monitors their health, restarts crashed RIGs. RIGs marked as critical get restarted automatically. Non-critical RIGs can be started/stopped on demand.
+- **App lifecycle** — starts app processes, monitors their health, restarts crashed apps. Apps marked as critical get restarted automatically. Non-critical apps can be started/stopped on demand.
 - **Communications** — network connectivity, device discovery (mDNS), interagent protocol for Potato-to-Potato communication.
-- **Dashboard** — the optional web UI for monitoring and configuration. Serves static assets, proxies to RIG web panels, shows system status.
-- **Inferno connection** — manages the connection to one or more Inferno instances (local, remote, or both). Routes Model Steps from RIGs to the appropriate Inferno.
+- **Dashboard** — the optional web UI for monitoring and configuration. Serves static assets, proxies to app web panels, shows system status.
+- **Inferno connection** — manages the connection to one or more Inferno instances (local, remote, or both). Routes inference requests from apps to the appropriate Inferno.
 
-### What Potato Is Not
+### What the App Supervisor Is Not
 
 - Not the inference engine — that's Inferno
 - Not the inference guardian — that's Mother
-- Not a RIG itself — Potato is the platform that runs RIGs
+- Not an app itself — it's the platform that runs apps
 
-systemd supervises Potato itself. If the Potato daemon crashes, systemd restarts it. Potato doesn't need an AI supervisor — it's the orchestrator, and a simple restart is enough to recover.
+systemd supervises the App Supervisor itself. If it crashes, systemd restarts it. It doesn't need an AI supervisor — a simple restart is enough to recover.
 
 ---
 
-## RIGs — The Apps
+## Apps — Isolated Background Services
 
-A **RIG** is an **application framework for AI agents**: a versioned runtime with strict interfaces, an explicit workflow loop, and persistent operational memory so agent work is repeatable, debuggable, and safe to evolve.
+Apps on Potato OS are **isolated background services** that run as separate processes. Each app gets its own lifecycle, its own state, and its own connection to Inferno for inference. One app crashing doesn't take down others or the platform.
 
-RIGs are a universal format — not Potato-specific. A RIG can run on Potato, on a laptop, on a server, in CI. Potato is just a particularly good runtime for them because it has Inferno, always-on hardware, and lifecycle management built in.
+### What an App Is
 
-We assume RIGs will be developed by agentic development — agents building, testing, and evolving RIGs — as a first-class workflow. The framework is designed for that from day one.
+- A **background service** that runs whether or not anyone has a browser open
+- Consumes **Inferno** for inference (never talks to llama-server directly)
+- Has a **manifest** declaring its identity and requirements
+- Implements a **lifecycle contract** (the platform controls when apps start, stop, suspend)
+- **Optionally** exposes a web panel for human interaction
+- Multiple apps run **concurrently**, sharing Inferno
 
-### The Mental Model
+### What an App Is Not
 
-- **Agent** = the model (brains) + harness (hands)
-- **OS/environment** = the job site (files, network, APIs)
-- **RIG** = the machine the agent operates
-
-The agent *could* improvise a one-off solution each time, but a RIG is pre-built and hardened: faster, more reliable, and reusable across runs. Like an excavator vs digging with your hands.
-
-### Why RIGs Exist
-
-Most agent frameworks give the model tools and say "figure it out." This works for demos but fails in production because:
-- The model takes different paths each time (non-reproducible)
-- Failures are silent (the model just tries something else)
-- There's no memory between runs (cold start every time)
-- Every action requires an inference call (expensive on constrained hardware)
-
-RIGs solve all four problems.
-
-### The Five Layers
-
-**1. Contract Layer — strict inputs and outputs**
-
-Every step in a RIG has typed JSON schemas for its inputs and outputs. No free-form prose driving tools. When the model prepares input for a tool, it must output schema-validated JSON. If it doesn't match, the step fails loudly with a schema error instead of silently producing garbage.
-
-This makes behavior predictable and failures explicit. You can look at a failed run and see exactly which step broke and why — the schema violation tells you.
-
-**2. Orchestration Layer — the workflow protocol**
-
-Work runs as an explicit workflow of two step types:
-
-**Model Steps (MS)** — invoke the model for intelligence. Brainstorm ideas, make decisions, rank options, judge quality, generate plans. These are the expensive steps that hit Inferno.
-
-**Tool Steps (TS)** — run deterministic code. Query a database, check DNS, run tests, edit files, call an API, parse a response. These are fast, free, and predictable. Same inputs always produce the same outputs.
-
-**The design principle: use Tool Steps for as much as possible. Model Steps only when you genuinely need intelligence.**
-
-A typical workflow: `MS (brainstorm) → TS (check reality) → TS (filter results) → TS (format data) → MS (rank and decide) → TS (apply the decision)`. Two Inferno calls instead of twenty. On a Pi sharing Inferno between multiple RIGs, this is the difference between "works" and "doesn't work."
-
-Each step returns a standard JSON envelope:
-```json
-{
-  "step_id": "check_availability",
-  "type": "TS",
-  "result": { "available": ["example.com", "example.io"] },
-  "next": { "mode": "model", "step_id": "rank_domains" }
-}
-```
-
-Steps chain explicitly — a Tool Step can chain directly to another Tool Step, or request a Model Step when it needs intelligence. The workflow graph is deterministic and inspectable.
-
-**Lifecycle:** `start()` → initialize state. `step()` → run the next MS or TS. `get_state()` → inspect progress. `finish()` → finalize outputs and notes.
-
-**3. Capability Layer — tools behind stable interfaces**
-
-Tools are exposed through stable protocol interfaces instead of ad-hoc shell glue. This keeps capabilities modular, swappable, testable, and versionable. Different harnesses can use the same RIG, and different RIGs can use the same tools.
-
-**4. State and Learning Layer — persistent operational notes**
-
-Agents are stateless. They forget everything between runs. A RIG solves this with persistent operational notes:
-
-- **Cold start (first run):** slow, like a human using a new machine for the first time. The agent discovers the real path through trial and error — tool ordering, retries, environment quirks, permission gotchas, machine-specific constraints.
-- **Run notes:** the RIG stores those discoveries as structured operational notes. Not chat transcripts — structured, queryable knowledge about what worked and what didn't.
-- **Warm start (later runs):** a new agent loads those notes and starts experienced, skipping the mistakes. The RIG learns across runs even though the agent is stateless.
-- **Reality still wins:** notes are acceleration hints. Live tool outputs and checks are always the source of truth each run. Stale notes get overridden by fresh observations.
-
-This is particularly powerful for Potato: a proven RIG deployed to a new Pi carries its operational notes with it. First run on new hardware might discover Pi-specific quirks and add those to the notes. Every subsequent run benefits.
-
-**5. Observability and Governance Layer — debuggable by default**
-
-Every run emits structured logs so you can answer:
-- What tools ran, with what inputs, and what they returned
-- What changed (diffs, artifacts, side effects)
-- What the model decided and why (key decision points with reasoning)
-- Where time was spent (which steps were slow, which Model Steps were expensive)
-
-Failures surface as contract/schema violations rather than silent behavior changes. When a RIG breaks, you can trace the exact step, see the exact input that violated the schema, and understand why.
-
-### Versioning and Evolution
-
-A RIG lives in a git repo with two branches:
-- **`main`** — maintainer upstream. Updates and improvements come from here.
-- **`for_agent`** — agent/user working branch. The agent can change anything: tools, code, schemas, `rig.md`, config.
-
-Updates arrive by merging `main` into `for_agent`. Customizations that prove generally useful can be promoted upstream via PR. Rollback is `git checkout main`.
-
-### The Manifest: `rig.md`
-
-Every RIG has a `rig.md` that serves as both manifest and documentation:
-1. **Workflow overview** — one paragraph explaining what the RIG does
-2. **Step catalog** — table of all steps with types, schemas, and chaining
-3. **Flow graph** — visual representation of the workflow
-4. **Schemas** — links to JSON schemas for each step's inputs and outputs
-
-This file is readable by humans and parseable by agents. It's the contract between the RIG and anything that runs it.
+- Not a UI module — the UI is optional
+- Not a standalone process that manages itself — the App Supervisor owns the lifecycle
+- Not something that manages models — that's Inferno's job
 
 ---
 
 ## Dashboard — The Window
 
-The web UI is not the system — it's a window into it. Everything works without it. A Pi in a closet running RIGs headlessly is the primary use case. The dashboard is for when a human wants to check in.
+The web UI is not the system — it's a window into it. Everything works without it. A Pi in a closet running apps headlessly is the primary use case. The dashboard is for when a human wants to check in.
 
 ### What the Dashboard Shows
 
 - **System status** — hardware metrics (CPU, memory, temperature, storage), network status, uptime
 - **Inferno status** — loaded models, health, queue depth, connected clients, active Model Steps
 - **Mother status** — current FDIR state, last recovery action, mode (deterministic/agentic)
-- **RIG status** — all running RIGs, their current step, progress, last output, health
-- **RIG panels** — mount/unmount individual RIG web panels for RIGs that have a UI (most won't)
-- **Configuration** — settings, model management, RIG management, interagent protocol peers
+- **App status** — all running apps, their current step, progress, last output, health
+- **App panels** — mount/unmount individual app web panels for apps that have a UI (most won't)
+- **Configuration** — settings, model management, app management, interagent protocol peers
 
 ### Design Principle
 
-The shell knows RIG **metadata** (name, icon, status, current step) but never reaches into RIG internals. RIGs push status updates through a defined protocol. This is the Chrome tab architecture pattern — the browser manages tabs using only metadata, never page content.
+The shell knows app **metadata** (name, icon, status, current step) but never reaches into app internals. Apps push status updates through a defined protocol. This is the Chrome tab architecture pattern — the browser manages tabs using only metadata, never page content.
 
 ---
 
@@ -316,9 +237,9 @@ The protocol layer for Potato-to-Potato communication. Potatoes discover each ot
 
 ### Two Proposed Modes
 
-**Trusted hierarchy** — for your own devices on your own network. One Potato delegates scoped authority to another: "run these RIG steps using your Inferno, here are the inputs, return the results." Trust is established by network membership and shared keys. This is how a fleet of Pis on a home network would cooperate.
+**Trusted hierarchy** — for your own devices on your own network. One Potato delegates scoped authority to another: "run this work using your Inferno, here are the inputs, return the results." Trust is established by network membership and shared keys. This is how a fleet of Pis on a home network would cooperate.
 
-**Open market** — for broader, less-trusted networks. Potatoes advertise available Inferno capacity and capabilities. Other Potatoes can bid on work, negotiate terms, and execute RIG steps for payment. Trust is established through reputation and crypto-backed settlement.
+**Open market** — for broader, less-trusted networks. Potatoes advertise available Inferno capacity and capabilities. Other Potatoes can bid on work, negotiate terms, and execute work for payment. Trust is established through reputation and crypto-backed settlement.
 
 ### Building Blocks Under Evaluation
 
@@ -331,7 +252,7 @@ The protocol layer for Potato-to-Potato communication. Potatoes discover each ot
 
 The interagent protocol connects naturally to the rest of the stack:
 - **Inferno** is already network-transparent — one Potato using another's Inferno is literally the first delegation use case
-- **RIG step envelopes** (typed JSON in, typed JSON out) are a natural wire format for delegated work
+- **App step envelopes** (typed JSON in, typed JSON out) are a natural wire format for delegated work
 - **Mother** on each device independently guards its own Inferno — the protocol doesn't change her job
 
 ---
@@ -356,24 +277,24 @@ systemd (PID 1)
 │   └── llama-server / inference runtime
 │       Models, KV cache, request queue
 │
-└── Potato daemon
+└── App Supervisor (Potato OS daemon)
     │
-    │   "Are RIGs running? Are comms up?"
-    │   Moderate intelligence. Restarts crashed RIGs.
+    │   "Are apps running? Are comms up?"
+    │   Restarts crashed apps.
     │   Manages network and discovery.
     │   Python/FastAPI, supervised by systemd.
     │
-    ├── RIG: chat (demo)
-    ├── RIG: weather-briefing (headless)
-    ├── RIG: home-monitor (has web panel)
+    ├── App: chat (demo)
+    ├── App: weather-briefing (headless)
+    ├── App: home-monitor (has web panel)
     └── Dashboard (web UI)
 ```
 
 Why this layering works:
 - systemd is always there, always works, never confused. It's the bedrock.
-- Mother is specialized — she only understands inference, but she understands it deeply. She can survive Potato crashing.
-- Potato is the generalist — it manages everything else. If it crashes, systemd restarts it and RIGs resume.
-- Each layer can fail independently without taking down the layers above it. A crashed RIG doesn't kill Potato. A crashed Potato doesn't kill Inferno. A crashed Inferno gets restored by Mother.
+- Mother is specialized — she only understands inference, but she understands it deeply. She can survive the App Supervisor crashing.
+- The App Supervisor is the generalist — it manages everything else. If it crashes, systemd restarts it and apps resume.
+- Each layer can fail independently without taking down the layers above it. A crashed app doesn't kill the App Supervisor. A crashed App Supervisor doesn't kill Inferno. A crashed Inferno gets restored by Mother.
 
 ---
 
@@ -383,15 +304,15 @@ Proven patterns from existing systems that directly apply to this architecture.
 
 | Pattern | Source | What to steal |
 |---------|--------|---------------|
-| LLM syscall abstraction + scheduler | AIOS (COLM 2025) | RIGs don't talk to the model directly — Model Steps are dispatched and scheduled by the platform |
+| LLM syscall abstraction + scheduler | AIOS (COLM 2025) | Apps don't talk to the model directly — inference requests are dispatched and scheduled by the platform |
 | Sidecar supervisor with behavioral memory | VIGIL (arxiv:2512.07094) | Mother watches system health, builds a persistent model with decay, emits targeted fixes — not just restart |
-| Hub-and-spoke with message queue | llama-deploy | Control plane routes Model Steps, message queue decouples RIGs from inference execution |
+| Hub-and-spoke with message queue | llama-deploy | Control plane routes inference requests, message queue decouples apps from inference execution |
 | P2P distributed inference | LocalAI / exo | Automatic node discovery, inference across network devices, no master-worker hierarchy |
 | 4-tier self-healing | OpenClaw | systemd restart → watchdog health check → AI diagnosis + repair → human escalation |
 | Dual-model (fast + smart) | Max Headbox | Small model for quick Tool Step guidance, bigger model for complex Model Steps — manage latency on constrained hardware |
 | Plan-Execute-Verify loop | Autonomic Computing (arxiv:2407.14402) | Safe remediation with rollback — detect, reason, act, verify the fix worked |
 | Agent OS kernel with sandbox isolation | OpenFang | Agents as OS-level processes, sandboxed execution, typed message channels, single-binary deployment |
-| Localhost OpenAI-compatible API | Jan.ai / LM Studio / Ollama | Standard interface for all RIGs to consume inference — the `/v1/chat/completions` contract |
+| Localhost OpenAI-compatible API | Jan.ai / LM Studio / Ollama | Standard interface for all apps to consume inference — the `/v1/chat/completions` contract |
 | Command deny-list + human escalation | Rampart | Safety guardrails for agentic mode — deny dangerous commands, escalate to human for high-risk actions |
 
 ### What Nobody Does Yet
@@ -414,9 +335,9 @@ That's the gap.
 |-----------|--------------------|-----------------------|
 | Mother | Doesn't exist. systemd restarts the service | Compiled FDIR supervisor, ships with Inferno |
 | Inferno | llama-server subprocess, managed by runtime_state.py | Standalone orchestrator, multi-model, multi-client, network-discoverable |
-| RIGs | Chat hardwired into shell (partially extracted in #144) | Universal agent app framework with MS/TS workflows, persistent notes, strict contracts |
-| Potato | FastAPI monolith serving chat + API + status | OS daemon managing RIG lifecycles, comms, dashboard |
-| Dashboard | Shell + chat monolith | Thin shell showing RIG/Inferno/Mother status, mounting RIG panels |
+| Apps | Chat hardwired into shell (partially extracted in #144) | Isolated background services with lifecycle management |
+| App Supervisor | FastAPI monolith serving chat + API + status | OS daemon managing app lifecycles, comms, dashboard |
+| Dashboard | Shell + chat monolith | Thin shell showing app/Inferno/Mother status, mounting app panels |
 | Interagent | Doesn't exist | Potato-to-Potato delegation, discovery, and negotiation protocol |
 
 ---
@@ -425,10 +346,10 @@ That's the gap.
 
 These are intentionally unresolved — the proposal needs input before they're decided.
 
-- **RIG process model** — each RIG as a separate Python process? How do they communicate with Potato? Unix sockets for local, HTTP for network-crossing?
+- **App process model** — each app as a separate Python process? How do they communicate with the App Supervisor? Unix sockets for local, HTTP for network-crossing?
 - **Inferno API** — is OpenAI-compatible `/v1/chat/completions` the right interface, or does Inferno need its own protocol with scheduling, priority, and model selection?
 - **Mother's deterministic playbook** — what are the exact recovery steps and their ordering?
-- **RIG-to-Inferno contract** — how does a Model Step express what it needs? Capability requests ("I need vision") vs model requests ("I need Qwen 3B") vs resource requests ("I need 64k context")?
+- **App-to-Inferno contract** — how does an app express what it needs from inference? Capability requests ("I need vision") vs model requests ("I need Qwen 3B") vs resource requests ("I need 64k context")?
 - **Interagent protocol shape** — thin Potato-specific protocol, layered hierarchy + market, or existing ecosystem adaptation?
-- **Security model** — how does remote Inferno authenticate clients? How does agentic Mother scope her access? How are RIG permissions declared and enforced?
+- **Security model** — how does remote Inferno authenticate clients? How does agentic Mother scope her access? How are app permissions declared and enforced?
 - **Build sequencing** — what do we build first?

@@ -40,14 +40,16 @@ huggingface-cli download taobao-mnn/Qwen3.5-4B-MNN --local-dir /tmp/qwen35-4b-mn
 
 For models without pre-converted MNN versions, the pipeline is:
 
-1. Install MNN Python tools:
+1. Install MNN Python package and clone repo for export tools:
    ```bash
-   pip install mnn-llm
+   pip install MNN
+   git clone https://github.com/alibaba/MNN.git
    ```
 
-2. Export HuggingFace model to MNN format:
+2. Export HuggingFace model to MNN format using `llmexport.py` from the repo:
    ```bash
-   python -m mnn_llm.llm_export \
+   cd MNN/transformers/llm/export
+   python llmexport.py \
      --path /path/to/hf-model \
      --type qwen \
      --quant_bit 4 \
@@ -147,7 +149,7 @@ The optional 5th argument disables thinking mode for Qwen3 models (any non-empty
 
 | Capability | MNN (`llm_demo`) | IK (`llama-server`) |
 |------------|-------------------|---------------------|
-| HTTP server | None | Yes (OpenAI-compatible) |
+| HTTP server | Optional (`mls serve`, requires `BUILD_MLS=ON`) | Yes (OpenAI-compatible) |
 | Streaming API | None | SSE via `/v1/chat/completions` |
 | Prompt caching | Within single session | Across requests (persistent) |
 | Multi-turn | Within session only | Full via API |
@@ -156,7 +158,7 @@ The optional 5th argument disables thinking mode for Qwen3 models (any non-empty
 | Community models | ~208 pre-converted | Thousands of GGUF models |
 | Documentation | Primarily Chinese | English-first, extensive |
 
-The biggest integration gap for Potato OS: **MNN has no HTTP server**. Potato's entire architecture routes through `llama-server`'s OpenAI-compatible API. Adopting MNN would require either building an HTTP wrapper or rearchitecting the inference path.
+MNN ships an optional `mls serve` binary (built with `BUILD_MLS=ON` + OpenSSL) that exposes chat-completion and streaming endpoints. This was not tested in this spike (we used `llm_demo` for benchmarking), but it significantly reduces the integration gap for Potato OS — no custom HTTP wrapper needed.
 
 ## Benchmark methodology
 

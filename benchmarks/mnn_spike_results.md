@@ -244,7 +244,7 @@ Blue: Pi 5 (32-bit LPDDR4X, ~5 GB/s) — Orange: Snapdragon 8 Gen 2 (64-bit LPDD
 |------------|-----|----------|--------|
 | Decode throughput (same model class) | 4.1-4.5 tok/s | 3.2-5.9 tok/s | **IK** (smaller GGUF = faster) |
 | Prefill throughput | **27.6 tok/s** | ~6-11 tok/s | **MNN** (2-4x faster) |
-| HTTP server / API | None | OpenAI-compatible SSE | **IK** |
+| HTTP server / API | `mls serve` (optional, not tested) | OpenAI-compatible SSE | **IK** (proven) |
 | Prompt caching | Within session only | Persistent across requests | **IK** |
 | Multi-turn chat | Single session | Full API support | **IK** |
 | Vision/multimodal | Possible (extra build flags) | Yes (mmproj) | **IK** |
@@ -271,7 +271,7 @@ Blue: Pi 5 (32-bit LPDDR4X, ~5 GB/s) — Orange: Snapdragon 8 Gen 2 (64-bit LPDD
 
 3. **The build and runtime experience is solid.** MNN compiled cleanly on Pi 5 in 6.5 minutes, the pre-converted model worked out of the box, and the `llm_demo` benchmark mode is well-designed. This is a production-grade framework, not a research prototype.
 
-4. **Integration cost is real but manageable.** MNN has no HTTP server — Potato OS would need a lightweight wrapper. No prompt caching across requests. But for batch/prefill tasks, these gaps matter less than for interactive chat. A sidecar approach (MNN for specific tasks, IK for general chat) avoids rearchitecting the existing llama-server integration.
+4. **Integration cost is real but manageable.** MNN ships an optional `mls serve` binary with chat-completion endpoints (not tested in this spike). No prompt caching across requests. But for batch/prefill tasks, these gaps matter less than for interactive chat. A sidecar approach (MNN for specific tasks, IK for general chat) avoids rearchitecting the existing llama-server integration.
 
 5. **The Pi 5's 32-bit memory bus is the decode bottleneck**, not MNN. No runtime can fix this for decode. But prefill is compute-bound and MNN's fused transformer ops + ARM82 kernels extract more from the available compute than IK does.
 
@@ -280,4 +280,4 @@ Blue: Pi 5 (32-bit LPDDR4X, ~5 GB/s) — Orange: Snapdragon 8 Gen 2 (64-bit LPDD
 - Follow up with an MNN sidecar integration ticket — lightweight HTTP wrapper around `llm_demo` for prefill-heavy API endpoints
 - Keep IK llama as the primary runtime for interactive chat
 - Consider ByteShape Qwen3-4B-Instruct-2507 Q4_K_S (3.87 bpw) as a potential default model for IK — 5.9 tok/s decode in 1.9GB is compelling
-- Investigate MNN's `mls_server` (found in the repo at `transformers/llm/engine/app/mls_server.cpp`) as a potential HTTP server path
+- Test MNN's `mls serve` HTTP server (`BUILD_MLS=ON`) as the integration path — may avoid needing a custom wrapper

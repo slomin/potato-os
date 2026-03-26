@@ -57,10 +57,12 @@ config:
 ---
 xychart-beta
     title "Decode Speed by Runtime + Model (tok/s, higher is better)"
-    x-axis ["MNN 4t", "MNN 2t", "IK Q4_K_M", "IK Q5_K_S", "IK Q4_K_S"]
+    x-axis ["MNN 4t (HQQ 4bit)", "MNN 2t (HQQ 4bit)", "IK Qwen3.5 Q4_K_M", "IK BS Qwen3 Q5_K_S", "IK BS Qwen3 Q4_K_S"]
     y-axis "Tokens per second" 0 --> 7
     bar [4.1, 4.5, 3.2, 5.0, 5.9]
 ```
+
+BS = ByteShape
 
 #### Model size vs decode speed
 
@@ -72,13 +74,13 @@ config:
             plotColorPalette: "#dc2626, #2563eb"
 ---
 xychart-beta
-    title "Decode Speed vs Model Size — smaller model = faster decode on Pi 5"
-    x-axis "Model size (GB)" [1.9, 2.3, 2.5, 2.6]
+    title "Decode Speed vs Model Size — smaller = faster on Pi 5"
+    x-axis ["BS Q4_K_S (1.9G)", "BS Q5_K_S (2.3G)", "MNN HQQ 4bit (2.5G)", "Q4_K_M (2.6G)"]
     y-axis "Decode tok/s" 0 --> 7
     line [5.9, 5.0, 4.5, 3.2]
 ```
 
-Red line: all runtimes plotted by model weight size. On Pi 5's bandwidth-constrained bus, model size is the dominant factor — runtime choice is secondary.
+On Pi 5's bandwidth-constrained 32-bit bus, model size is the dominant factor — runtime choice is secondary.
 
 #### Prefill speed comparison
 
@@ -91,7 +93,7 @@ config:
 ---
 xychart-beta
     title "Prefill Speed by Runtime + Model (tok/s, higher is better)"
-    x-axis ["MNN 4t", "MNN 2t", "IK Q4_K_M", "IK Q5_K_S", "IK Q4_K_S"]
+    x-axis ["MNN 4t (HQQ 4bit)", "MNN 2t (HQQ 4bit)", "IK Qwen3.5 Q4_K_M", "IK BS Qwen3 Q5_K_S", "IK BS Qwen3 Q4_K_S"]
     y-axis "Tokens per second" 0 --> 30
     bar [27.6, 13.8, 11.0, 5.0, 6.0]
 ```
@@ -150,10 +152,12 @@ For reference, the same MNN model on Snapdragon 8 Gen 2 (LPDDR5X, 64-bit bus, i8
 
 ## Cross-device comparison (MNN Qwen3.5-4B-MNN, CPU only)
 
-| Device | Prefill tok/s | Decode tok/s | Memory bus |
-|--------|--------------|-------------|------------|
-| Snapdragon 8 Gen 2 (OnePlus 12R) | 35 | 12 | 64-bit LPDDR5X |
-| **Pi 5 (BCM2712)** | **27.6** | **4.1** | **32-bit LPDDR4X** |
+| Device | Prefill tok/s | Decode tok/s | Memory | Memory bus |
+|--------|--------------|-------------|--------|------------|
+| Snapdragon 8 Gen 2 (OnePlus 12R) | 42.5 | 12.2 | 3.7 GB | 64-bit LPDDR5X |
+| **Pi 5 (BCM2712)** | **27.6** | **4.1** | **3.0 GB** | **32-bit LPDDR4X** |
+
+Snapdragon numbers from MNN Android app benchmark (MnnLlmChat v0.8.0.1, `nPromptGen=128/128`, 3 repeats, CPU backend, low precision, low memory). Pi numbers from `llm_demo` benchmark mode with a ~33 token prompt and 128 max decode tokens. Decode comparison is valid — decode speed is independent of prompt length.
 
 ```mermaid
 ---
@@ -165,12 +169,12 @@ config:
 xychart-beta
     title "MNN Cross-Device: Pi 5 vs Snapdragon 8 Gen 2"
     x-axis ["Prefill", "Decode"]
-    y-axis "Tokens per second" 0 --> 40
+    y-axis "Tokens per second" 0 --> 45
     bar [27.6, 4.1]
-    bar [35.0, 12.0]
+    bar [42.5, 12.2]
 ```
 
-Blue: Pi 5 — Red: Snapdragon 8 Gen 2. Prefill gap is modest (1.3x) but decode gap is 3x — directly tracks the memory bandwidth difference.
+Blue: Pi 5 — Red: Snapdragon 8 Gen 2. Prefill gap is 1.5x but decode gap is 3x — directly tracks the memory bandwidth difference.
 
 ## Qualitative assessment
 
@@ -186,6 +190,12 @@ Blue: Pi 5 — Red: Snapdragon 8 Gen 2. Prefill gap is modest (1.3x) but decode 
 | Documentation | Primarily Chinese | English-first, extensive | **IK** |
 | Build experience | Clean, 6.5 min | Already deployed | **IK** |
 | Quantization flexibility | Fixed at export time | Many GGUF quant options | **IK** |
+
+## Caveats
+
+1. **Output quality was not evaluated.** This spike measured throughput only. The MNN HQQ 4-bit quant, GGUF Q4_K_M, and ByteShape Q4_K_S/Q5_K_S may produce different quality outputs at the same bit-width. A perplexity or human-eval comparison would be needed to assess quality tradeoffs.
+
+2. **No ByteShape-style quants exist for Qwen3.5 yet.** The ByteShape GGUF models used here are Qwen3 (not Qwen3.5), so the IK comparison crosses model generations. A same-model comparison would require either a ByteShape Qwen3.5-4B GGUF or an MNN-converted Qwen3-4B — neither was available at time of testing.
 
 ## Recommendation: side experiment only
 
@@ -207,5 +217,4 @@ Blue: Pi 5 — Red: Snapdragon 8 Gen 2. Prefill gap is modest (1.3x) but decode 
 
 - Keep this spike's research and benchmark data for reference
 - No follow-up MNN integration work
-- Consider the ByteShape Qwen3-4B-Q4_K_S as a potential default model — 5.9 tok/s decode in 1.9GB is compelling
-- Revisit if Raspberry Pi 6 changes the memory architecture
+- Consider ByteShape Qwen3-4B-Instruct-2507-Q4_K_S (3.87 bpw) as a potential default model — 5.9 tok/s decode in 1.9GB is compelling

@@ -4,7 +4,8 @@ set -euo pipefail
 # Build MNN with LLM support on Raspberry Pi 5.
 #
 # Prerequisites: cmake, g++, make (sudo apt install -y cmake g++ make)
-# Usage: rsync references/mnn/ to /tmp/mnn on Pi, then run this script ON the Pi.
+# Usage: clone MNN (git clone --depth 1 https://github.com/alibaba/MNN.git),
+#        rsync it to /tmp/mnn on Pi, then run this script ON the Pi.
 #
 # Environment variables:
 #   MNN_SRC   — path to MNN source (default: /tmp/mnn)
@@ -35,8 +36,9 @@ esac
 # Validate source exists
 if [ ! -f "${MNN_SRC}/CMakeLists.txt" ]; then
   echo "ERROR: MNN source not found at ${MNN_SRC}/CMakeLists.txt" >&2
-  echo "Rsync the MNN repo first:" >&2
-  echo "  sshpass -e rsync -az --delete --exclude .git references/mnn/ pi@potato.local:/tmp/mnn/" >&2
+  echo "Clone and rsync MNN first:" >&2
+  echo "  git clone --depth 1 https://github.com/alibaba/MNN.git /tmp/mnn-src" >&2
+  echo "  sshpass -e rsync -az --delete --exclude .git /tmp/mnn-src/ pi@potato.local:/tmp/mnn/" >&2
   exit 1
 fi
 

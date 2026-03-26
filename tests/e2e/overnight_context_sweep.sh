@@ -23,35 +23,51 @@ ssh_pi() {
   sshpass -p "${PI_PASS}" ssh \
     -o StrictHostKeyChecking=no \
     -o ConnectTimeout=10 \
-    "${PI_USER}@${PI_HOST}" "$1" 2>/dev/null || true
+    "${PI_USER}@${PI_HOST}" "$1" || true
 }
 
 log() {
   printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
 }
 
-kill_all_llama() {
-  log "Killing all llama-server on ${PI_HOST}..."
+stop_potato_service() {
+  log "Stopping potato service on ${PI_HOST}..."
+  ssh_pi "echo ${PI_PASS} | sudo -S systemctl stop potato"
   ssh_pi "echo ${PI_PASS} | sudo -S pkill -9 -f llama-server || true"
-  sleep 5
-  log "Memory: $(ssh_pi 'free -m' | grep Mem)"
+  sleep 3
+  log "Service stopped. Memory: $(ssh_pi 'free -m' | grep Mem)"
+}
+
+start_potato_service() {
+  log "Restarting potato service on ${PI_HOST}..."
+  ssh_pi "echo ${PI_PASS} | sudo -S systemctl start potato"
+}
+
+kill_all_llama() {
+  log "Killing benchmark llama-server on ${PI_HOST}..."
+  ssh_pi "echo ${PI_PASS} | sudo -S pkill -9 -f llama-server || true"
+  sleep 3
 }
 
 start_server() {
   local ctx_size="$1"
   log "Starting server: ctx=${ctx_size} on ${PI_HOST}:${PORT}"
 
-  ssh_pi "mkdir -p /opt/potato/state"
-  ssh_pi "LD_LIBRARY_PATH=/opt/potato/llama/lib GGML_BACKEND_DIR=/opt/potato/llama/lib nohup /opt/potato/llama/bin/llama-server \
-    --model ${MODEL} \
-    --host 0.0.0.0 --port ${PORT} \
-    --ctx-size ${ctx_size} \
-    --cache-ram 1024 --parallel 1 --threads 4 \
-    --cache-type-k q8_0 --cache-type-v q8_0 \
-    --jinja --flash-attn on --no-warmup \
-    --reasoning-format none --reasoning-budget 0 \
-    --chat-template-kwargs '{\"enable_thinking\": false}' \
-    >/opt/potato/state/bench-${PORT}.log 2>&1 &"
+  # Kill any previous benchmark server
+  ssh_pi "echo ${PI_PASS} | sudo -S pkill -9 -f llama-server || true"
+  sleep 3
+
+  ssh_pi "LD_LIBRARY_PATH=/opt/potato/llama/lib GGML_BACKEND_DIR=/opt/potato/llama/lib \
+    nohup /opt/potato/llama/bin/llama-server \
+      --model ${MODEL} \
+      --host 0.0.0.0 --port ${PORT} \
+      --ctx-size ${ctx_size} \
+      --cache-ram 1024 --parallel 1 --threads 4 \
+      --cache-type-k q8_0 --cache-type-v q8_0 \
+      --jinja --flash-attn on --no-warmup \
+      --reasoning-format none --reasoning-budget 0 \
+      --chat-template-kwargs '{\"enable_thinking\": false}' \
+      >/tmp/bench-${PORT}.log 2>&1 &"
 
   local deadline=$((SECONDS + 300))
   while [ "${SECONDS}" -lt "${deadline}" ]; do
@@ -59,13 +75,13 @@ start_server() {
     code=$(curl -s -o /dev/null -w '%{http_code}' "http://${PI_HOST}:${PORT}/v1/models" 2>/dev/null || echo 0)
     if [ "${code}" = "200" ]; then
       log "Server ready (ctx=${ctx_size})"
-      ssh_pi "grep -i 'KV.*size\|kv_cache' /opt/potato/state/bench-${PORT}.log" || true
+      ssh_pi "grep -i 'KV.*size\|kv_cache' /tmp/bench-${PORT}.log" || true
       return 0
     fi
     sleep 2
   done
   log "FAILED: server did not start within 5 min"
-  ssh_pi "tail -20 /opt/potato/state/bench-${PORT}.log"
+  ssh_pi "tail -20 /tmp/bench-${PORT}.log"
   return 1
 }
 
@@ -90,11 +106,19 @@ run_conversation() {
 
 # ── Main ─────────────────────────────────────────────────────────────────
 
+cleanup() {
+  kill_all_llama
+  start_potato_service
+}
+
+trap cleanup EXIT
+
+stop_potato_service
+
 log "Overnight context sweep: ${PI_HOST} (${HW_TAG})"
 log "Configs: ${CTX_SIZES}"
 
 for ctx_size in ${CTX_SIZES}; do
-  kill_all_llama
   if start_server "${ctx_size}"; then
     run_conversation "${ctx_size}" || log "Conversation failed for ctx=${ctx_size}"
   else
@@ -103,5 +127,4 @@ for ctx_size in ${CTX_SIZES}; do
   sleep 10
 done
 
-kill_all_llama
 log "=== ALL DONE ==="

@@ -12,6 +12,7 @@ import json
 import subprocess
 import time
 import re
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,8 @@ STORY_PROMPTS = [
 ]
 
 MAX_TURNS = 120  # 64K context needs ~95 turns at ~700 tok/turn
+MAX_RETRIES = 3
+MAX_CONSECUTIVE_FAILURES = 5
 
 
 def parse_args() -> argparse.Namespace:
@@ -122,7 +125,7 @@ def sample_metrics(host: str, user: str, password: str, port: int) -> dict:
     }
 
 
-def send_chat(host: str, port: int, messages: list[dict]) -> dict:
+def send_chat(host: str, port: int, messages: list[dict], timeout: int = 600) -> dict:
     payload = {
         "model": "qwen-local",
         "stream": False,
@@ -143,7 +146,7 @@ def send_chat(host: str, port: int, messages: list[dict]) -> dict:
         method="POST",
     )
     start = time.monotonic()
-    with urllib.request.urlopen(req, timeout=600) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         body = json.loads(resp.read())
     total_s = time.monotonic() - start
 
@@ -171,23 +174,60 @@ def main() -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    # Scale timeout: large contexts with high fill can be very slow
+    request_timeout = max(600, args.ctx_size // 30)  # 32K→600s, 48K→1638s, 64K→2184s
+
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
     prev_n_past = 0
+    consecutive_failures = 0
 
     for turn in range(1, MAX_TURNS + 1):
         prompt = STORY_PROMPTS[(turn - 1) % len(STORY_PROMPTS)]
         messages.append({"role": "user", "content": prompt})
 
-        try:
-            result = send_chat(args.host, args.port, messages)
-        except Exception as e:
-            print(f"Turn {turn}: FAILED — {e}")
-            row = {"turn": turn, "error": str(e), "ctx_size": args.ctx_size,
-                   "hardware_tag": args.hardware_tag,
-                   "timestamp": datetime.now(timezone.utc).isoformat()}
-            with open(output, "a") as f:
-                f.write(json.dumps(row) + "\n")
-            break
+        result = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                result = send_chat(args.host, args.port, messages, timeout=request_timeout)
+                consecutive_failures = 0
+                break
+            except (ConnectionRefusedError, ConnectionResetError, OSError,
+                    urllib.error.URLError) as e:
+                inner = getattr(e, "reason", e)
+                if "Connection refused" in str(inner) or "Connection reset" in str(inner):
+                    print(f"Turn {turn}: server died ({e})")
+                    row = {"turn": turn, "error": f"server_dead: {e}",
+                           "ctx_size": args.ctx_size, "hardware_tag": args.hardware_tag,
+                           "timestamp": datetime.now(timezone.utc).isoformat()}
+                    with open(output, "a") as f:
+                        f.write(json.dumps(row) + "\n")
+                    messages.pop()  # remove the unanswered user prompt
+                    result = None
+                    break  # no point retrying a dead server — let shell handle it
+                if attempt < MAX_RETRIES:
+                    wait = 30 * attempt
+                    print(f"Turn {turn}: attempt {attempt} failed ({e}), retry in {wait}s...")
+                    time.sleep(wait)
+            except Exception as e:
+                if attempt < MAX_RETRIES:
+                    wait = 30 * attempt
+                    print(f"Turn {turn}: attempt {attempt} failed ({e}), retry in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    print(f"Turn {turn}: FAILED after {MAX_RETRIES} attempts — {e}")
+                    row = {"turn": turn, "error": str(e), "ctx_size": args.ctx_size,
+                           "hardware_tag": args.hardware_tag,
+                           "timestamp": datetime.now(timezone.utc).isoformat()}
+                    with open(output, "a") as f:
+                        f.write(json.dumps(row) + "\n")
+
+        if result is None:
+            messages.pop() if messages and messages[-1]["role"] == "user" else None
+            consecutive_failures += 1
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                print(f"Aborting: {MAX_CONSECUTIVE_FAILURES} consecutive failures")
+                break
+            continue
 
         messages.append({"role": "assistant", "content": result["content"]})
 

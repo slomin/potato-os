@@ -15,13 +15,13 @@ Refs #24
 | IK model 1 | [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) Q4_K_M (2.6GB) — standard llama.cpp K-quant |
 | IK model 2 | ByteShape Qwen3-4B-Instruct-2507-Q5_K_S-4.74bpw.gguf (2.3GB) |
 | IK model 3 | ByteShape Qwen3-4B-Instruct-2507-Q4_K_S-3.87bpw.gguf (1.9GB) |
-
-**Note on ByteShape quants**: ByteShape uses [ShapeLearn](https://byteshape.com), a gradient-based per-tensor precision optimizer. The K-quant labels (Q4_K_S, Q5_K_S) are used purely for HuggingFace compatibility — they do not correspond to standard llama.cpp quantization profiles. The **bpw** (bits per weight) suffix in the filename is the actual meaningful metric. A ByteShape "Q4_K_S" at 3.87 bpw is a fundamentally different quantization from a standard llama.cpp Q4_K_S.
 | Prompt | "Explain how a lighthouse lamp works in about 100 words." |
 | Max tokens | 128 |
 | Thinking mode | Disabled on all runtimes |
 | CPU governor | Performance (2.4GHz locked) |
 | Memory state | Clean — no other inference processes running |
+
+**Note on ByteShape quants**: ByteShape uses [ShapeLearn](https://byteshape.com), a gradient-based per-tensor precision optimizer. The K-quant labels (Q4_K_S, Q5_K_S) are used purely for HuggingFace compatibility — they do not correspond to standard llama.cpp quantization profiles. The **bpw** (bits per weight) suffix in the filename is the actual meaningful metric. A ByteShape "Q4_K_S" at 3.87 bpw is a fundamentally different quantization from a standard llama.cpp Q4_K_S.
 
 ## Build experience
 
@@ -55,16 +55,16 @@ MNN compiled cleanly on Pi 5 with `cmake` + `g++` 14.2.0.
 config:
     themeVariables:
         xyChart:
-            plotColorPalette: "#2563eb"
+            plotColorPalette: "#8b5cf6, #a78bfa, #2563eb, #f97316, #ef4444"
 ---
 xychart-beta
     title "Decode Speed by Runtime + Model (tok/s, higher is better)"
-    x-axis ["MNN 4t (HQQ 4bit)", "MNN 2t (HQQ 4bit)", "IK Q4_K_M", "IK BS Q5_K_S 4.74bpw", "IK BS Q4_K_S 3.87bpw"]
+    x-axis ["MNN 4t HQQ", "MNN 2t HQQ", "IK Q4_K_M", "IK BS 4.74bpw", "IK BS 3.87bpw"]
     y-axis "Tokens per second" 0 --> 7
     bar [4.1, 4.5, 3.2, 5.0, 5.9]
 ```
 
-BS = ByteShape Qwen3-4B. bpw = actual bits per weight (ByteShape's meaningful metric — K-quant labels are for HuggingFace compatibility only).
+Purple: MNN — Blue: IK unsloth — Orange/Red: IK ByteShape (BS). bpw = actual bits per weight.
 
 #### Model size vs decode speed
 
@@ -77,7 +77,7 @@ config:
 ---
 xychart-beta
     title "Decode Speed vs Model Size — smaller = faster on Pi 5"
-    x-axis ["BS Q4_K_S 3.87bpw (1.9G)", "BS Q5_K_S 4.74bpw (2.3G)", "MNN HQQ 4bit (2.5G)", "Q4_K_M (2.6G)"]
+    x-axis ["BS 3.87bpw (1.9G)", "BS 4.74bpw (2.3G)", "MNN HQQ (2.5G)", "Q4_K_M (2.6G)"]
     y-axis "Decode tok/s" 0 --> 7
     line [5.9, 5.0, 4.5, 3.2]
 ```
@@ -91,16 +91,26 @@ On Pi 5's bandwidth-constrained 32-bit bus, model size is the dominant factor �
 config:
     themeVariables:
         xyChart:
-            plotColorPalette: "#16a34a"
+            plotColorPalette: "#8b5cf6, #a78bfa, #2563eb, #f97316, #ef4444"
 ---
 xychart-beta
     title "Prefill Speed by Runtime + Model (tok/s, higher is better)"
-    x-axis ["MNN 4t (HQQ 4bit)", "MNN 2t (HQQ 4bit)", "IK Q4_K_M", "IK BS Q5_K_S 4.74bpw", "IK BS Q4_K_S 3.87bpw"]
+    x-axis ["MNN 4t HQQ", "MNN 2t HQQ", "IK Q4_K_M", "IK BS 4.74bpw", "IK BS 3.87bpw"]
     y-axis "Tokens per second" 0 --> 30
     bar [27.6, 13.8, 11.0, 5.0, 6.0]
 ```
 
 MNN dominates prefill (compute-bound) but loses decode (memory-bandwidth-bound).
+
+#### Best prefill: MNN vs IK (size-matched models)
+
+| Runtime | Model | Model size | Prefill tok/s |
+|---------|-------|-----------|--------------|
+| **MNN (4 threads)** | Qwen3.5-4B-MNN (HQQ 4bit) | 2.5 GB | **27.6** |
+| IK llama (4 threads) | Qwen3.5-4B Q4_K_M (unsloth) | 2.6 GB | ~11 |
+| IK llama (4 threads) | ByteShape Qwen3-4B Q5_K_S (4.74 bpw) | 2.3 GB | ~5 |
+
+At comparable model sizes (~2.3-2.6 GB), MNN's prefill is **2.5-5x faster** than IK llama. This is MNN's clear strength — its fused transformer ops and ARM82 compute kernels excel at the matrix-matrix multiplications that dominate prefill. The advantage is less useful in practice since prefill only runs once per conversation turn.
 
 ### MNN thread count sweep (Qwen3.5-4B-MNN, memory=low, precision=low)
 
@@ -122,14 +132,14 @@ config:
             plotColorPalette: "#2563eb, #dc2626"
 ---
 xychart-beta
-    title "MNN Thread Count vs Throughput"
+    title "MNN Thread Count — Prefill vs Decode"
     x-axis "Threads" [1, 2, 3, 4]
     y-axis "Tokens per second" 0 --> 30
     line [9.3, 13.8, 23.4, 27.6]
     line [4.4, 4.5, 4.3, 4.1]
 ```
 
-Blue: prefill (scales with threads) — Red: decode (peaks at 2 threads, bus-contention-limited)
+Blue: **prefill** (scales linearly with threads) — Red: **decode** (peaks at 2 threads, bus-contention-limited)
 
 ### IK llama thread count sweep
 
@@ -190,14 +200,14 @@ LLM decode is memory-bandwidth-bound (streaming entire model per token). Three f
 
 3. **Thread contention**: 4 threads fighting over one 32-bit bus. MNN's own research found fewer threads can be faster for decode.
 
-For reference, the same MNN model on Snapdragon 8 Gen 2 (LPDDR5X, 64-bit bus, i8mm): **35 tok/s prefill, 12 tok/s decode** — 3x faster decode, matching the bandwidth gap.
+For reference, the same MNN model on Snapdragon 8 Gen 2 (LPDDR5X, 64-bit bus, ~17 GB/s, i8mm): **42.5 tok/s prefill, 12.2 tok/s decode** — 3x faster decode, matching the ~3x bandwidth gap.
 
 ## Cross-device comparison (MNN Qwen3.5-4B-MNN, CPU only)
 
-| Device | Prefill tok/s | Decode tok/s | Memory | Memory bus |
-|--------|--------------|-------------|--------|------------|
-| Snapdragon 8 Gen 2 (OnePlus 12R) | 42.5 | 12.2 | 3.7 GB | 64-bit LPDDR5X |
-| **Pi 5 (BCM2712)** | **27.6** | **4.1** | **3.0 GB** | **32-bit LPDDR4X** |
+| Device | Prefill tok/s | Decode tok/s | Memory | Memory bus | Effective BW |
+|--------|--------------|-------------|--------|------------|-------------|
+| Snapdragon 8 Gen 2 (OnePlus 12R) | 42.5 | 12.2 | 3.7 GB | 64-bit LPDDR5X | ~15-20 GB/s |
+| **Pi 5 (BCM2712)** | **27.6** | **4.1** | **3.0 GB** | **32-bit LPDDR4X** | **~4.8-5.7 GB/s** |
 
 Snapdragon numbers from MNN Android app benchmark (MnnLlmChat v0.8.0.1, `nPromptGen=128/128`, 3 repeats, CPU backend, low precision, low memory). Pi numbers from `llm_demo` benchmark mode with a ~33 token prompt and 128 max decode tokens. Decode comparison is valid — decode speed is independent of prompt length.
 
@@ -206,7 +216,7 @@ Snapdragon numbers from MNN Android app benchmark (MnnLlmChat v0.8.0.1, `nPrompt
 config:
     themeVariables:
         xyChart:
-            plotColorPalette: "#2563eb, #dc2626"
+            plotColorPalette: "#2563eb, #f97316, #2563eb, #f97316"
 ---
 xychart-beta
     title "MNN Cross-Device: Pi 5 vs Snapdragon 8 Gen 2"
@@ -216,7 +226,7 @@ xychart-beta
     bar [42.5, 12.2]
 ```
 
-Blue: Pi 5 — Red: Snapdragon 8 Gen 2. Prefill gap is 1.5x but decode gap is 3x — directly tracks the memory bandwidth difference.
+Blue: Pi 5 (32-bit bus, ~5 GB/s) — Orange: Snapdragon 8 Gen 2 (64-bit bus, ~17 GB/s). Prefill gap is 1.5x but decode gap is 3x — directly tracks the ~3x memory bandwidth difference.
 
 ## Qualitative assessment
 
@@ -235,7 +245,7 @@ Blue: Pi 5 — Red: Snapdragon 8 Gen 2. Prefill gap is 1.5x but decode gap is 3x
 
 ## Caveats
 
-1. **Output quality was not evaluated.** This spike measured throughput only. The MNN HQQ 4-bit quant, GGUF Q4_K_M, and ByteShape Q4_K_S/Q5_K_S may produce different quality outputs at the same bit-width. A perplexity or human-eval comparison would be needed to assess quality tradeoffs.
+1. **Output quality was not evaluated.** This spike measured throughput only. The MNN HQQ 4-bit quant, GGUF Q4_K_M, and ByteShape Q4_K_S/Q5_K_S may produce different quality outputs at the same bit-width. A dedicated quality evaluation would be needed to assess tradeoffs.
 
 2. **No ByteShape-style quants exist for Qwen3.5 yet.** The ByteShape GGUF models used here are Qwen3 (not Qwen3.5), so the IK comparison crosses model generations. A same-model comparison would require either a ByteShape Qwen3.5-4B GGUF or an MNN-converted Qwen3-4B — neither was available at time of testing.
 

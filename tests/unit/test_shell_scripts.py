@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+
+import pytest
 from pathlib import Path
 
 from tests.unit.conftest import REPO_ROOT, write_stub
@@ -289,6 +291,54 @@ printf '%s\n' "$@" > "$ARGS_OUT"
     assert "on" in args
     assert "--chat-template-kwargs" in args
     assert "enable_thinking" in args
+
+
+@pytest.mark.parametrize(
+    "family, expected_flag",
+    [("ik_llama", "--webui"), ("llama_cpp", "--no-webui")],
+)
+def test_start_llama_disables_webui_per_runtime_family(tmp_path: Path, family: str, expected_flag: str):
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    args_out = tmp_path / "args.txt"
+    model_path = tmp_path / "Qwen3.5-2B-Q4_K_M.gguf"
+    mmproj_path = tmp_path / "mmproj-F16.gguf"
+    model_path.write_bytes(b"gguf")
+    mmproj_path.write_bytes(b"mmproj")
+
+    runtime_dir = tmp_path / "llama"
+    runtime_dir.mkdir()
+    (runtime_dir / "runtime.json").write_text(
+        json.dumps({"family": family, "profile": "pi5-opt"}), encoding="utf-8"
+    )
+
+    write_stub(
+        fakebin / "fake-llama-server",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$@" > "$ARGS_OUT"
+""",
+    )
+
+    env = os.environ.copy()
+    env["LLAMA_SERVER_BIN"] = str(fakebin / "fake-llama-server")
+    env["POTATO_MODEL_PATH"] = str(model_path)
+    env["POTATO_LLAMA_RUNTIME_DIR"] = str(runtime_dir)
+    env["POTATO_MMPROJ_PATH"] = str(mmproj_path)
+    env["POTATO_AUTO_DOWNLOAD_MMPROJ"] = "0"
+    env["POTATO_VISION_MODEL_NAME_PATTERN_QWEN35"] = "1"
+    env["POTATO_SLOT_SAVE_PATH"] = str(tmp_path / "llama-slots")
+    env["ARGS_OUT"] = str(args_out)
+
+    subprocess.run([str(REPO_ROOT / "bin" / "start_llama.sh")], check=True, cwd=REPO_ROOT, env=env)
+
+    args = args_out.read_text(encoding="utf-8")
+    assert expected_flag in args
+    if family == "ik_llama":
+        assert "none" in args
+        assert "--no-webui" not in args
+    else:
+        assert "--webui" not in args or "--no-webui" in args
 
 
 def test_start_llama_text_model_skips_mmproj(tmp_path: Path):

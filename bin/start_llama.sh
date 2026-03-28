@@ -410,6 +410,24 @@ if should_disable_mmap; then
   extra_args+=(--no-mmap)
   printf 'Applying no-mmap runtime profile for local weights (disable GGUF mmap streaming)\n' >&2
 fi
+runtime_family=''
+for _meta in "${LLAMA_RUNTIME_DIR}/runtime.json" \
+             "${LLAMA_RUNTIME_DIR}/.potato-llama-runtime-bundle.json"; do
+  if [ -r "${_meta}" ]; then
+    runtime_family="$(
+      sed -n 's/.*"family"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+        "${_meta}" 2>/dev/null | head -n1
+    )"
+    [ -n "${runtime_family}" ] && break
+  fi
+done
+# Disable the built-in WebUI — Potato serves its own UI.
+# ik_llama uses "--webui none"; upstream llama.cpp uses "--no-webui".
+if [ "${runtime_family}" = "ik_llama" ]; then
+  extra_args+=(--webui none)
+elif [ "${runtime_family}" = "llama_cpp" ]; then
+  extra_args+=(--no-webui)
+fi
 if [ -n "${EXTRA_FLAGS}" ]; then
   # shellcheck disable=SC2206
   split_extra=(${EXTRA_FLAGS})

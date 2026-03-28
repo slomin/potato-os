@@ -273,6 +273,27 @@ def test_build_update_status_uses_live_version_not_cached(runtime, monkeypatch):
     assert result["current_version"] == "0.3.6-pre-alpha"
 
 
+def test_build_update_status_just_updated_to_null_by_default(runtime):
+    result = build_update_status(runtime)
+    assert result["just_updated_to"] is None
+    assert result["just_updated_release_notes"] is None
+
+
+def test_build_update_status_includes_just_updated_to_when_set(runtime):
+    state = {
+        "available": False,
+        "latest_version": "0.5.0",
+        "checked_at_unix": 1711000000,
+        "error": None,
+        "just_updated_to": "0.5.0",
+        "just_updated_release_notes": "Notes for 0.5.0",
+    }
+    runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
+    result = build_update_status(runtime)
+    assert result["just_updated_to"] == "0.5.0"
+    assert result["just_updated_release_notes"] == "Notes for 0.5.0"
+
+
 def test_build_update_status_deferred_when_download_active(runtime):
     runtime.download_state_path.write_text(
         json.dumps({"bytes_total": 1000, "bytes_downloaded": 500, "percent": 50}),
@@ -773,6 +794,40 @@ def test_detect_post_update_state_fails_on_version_mismatch(runtime, monkeypatch
     after = read_update_state(runtime)
     assert after["execution_state"] == "failed"
     assert after["execution_error"] == "version_unchanged_after_restart"
+
+
+def test_detect_post_update_state_sets_just_updated_to(runtime, monkeypatch):
+    monkeypatch.setattr("core.update_state.__version__", "0.5.0")
+    state = {
+        "available": True,
+        "latest_version": "0.5.0",
+        "release_notes": "Notes for 0.5.0",
+        "execution_state": "restart_pending",
+        "execution_target_version": "0.5.0",
+    }
+    runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    assert detect_post_update_state(runtime) is True
+
+    after = read_update_state(runtime)
+    assert after["just_updated_to"] == "0.5.0"
+    assert after["just_updated_release_notes"] == "Notes for 0.5.0"
+
+
+def test_detect_post_update_state_does_not_set_just_updated_to_on_failure(runtime, monkeypatch):
+    monkeypatch.setattr("core.update_state.__version__", "0.4.0")
+    state = {
+        "available": True,
+        "latest_version": "0.5.0",
+        "execution_state": "restart_pending",
+        "execution_target_version": "0.5.0",
+    }
+    runtime.update_state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    assert detect_post_update_state(runtime) is False
+
+    after = read_update_state(runtime)
+    assert after.get("just_updated_to") is None
 
 
 # ---------------------------------------------------------------------------

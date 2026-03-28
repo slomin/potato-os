@@ -1994,3 +1994,46 @@ body.terminal-modal-open #terminalModal { display: grid; }
     height: calc(100vh - 140px);
   }
 }
+
+/* ── Changelog modal ───────────────────────────────────────────────── */
+
+body.changelog-modal-open { overflow: hidden; }
+
+body.changelog-modal-open #changelogBackdrop { display: block; }
+body.changelog-modal-open #changelogModal { display: grid; }
+
+.changelog-modal-shell {
+  width: min(640px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  display: flex;
+  flex-direction: column;
+}
+
+.changelog-content {
+  overflow-y: auto;
+  max-height: 60vh;
+  padding: 8px 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.changelog-content h1,
+.changelog-content h2,
+.changelog-content h3 { margin: 16px 0 8px; }
+.changelog-content p { margin: 0 0 10px; }
+.changelog-content ul,
+.changelog-content ol { padding-left: 20px; margin: 0 0 10px; }
+.changelog-content code { font-size: 13px; padding: 2px 6px; border-radius: 4px; background: var(--panel-muted); }
+.changelog-content pre { padding: 12px; border-radius: 8px; background: var(--panel-muted); overflow-x: auto; }
+.changelog-content a { color: var(--link); text-decoration: underline; }
+.changelog-content table { width: 100%; border-collapse: collapse; margin: 0 0 10px; font-size: 14px; }
+.changelog-content th,
+.changelog-content td { padding: 6px 10px; border: 1px solid var(--border); text-align: left; }
+.changelog-content th { background: var(--panel-muted); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .changelog-modal-shell {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+  }
+}

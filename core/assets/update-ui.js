@@ -1,6 +1,7 @@
 "use strict";
 
-import { appState } from "./state.js";
+import { appState, CHANGELOG_SEEN_KEY } from "./state.js";
+import { flushPendingNoticeDismissal } from "./platform-notify.js";
 
 const ACTIVE_STATES = new Set(["downloading", "staging", "applying", "restart_pending"]);
 
@@ -31,6 +32,12 @@ export function renderUpdateCard(updatePayload) {
   const error = String(updatePayload?.progress?.error || "");
   const hasNotes = Boolean(updatePayload?.release_notes);
   const isActive = ACTIVE_STATES.has(state);
+
+  // Post-update auto-open — must run before early returns that hide the card
+  const justUpdatedTo = String(updatePayload?.just_updated_to || "");
+  if (justUpdatedTo) {
+    maybeAutoOpenChangelog(updatePayload);
+  }
 
   // Default: hide everything
   if (startBtn) startBtn.hidden = true;
@@ -159,4 +166,71 @@ export function setUpdateStartInFlight(inFlight) {
     retryBtn.disabled = Boolean(inFlight);
     retryBtn.textContent = inFlight ? "Retrying..." : "Retry";
   }
+}
+
+// ── Changelog modal ───────────────────────────────────────────────────
+
+let _markdownConfigured = false;
+
+function _renderMarkdown(source) {
+  if (!_markdownConfigured && window.marked) {
+    window.marked.setOptions({ gfm: true, breaks: true });
+    _markdownConfigured = true;
+  }
+  const html = window.marked?.parse(source) || "";
+  return window.DOMPurify?.sanitize(html, {
+    ALLOWED_TAGS: ["a", "blockquote", "br", "code", "em", "h1", "h2", "h3", "h4", "li", "ol", "p", "pre", "strong", "table", "tbody", "td", "th", "thead", "tr", "ul"],
+    ALLOWED_ATTR: ["href", "title"],
+  }) || "";
+}
+
+export function openChangelogModal({ version, notes, subtitle } = {}) {
+  appState.changelogModalOpen = true;
+  document.body.classList.add("changelog-modal-open");
+  const backdrop = document.getElementById("changelogBackdrop");
+  const modal = document.getElementById("changelogModal");
+  if (backdrop) backdrop.hidden = false;
+  if (modal) modal.hidden = false;
+
+  const titleEl = document.getElementById("changelogModalTitle");
+  const subtitleEl = document.getElementById("changelogModalSubtitle");
+  const contentEl = document.getElementById("changelogContent");
+
+  if (titleEl) titleEl.textContent = version ? `What's new in v${version}` : "What's new";
+  if (subtitleEl) subtitleEl.textContent = subtitle || "";
+  if (contentEl) {
+    contentEl.innerHTML = notes
+      ? _renderMarkdown(notes)
+      : "No release notes available for this version.";
+  }
+}
+
+export function closeChangelogModal() {
+  appState.changelogModalOpen = false;
+  document.body.classList.remove("changelog-modal-open");
+  const backdrop = document.getElementById("changelogBackdrop");
+  const modal = document.getElementById("changelogModal");
+  if (backdrop) backdrop.hidden = true;
+  if (modal) modal.hidden = true;
+  flushPendingNoticeDismissal();
+}
+
+export function bindChangelogModal() {
+  const closeBtn = document.getElementById("changelogCloseBtn");
+  const backdrop = document.getElementById("changelogBackdrop");
+  if (closeBtn) closeBtn.addEventListener("click", closeChangelogModal);
+  if (backdrop) backdrop.addEventListener("click", closeChangelogModal);
+}
+
+function maybeAutoOpenChangelog(updatePayload) {
+  const version = String(updatePayload?.just_updated_to || "");
+  if (!version) return;
+  const seen = localStorage.getItem(CHANGELOG_SEEN_KEY);
+  if (seen === version) return;
+  localStorage.setItem(CHANGELOG_SEEN_KEY, version);
+  openChangelogModal({
+    version,
+    notes: updatePayload?.just_updated_release_notes || updatePayload?.release_notes || null,
+    subtitle: "You\u2019ve updated to this version.",
+  });
 }

@@ -25,7 +25,7 @@ import { appState, RUNTIME_RECONNECT_INTERVAL_MS, RUNTIME_RECONNECT_TIMEOUT_MS, 
 import { formatBytes } from "./utils.js";
 import { isLocalModelConnected, findResumableFailedModel, renderDownloadPrompt } from "./status.js";
 import { setModelUploadStatus, setLlamaRuntimeSwitchStatus, setLlamaRuntimeSwitchButtonState, setLlamaMemoryLoadingStatus, setLlamaMemoryLoadingButtonState, setLargeModelOverrideStatus, setLargeModelOverrideButtonState, setPowerCalibrationStatus, setPowerCalibrationButtonsState } from "./runtime-ui.js";
-import { setUpdateCheckInFlight, setUpdateStartInFlight, isUpdateExecutionActive } from "./update-ui.js";
+import { setUpdateCheckInFlight, setUpdateStartInFlight, isUpdateExecutionActive, openChangelogModal } from "./update-ui.js";
 import { setModelUrlStatus, formatModelUrlStatus, resolveSelectedSettingsModel, selectedModelHasUnsavedChanges, blockModelSelectionChange, renderSettingsWorkspace } from "./settings-ui.js";
 import { showPlatformNotice } from "./platform-notify.js";
 import * as platformApi from "./platform-api.js";
@@ -640,8 +640,12 @@ export async function startUpdate() {
 }
 
 export function showUpdateReleaseNotes() {
-  const notes = appState.latestStatus?.update?.release_notes;
-  showPlatformNotice(notes || "No release notes available.", { level: "info", durationMs: 15000 });
+  const update = appState.latestStatus?.update;
+  const notes = update?.release_notes;
+  const latest = String(update?.latest_version || "");
+  const current = String(update?.current_version || "");
+  const subtitle = (current && latest) ? `v${current} \u2192 v${latest}` : "";
+  openChangelogModal({ version: latest, notes: notes || null, subtitle });
 }
 
 function stopUpdateReconnectWatch() {

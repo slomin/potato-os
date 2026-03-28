@@ -13,6 +13,8 @@ function makeUpdatePayload(overrides = {}) {
       deferred: false,
       defer_reason: null,
       progress: { phase: null, percent: 0, error: null },
+      just_updated_to: null,
+      just_updated_release_notes: null,
       ...overrides,
     },
   });
@@ -241,7 +243,7 @@ test("install button calls start endpoint", async ({ page }) => {
   expect(startCalled).toBe(true);
 });
 
-test("release notes displayed as platform notice", async ({ page }) => {
+test("release notes button opens changelog modal", async ({ page }) => {
   const status = makeUpdatePayload({
     available: true,
     current_version: "0.4.0",
@@ -256,7 +258,151 @@ test("release notes displayed as platform notice", async ({ page }) => {
   await waitForStatusApplied(page);
 
   await page.locator("#updateNotesBtn").click();
-  await expect(page.locator("#platformNotice")).toContainText("Feature A", { timeout: 5000 });
+  await expect(page.locator("#changelogModal")).toBeVisible();
+  await expect(page.locator("#changelogContent")).toContainText("Feature A");
+});
+
+test("changelog modal closes on close button click", async ({ page }) => {
+  const status = makeUpdatePayload({
+    available: true,
+    current_version: "0.4.0",
+    latest_version: "0.5.0",
+    state: "idle",
+    release_notes: "Some notes",
+  });
+  await page.route("**/status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status) })
+  );
+  await page.goto("/");
+  await waitForStatusApplied(page);
+
+  await page.locator("#updateNotesBtn").click();
+  await expect(page.locator("#changelogModal")).toBeVisible();
+  await page.locator("#changelogCloseBtn").click();
+  await expect(page.locator("#changelogModal")).toBeHidden();
+});
+
+test("changelog modal closes on Escape key", async ({ page }) => {
+  const status = makeUpdatePayload({
+    available: true,
+    current_version: "0.4.0",
+    latest_version: "0.5.0",
+    state: "idle",
+    release_notes: "Some notes",
+  });
+  await page.route("**/status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status) })
+  );
+  await page.goto("/");
+  await waitForStatusApplied(page);
+
+  await page.locator("#updateNotesBtn").click();
+  await expect(page.locator("#changelogModal")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#changelogModal")).toBeHidden();
+});
+
+test("changelog modal renders markdown as HTML", async ({ page }) => {
+  const status = makeUpdatePayload({
+    available: true,
+    current_version: "0.4.0",
+    latest_version: "0.5.0",
+    state: "idle",
+    release_notes: "## Heading\n- bullet one\n- bullet two",
+  });
+  await page.route("**/status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status) })
+  );
+  await page.goto("/");
+  await waitForStatusApplied(page);
+
+  await page.locator("#updateNotesBtn").click();
+  await expect(page.locator("#changelogContent h2")).toBeVisible();
+  await expect(page.locator("#changelogContent li")).toHaveCount(2);
+});
+
+test("changelog auto-opens after update with just_updated_to", async ({ page }) => {
+  const status = makeUpdatePayload({
+    available: false,
+    current_version: "0.5.0",
+    latest_version: "0.5.0",
+    state: "idle",
+    release_notes: "## What's new\n- Feature A",
+    just_updated_to: "0.5.0",
+    just_updated_release_notes: "## What's new\n- Feature A",
+  });
+  await page.route("**/status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status) })
+  );
+  await page.goto("/");
+  await waitForStatusApplied(page);
+
+  await expect(page.locator("#changelogModal")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator("#changelogContent")).toContainText("Feature A");
+});
+
+test("changelog auto-open uses snapshotted notes over stale release_notes", async ({ page }) => {
+  const status = makeUpdatePayload({
+    available: false,
+    current_version: "0.5.0",
+    latest_version: "0.5.0",
+    state: "idle",
+    release_notes: "## vNEXT notes (stale)",
+    just_updated_to: "0.5.0",
+    just_updated_release_notes: "## v0.5.0 notes (correct)",
+  });
+  await page.route("**/status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status) })
+  );
+  await page.goto("/");
+  await waitForStatusApplied(page);
+
+  await expect(page.locator("#changelogModal")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator("#changelogContent")).toContainText("v0.5.0 notes (correct)");
+  await expect(page.locator("#changelogContent")).not.toContainText("stale");
+});
+
+test("changelog does not auto-open when version already seen", async ({ page }) => {
+  const status = makeUpdatePayload({
+    available: false,
+    current_version: "0.5.0",
+    latest_version: "0.5.0",
+    state: "idle",
+    release_notes: "## What's new\n- Feature A",
+    just_updated_to: "0.5.0",
+  });
+  await page.route("**/status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status) })
+  );
+
+  // Pre-set the "already seen" key before navigating
+  await page.goto("/");
+  await page.evaluate(() => localStorage.setItem("potato_changelog_seen_v", "0.5.0"));
+  await page.goto("/");
+  await waitForStatusApplied(page);
+
+  // Wait a tick and confirm modal did not open
+  await page.waitForTimeout(1000);
+  await expect(page.locator("#changelogModal")).toBeHidden();
+});
+
+test("changelog modal shows fallback when no release notes", async ({ page }) => {
+  const status = makeUpdatePayload({
+    available: false,
+    current_version: "0.5.0",
+    latest_version: "0.5.0",
+    state: "idle",
+    release_notes: null,
+    just_updated_to: "0.5.0",
+  });
+  await page.route("**/status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(status) })
+  );
+  await page.goto("/");
+  await waitForStatusApplied(page);
+
+  await expect(page.locator("#changelogModal")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator("#changelogContent")).toContainText("No release notes available");
 });
 
 test("check button disabled during active update execution", async ({ page }) => {

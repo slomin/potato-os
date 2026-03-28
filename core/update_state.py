@@ -159,6 +159,8 @@ def build_update_status(runtime: RuntimeConfig) -> dict[str, Any]:
             "deferred": deferred,
             "defer_reason": "download_active" if deferred else None,
             "progress": {"phase": exec_phase, "percent": exec_percent, "error": progress_error},
+            "just_updated_to": None,
+            "just_updated_release_notes": None,
         }
 
     latest_version = state.get("latest_version")
@@ -176,6 +178,8 @@ def build_update_status(runtime: RuntimeConfig) -> dict[str, Any]:
         "deferred": deferred,
         "defer_reason": "download_active" if deferred else None,
         "progress": {"phase": exec_phase, "percent": exec_percent, "error": progress_error},
+        "just_updated_to": state.get("just_updated_to"),
+        "just_updated_release_notes": state.get("just_updated_release_notes"),
     }
 
 
@@ -330,6 +334,8 @@ def detect_post_update_state(runtime: RuntimeConfig) -> bool:
     state["execution_error"] = None
     state["execution_target_version"] = None
     state["execution_started_at_unix"] = None
+    state["just_updated_to"] = target or __version__
+    state["just_updated_release_notes"] = state.get("release_notes")
     _atomic_write_json(runtime.update_state_path, state)
     return True
 

@@ -166,6 +166,8 @@ function makeStatusPayload(overrides = {}) {
       deferred: false,
       defer_reason: null,
       progress: { phase: null, percent: 0, error: null },
+      just_updated_to: null,
+      just_updated_release_notes: null,
     },
     llama_runtime: {
       current: { family: "ik_llama", llama_cpp_commit: "abc12345", profile: "pi5-opt", has_server_binary: true },

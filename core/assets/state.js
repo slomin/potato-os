@@ -39,6 +39,7 @@ export const appState = {
   settingsModalOpenedAtMs: 0,
   editModalOpen: false,
   terminalModalOpen: false,
+  changelogModalOpen: false,
   modelSwitcherOpen: false,
   settingsWorkspaceTab: "model",
   selectedSettingsModelId: "",
@@ -108,6 +109,7 @@ export const IMAGE_CANCEL_RESTART_DELAY_MS = Math.max(
   2000,
   Number(window.__POTATO_CANCEL_RESTART_DELAY_MS__ || 45000),
 );
+export const CHANGELOG_SEEN_KEY = "potato_changelog_seen_v";
 export const SESSIONS_DB_NAME = "potato_sessions";
 export const SESSIONS_DB_VERSION = 1;
 export const SESSIONS_STORE = "sessions";

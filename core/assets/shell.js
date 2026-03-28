@@ -4,7 +4,7 @@ import { appState, defaultSettings, STATUS_POLL_TIMEOUT_MS } from "./state.js";
 import { formatCountdownSeconds } from "./utils.js";
 import { isLocalModelConnected, updateLlamaIndicator, renderDownloadPrompt, renderStatusActions, renderCompatibilityWarnings, formatSidebarStatusDetail, findResumableFailedModel } from "./status.js";
 import { setRuntimeDetailsExpanded, renderSystemRuntime, renderLlamaRuntimeStatus, renderUploadState } from "./runtime-ui.js";
-import { renderUpdateCard } from "./update-ui.js";
+import { renderUpdateCard, closeChangelogModal, bindChangelogModal } from "./update-ui.js";
 import { populateModelSwitcher, openModelSwitcher, closeModelSwitcher, toggleModelSwitcher } from "./model-switcher.js";
 import { loadSettings, saveSettings, renderSettingsWorkspace, closeSettingsModal, closeLegacySettingsModal, setSettingsModalOpen, registerSettingsPlatformCallbacks } from "./settings-ui.js";
 import { registerPlatformShell } from "./platform-controls.js";
@@ -84,6 +84,10 @@ import { registerPlatformShell } from "./platform-controls.js";
             return;
           }
           if (_appEscapeHandler && _appEscapeHandler()) return;
+          if (appState.changelogModalOpen) {
+            closeChangelogModal();
+            return;
+          }
           if (appState.legacySettingsModalOpen) {
             closeLegacySettingsModal();
             return;
@@ -372,6 +376,7 @@ import { registerPlatformShell } from "./platform-controls.js";
 
     // Bind shell event handlers (these are shell-owned, safe before app loads)
     bindMobileSidebar();
+    bindChangelogModal();
     document.getElementById("themeToggle").addEventListener("click", toggleTheme);
     document.getElementById("sidebarToggle").addEventListener("click", () => setSidebarOpen(!document.body.classList.contains("sidebar-open")));
     document.getElementById("sidebarCloseBtn").addEventListener("click", () => setSidebarOpen(false));

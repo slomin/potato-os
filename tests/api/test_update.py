@@ -88,6 +88,8 @@ def test_status_includes_update_key_with_default_shape(client, monkeypatch):
     assert update["state"] == "idle"
     assert update["deferred"] is False
     assert update["defer_reason"] is None
+    assert update["just_updated_to"] is None
+    assert update["just_updated_release_notes"] is None
     assert update["progress"] == {"phase": None, "percent": 0, "error": None}
 
 

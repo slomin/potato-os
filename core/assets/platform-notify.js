@@ -31,7 +31,7 @@ function ensureNoticeBar() {
 }
 
 function isModalOpen() {
-  return appState.settingsModalOpen || appState.legacySettingsModalOpen;
+  return appState.settingsModalOpen || appState.legacySettingsModalOpen || appState.changelogModalOpen;
 }
 
 export function showPlatformNotice(message, { level = "info", durationMs = 6000 } = {}) {

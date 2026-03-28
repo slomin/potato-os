@@ -400,6 +400,20 @@
     </div>
   </div>
 
+  <div id="changelogBackdrop" class="settings-backdrop" hidden></div>
+  <div id="changelogModal" class="settings-modal changelog-modal" role="dialog" aria-modal="true" aria-labelledby="changelogModalTitle" hidden>
+    <div class="settings-modal-shell changelog-modal-shell">
+      <div class="settings-modal-header">
+        <div>
+          <h2 id="changelogModalTitle" class="settings-modal-title">What's new</h2>
+          <p id="changelogModalSubtitle" class="settings-modal-note"></p>
+        </div>
+        <button id="changelogCloseBtn" class="ghost-btn settings-close-btn" type="button" aria-label="Close">Close</button>
+      </div>
+      <div id="changelogContent" class="changelog-content"></div>
+    </div>
+  </div>
+
   <div id="terminalBackdrop" class="settings-backdrop" hidden></div>
   <div id="terminalModal" class="settings-modal terminal-modal" role="dialog" aria-modal="true" aria-labelledby="terminalModalTitle" hidden>
     <div class="settings-modal-shell terminal-modal-shell">

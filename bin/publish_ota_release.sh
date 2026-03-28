@@ -174,7 +174,13 @@ else
     git push "${PUSH_REMOTE}" "${VERSION}" 2>/dev/null || true
   fi
 
-  RELEASE_NOTES="$(cat <<NOTES
+  CHANGELOG_FILE="${REPO_ROOT}/docs/releases/${VERSION}.md"
+  if [ -f "${CHANGELOG_FILE}" ]; then
+    RELEASE_NOTES="$(cat "${CHANGELOG_FILE}")"
+    printf 'Using changelog: %s\n' "${CHANGELOG_FILE}"
+  else
+    printf 'No changelog at %s — using default template.\n' "${CHANGELOG_FILE}"
+    RELEASE_NOTES="$(cat <<NOTES
 ## Potato OS ${VERSION} — OTA Update
 
 | Field | Value |
@@ -193,7 +199,8 @@ Devices running Potato OS can check for and apply this update via the built-in u
 sha256sum -c ${CHECKSUM_NAME}
 \`\`\`
 NOTES
-  )"
+    )"
+  fi
 
   gh release create "${VERSION}" \
     "${TARBALL_PATH}" \

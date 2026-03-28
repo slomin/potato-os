@@ -110,7 +110,8 @@ stage_started_at="$(now_epoch)"
 log_stage "Syncing install paths to Pi..."
 SSHPASS="${PI_PASSWORD}" sshpass -e rsync "${rsync_flags[@]}" "${rsync_progress_flags[@]}" \
   -e "ssh ${PI_SSH_OPTIONS}" \
-  --include='/app/' --include='/app/**' \
+  --include='/core/' --include='/core/**' \
+  --include='/apps/' --include='/apps/**' \
   --include='/bin/' --include='/bin/**' \
   --include='/nginx/' --include='/nginx/**' \
   --include='/systemd/' --include='/systemd/**' \

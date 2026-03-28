@@ -559,6 +559,7 @@ test("model-first settings save per model, yaml can be applied, and projector do
   });
 
   await page.goto("/");
+  await expect(page.locator("#composerForm")).toBeVisible({ timeout: 5000 });
   await openSettingsModal(page);
 
   await expect(page.locator("#settingsModelWorkspace")).toBeVisible();

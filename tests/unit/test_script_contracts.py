@@ -80,7 +80,8 @@ def test_smoke_script_retries_connection_refused():
     assert "--retry-connrefused" in script
     assert "--retry-all-errors" in script
     assert "Syncing install paths to Pi..." in script
-    assert "--include='/app/'" in script
+    assert "--include='/core/'" in script
+    assert "--include='/apps/'" in script
     assert "--include='/bin/'" in script
     assert "--include='/nginx/'" in script
     assert "--include='/systemd/'" in script

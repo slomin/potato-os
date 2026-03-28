@@ -11,7 +11,7 @@ const {
   makeStatusPayload,
   makeMultiModelStatusPayload,
   sendAndWaitForReply,
-} = require("./helpers");
+} = require("../../../tests/ui/helpers");
 
 
 test("large image selection shows loading phases and optimization metadata", async ({ page }) => {

@@ -1,6 +1,6 @@
 "use strict";
 
-import { appState } from "./state.js";
+import { appState } from "/assets/state.js";
 
     let _openEditMessageModal = null;
 

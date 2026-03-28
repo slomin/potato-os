@@ -1,0 +1,12 @@
+{
+  "id": "chat",
+  "name": "Potato Chat",
+  "version": "0.1.0",
+  "entry": "main.py",
+  "critical": true,
+  "has_ui": true,
+  "ui_path": "assets/",
+  "socket": "chat.sock",
+  "inferno": true,
+  "description": "Chat interface — the first Potato app"
+}

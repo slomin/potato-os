@@ -1,10 +1,10 @@
 "use strict";
 
-import { appState, PREFILL_METRICS_KEY, PREFILL_PROGRESS_CAP, PREFILL_PROGRESS_TAIL_START, PREFILL_PROGRESS_FLOOR, PREFILL_TICK_MS, PREFILL_FINISH_DURATION_MS, PREFILL_FINISH_TICK_MS, PREFILL_FINISH_HOLD_MS, STATUS_CHIP_MIN_VISIBLE_MS, IMAGE_CANCEL_RECOVERY_DELAY_MS, IMAGE_CANCEL_RESTART_DELAY_MS } from "./state.js";
-import { postJson } from "./utils.js";
+import { appState, PREFILL_METRICS_KEY, PREFILL_PROGRESS_CAP, PREFILL_PROGRESS_TAIL_START, PREFILL_PROGRESS_FLOOR, PREFILL_TICK_MS, PREFILL_FINISH_DURATION_MS, PREFILL_FINISH_TICK_MS, PREFILL_FINISH_HOLD_MS, STATUS_CHIP_MIN_VISIBLE_MS, IMAGE_CANCEL_RECOVERY_DELAY_MS, IMAGE_CANCEL_RESTART_DELAY_MS } from "/assets/state.js";
+import { postJson } from "/assets/utils.js";
 import { appendMessage, updateMessage, setMessageProcessingState, setMessageMeta, setMessageActionsVisible, removeMessage } from "./messages.js";
 import { clearPendingImage, buildUserMessageContent, buildUserBubblePayload, cancelPendingImageWork } from "./image-handler.js";
-import { collectSettings, resolveSeedForRequest, activeRuntimeVisionCapability, showTextOnlyImageBlockedState, renderComposerCapabilities, formatImageRejectedNotice } from "./settings-ui.js";
+import { collectSettings, resolveSeedForRequest, activeRuntimeVisionCapability, showTextOnlyImageBlockedState, renderComposerCapabilities, formatImageRejectedNotice } from "/assets/settings-ui.js";
 import { saveActiveSession } from "./session-manager.js";
 
     let _ui = {};

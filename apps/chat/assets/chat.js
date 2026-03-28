@@ -1,13 +1,14 @@
 "use strict";
 
-import { appState } from "./state.js";
+import { appState } from "/assets/state.js";
 import { registerAppendMessage, registerSetMessageMeta, startNewChat, deleteSession, deleteAllSessions, loadSessionIntoView, initSessionManager } from "./session-manager.js";
-import { registerUpdateCallbacks } from "./update-ui.js";
+import { registerUpdateCallbacks } from "/assets/update-ui.js";
 import { registerOpenEditMessageModal, getMessagesBox, isMessagesPinned, setMessagesPinnedState, hasActiveMessageSelection, appendMessage, setMessageMeta, removeMessage } from "./messages.js";
 import { registerImageUiCallbacks, clearPendingImage, handleImageSelected, openImagePicker } from "./image-handler.js";
-import { registerSettingsChatCallbacks, activeRuntimeVisionCapability, showTextOnlyImageBlockedState, bindSettingsModal } from "./settings-ui.js";
-import { registerChatEngineCallbacks, setComposerActivity, setComposerStatusChip, hideComposerStatusChip, setCancelEnabled, sendChat, stopGeneration, cancelCurrentWork } from "./chat-engine.js";
-import { switchLlamaRuntimeBundle, applyLlamaMemoryLoadingMode, applyLargeModelOverrideFromSettings, allowUnsupportedLargeModelFromWarning, capturePowerCalibrationSample, fitPowerCalibrationModel, resetPowerCalibrationModel, registerModelFromUrl, activateSelectedModel, purgeAllModels, uploadLocalModel, cancelLocalModelUpload, startModelDownload, resetRuntimeHeavy, checkForUpdate, startUpdate, showUpdateReleaseNotes, startUpdateReconnectWatch, handleModelsListClick } from "./platform-controls.js";
+import { registerSettingsChatCallbacks, activeRuntimeVisionCapability, showTextOnlyImageBlockedState, bindSettingsModal } from "/assets/settings-ui.js";
+import { registerChatEngineCallbacks, setSendEnabled, setComposerActivity, setComposerStatusChip, hideComposerStatusChip, setCancelEnabled, sendChat, stopGeneration, cancelCurrentWork } from "/app/chat/assets/chat-engine.js";
+import { switchLlamaRuntimeBundle, applyLlamaMemoryLoadingMode, applyLargeModelOverrideFromSettings, allowUnsupportedLargeModelFromWarning, capturePowerCalibrationSample, fitPowerCalibrationModel, resetPowerCalibrationModel, registerModelFromUrl, activateSelectedModel, purgeAllModels, uploadLocalModel, cancelLocalModelUpload, startModelDownload, resetRuntimeHeavy, checkForUpdate, startUpdate, showUpdateReleaseNotes, startUpdateReconnectWatch, handleModelsListClick, registerComposerActivity } from "/assets/platform-controls.js";
+import { registerAppSendEnabled } from "/assets/shell.js";
 
     // Shell API references — populated by init()
     let _shell = {};
@@ -227,7 +228,7 @@ export function init(shellApi) {
     if (registerEscapeHandler) {
       registerEscapeHandler(() => {
         if (appState.terminalModalOpen) {
-          import("./terminal-ui.js").then((m) => m.closeTerminalModal());
+          import("/assets/terminal-ui.js").then((m) => m.closeTerminalModal());
           return true;
         }
         if (appState.editModalOpen) {
@@ -256,9 +257,15 @@ export function init(shellApi) {
     registerChatEngineCallbacks({
       focusPromptInput, pollStatus,
     });
+    registerAppSendEnabled(setSendEnabled);
+    registerComposerActivity(setComposerActivity);
     registerUpdateCallbacks({
       onRestartPending: startUpdateReconnectWatch,
     });
+    // If a status poll already landed before we registered, replay restart_pending
+    if (appState.latestStatus?.update?.state === "restart_pending") {
+      startUpdateReconnectWatch();
+    }
     initSessionManager().catch(() => {});
 
     // Model switcher — shell owns the DOM bindings, chat provides the activate callback
@@ -301,7 +308,7 @@ export function init(shellApi) {
     {
       let terminalBound = false;
       document.getElementById("terminalOpenBtn").addEventListener("click", async () => {
-        const mod = await import("./terminal-ui.js");
+        const mod = await import("/assets/terminal-ui.js");
         if (!terminalBound) { mod.bindTerminalModal(); terminalBound = true; }
         mod.openTerminalModal();
       });

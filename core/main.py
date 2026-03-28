@@ -1626,8 +1626,9 @@ def _forward_headers(request: Request) -> dict[str, str]:
     return forward
 
 
-_CHAT_HTML_PATH = Path(__file__).resolve().parent / "assets" / "chat.html"
-CHAT_HTML = _CHAT_HTML_PATH.read_text(encoding="utf-8")
+_INDEX_HTML_PATH = Path(__file__).resolve().parent / "assets" / "index.html"
+_CHAT_HTML_PATH = _INDEX_HTML_PATH  # backward compat for tests
+CHAT_HTML = _INDEX_HTML_PATH.read_text(encoding="utf-8")
 
 
 def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool | None = None) -> FastAPI:
@@ -1797,6 +1798,31 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
     app.include_router(update_router)
     app.include_router(terminal_router)
     app.include_router(apps_router)
+
+    # Mount static assets for UI-enabled apps
+    try:
+        from core.app_manifest import discover_apps
+    except ModuleNotFoundError:
+        from app_manifest import discover_apps  # type: ignore[no-redef]
+    # Check both runtime apps dir and repo-local apps dir (for dev)
+    _repo_apps = Path(__file__).resolve().parent.parent / "apps"
+    _runtime_apps = app.state.runtime.base_dir / "apps"
+    _mounted_app_ids: set[str] = set()
+    for apps_dir in (_runtime_apps, _repo_apps):
+        if not apps_dir.is_dir():
+            continue
+        for manifest in discover_apps(apps_dir):
+            if manifest.id in _mounted_app_ids:
+                continue
+            if manifest.has_ui and manifest.ui_path:
+                app_assets_dir = apps_dir / manifest.id / manifest.ui_path
+                if app_assets_dir.is_dir():
+                    app.mount(
+                        f"/app/{manifest.id}/assets",
+                        StaticFiles(directory=str(app_assets_dir)),
+                        name=f"app-{manifest.id}",
+                    )
+                    _mounted_app_ids.add(manifest.id)
 
     return app
 

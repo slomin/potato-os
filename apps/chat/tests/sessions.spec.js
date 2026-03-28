@@ -11,7 +11,7 @@ const {
   makeStatusPayload,
   makeMultiModelStatusPayload,
   sendAndWaitForReply,
-} = require("./helpers");
+} = require("../../../tests/ui/helpers");
 
 
 test("new chat button clears the conversation", async ({ page }) => {

@@ -1,0 +1,47 @@
+<section id="messages" class="messages"></section>
+
+<form id="composerForm" class="composer">
+  <textarea id="userPrompt" rows="3" placeholder="Message Potato OS..."></textarea>
+  <div class="composer-bottom">
+    <div class="composer-left">
+      <input id="imageInput" class="visually-hidden-file" type="file" accept="image/*">
+      <button id="attachImageBtn" class="attach-btn" type="button">Attach image</button>
+      <button id="clearImageBtn" class="ghost-btn" type="button" hidden>Remove image</button>
+      <span id="imageMeta" class="image-meta" hidden></span>
+    </div>
+    <div class="composer-right">
+      <div id="composerStatusChip" class="composer-status-chip" hidden>
+        <span class="chip-spinner" aria-hidden="true"></span>
+        <span id="composerStatusText">Preparing prompt • 0%</span>
+        <button id="cancelBtn" class="chip-cancel-btn" type="button" hidden disabled aria-label="Cancel current work" title="Cancel">×</button>
+      </div>
+      <button id="sendBtn" class="send-btn" type="submit">Send</button>
+    </div>
+  </div>
+  <div id="composerVisionNotice" class="composer-vision-notice" hidden></div>
+  <div id="imagePreviewWrap" class="image-preview-wrap" hidden>
+    <img id="imagePreview" alt="Selected upload preview">
+  </div>
+  <div id="composerActivity" class="assistive-live" aria-live="polite"></div>
+</form>
+
+<div id="editBackdrop" class="edit-backdrop" hidden></div>
+<div id="editModal" class="edit-modal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle" hidden>
+  <div class="edit-modal-shell">
+    <div class="edit-modal-header">
+      <div>
+        <h2 id="editModalTitle" class="edit-modal-title">Edit message</h2>
+        <p id="editModalNote" class="edit-modal-note">Update the message and resend from this point in the conversation.</p>
+      </div>
+      <button id="editCloseBtn" class="ghost-btn settings-close-btn" type="button" aria-label="Close edit message dialog">Close</button>
+    </div>
+    <textarea id="editMessageInput" class="edit-modal-input" placeholder="Update your message..."></textarea>
+    <div class="edit-modal-actions">
+      <div id="editModalHint" class="edit-modal-hint">Everything after this turn will be replaced by the new run.</div>
+      <div class="edit-modal-action-row">
+        <button id="editCancelBtn" class="ghost-btn" type="button">Cancel</button>
+        <button id="editSendBtn" class="primary-btn edit-send-btn" type="button">Send</button>
+      </div>
+    </div>
+  </div>
+</div>

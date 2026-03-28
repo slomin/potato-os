@@ -1,7 +1,7 @@
 "use strict";
 
-import { appState, IMAGE_SAFE_MAX_BYTES, IMAGE_MAX_DIMENSION, IMAGE_MAX_PIXEL_COUNT } from "./state.js";
-import { formatBytes, estimateDataUrlBytes } from "./utils.js";
+import { appState, IMAGE_SAFE_MAX_BYTES, IMAGE_MAX_DIMENSION, IMAGE_MAX_PIXEL_COUNT } from "/assets/state.js";
+import { formatBytes, estimateDataUrlBytes } from "/assets/utils.js";
 import { appendMessage } from "./messages.js";
 
     let _ui = {};

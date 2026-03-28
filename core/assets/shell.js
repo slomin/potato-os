@@ -7,9 +7,12 @@ import { setRuntimeDetailsExpanded, renderSystemRuntime, renderLlamaRuntimeStatu
 import { renderUpdateCard } from "./update-ui.js";
 import { populateModelSwitcher, openModelSwitcher, closeModelSwitcher, toggleModelSwitcher } from "./model-switcher.js";
 import { loadSettings, saveSettings, renderSettingsWorkspace, closeSettingsModal, closeLegacySettingsModal, setSettingsModalOpen, registerSettingsPlatformCallbacks } from "./settings-ui.js";
-import { setSendEnabled } from "./chat-engine.js";
 import { registerPlatformShell } from "./platform-controls.js";
-import { init as initChatApp } from "./chat.js";
+
+    // App callback — registered by the active app, called on status updates
+    let _appSendEnabled = () => {};
+    export function registerAppSendEnabled(fn) { _appSendEnabled = fn; }
+    function setSendEnabled() { _appSendEnabled(); }
 
 
     // ── Shell: viewport & sidebar ────────────────────────────────────────
@@ -367,10 +370,7 @@ import { init as initChatApp } from "./chat.js";
     registerPlatformShell({ pollStatus });
     registerSettingsPlatformCallbacks({ setSidebarOpen, pollStatus });
 
-    // Load and initialize chat app
-    initChatApp({ pollStatus, setSidebarOpen, isMobileSidebarViewport, registerEscapeHandler, bindModelSwitcher });
-
-    // Bind shell event handlers
+    // Bind shell event handlers (these are shell-owned, safe before app loads)
     bindMobileSidebar();
     document.getElementById("themeToggle").addEventListener("click", toggleTheme);
     document.getElementById("sidebarToggle").addEventListener("click", () => setSidebarOpen(!document.body.classList.contains("sidebar-open")));
@@ -378,9 +378,24 @@ import { init as initChatApp } from "./chat.js";
     document.getElementById("sidebarBackdrop").addEventListener("click", () => setSidebarOpen(false));
     document.getElementById("runtimeViewToggle").addEventListener("click", () => setRuntimeDetailsExpanded(!appState.runtimeDetailsExpanded));
 
-    // Start status polling
-    pollStatus();
-    setInterval(() => {
-      if (appState.settingsModalOpen) return;
+    // Load the active app, then start status polling once app handlers are registered
+    function startPollingLoop() {
       pollStatus();
-    }, 2000);
+      setInterval(() => {
+        if (appState.settingsModalOpen) return;
+        pollStatus();
+      }, 2000);
+    }
+
+    const appContainer = document.getElementById("appContainer");
+    if (appContainer) {
+      import("/app/chat/assets/app.js").then(async (appModule) => {
+        await appModule.init(appContainer, { pollStatus, setSidebarOpen, isMobileSidebarViewport, registerEscapeHandler, bindModelSwitcher });
+        startPollingLoop();
+      }).catch((err) => {
+        console.error("Failed to load app:", err);
+        startPollingLoop();
+      });
+    } else {
+      startPollingLoop();
+    }

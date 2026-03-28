@@ -2,11 +2,17 @@ const { expect } = require("@playwright/test");
 
 async function waitForStatusApplied(page) {
   await expect(page.locator("#statusText")).not.toHaveText("Checking status...", { timeout: 10000 });
+  // Wait for the active app to finish mounting
+  await expect(page.locator("#composerForm")).toBeVisible({ timeout: 5000 });
 }
 
 async function waitUntilReady(page) {
   await page.goto("/");
   await expect(page.locator("#statusText")).toContainText("State: READY");
+  // Wait for the active app to load (chat injects #composerForm into #appContainer)
+  await expect(page.locator("#composerForm")).toBeVisible({ timeout: 5000 });
+  // Wait for chat to fully init (exposes window.appendMessage for tests)
+  await page.waitForFunction(() => typeof window.appendMessage === "function", { timeout: 5000 });
 }
 
 async function openSettingsModal(page) {

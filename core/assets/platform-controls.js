@@ -27,10 +27,14 @@ import { isLocalModelConnected, findResumableFailedModel, renderDownloadPrompt }
 import { setModelUploadStatus, setLlamaRuntimeSwitchStatus, setLlamaRuntimeSwitchButtonState, setLlamaMemoryLoadingStatus, setLlamaMemoryLoadingButtonState, setLargeModelOverrideStatus, setLargeModelOverrideButtonState, setPowerCalibrationStatus, setPowerCalibrationButtonsState } from "./runtime-ui.js";
 import { setUpdateCheckInFlight, setUpdateStartInFlight, isUpdateExecutionActive } from "./update-ui.js";
 import { setModelUrlStatus, formatModelUrlStatus, resolveSelectedSettingsModel, selectedModelHasUnsavedChanges, blockModelSelectionChange, renderSettingsWorkspace } from "./settings-ui.js";
-import { setComposerActivity } from "./chat-engine.js";
 import { showPlatformNotice } from "./platform-notify.js";
 import * as platformApi from "./platform-api.js";
 import * as modelApi from "./model-api.js";
+
+// Composer activity is owned by the active app — no-op if no app loaded
+let _setComposerActivity = () => {};
+export function registerComposerActivity(fn) { _setComposerActivity = fn; }
+function setComposerActivity(msg) { _setComposerActivity(msg); }
 
 let _shell = {};
 

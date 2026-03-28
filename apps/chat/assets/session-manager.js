@@ -1,6 +1,6 @@
 "use strict";
 
-import { appState, SESSIONS_DB_NAME, SESSIONS_DB_VERSION, SESSIONS_STORE, ACTIVE_SESSION_KEY, SESSION_TITLE_MAX_LENGTH, SESSION_LIST_MAX_VISIBLE } from "./state.js";
+import { appState, SESSIONS_DB_NAME, SESSIONS_DB_VERSION, SESSIONS_STORE, ACTIVE_SESSION_KEY, SESSION_TITLE_MAX_LENGTH, SESSION_LIST_MAX_VISIBLE } from "/assets/state.js";
 
 // Late-bound references (set by chat.js during init to avoid circular deps)
 let _appendMessage = null;

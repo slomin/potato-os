@@ -596,6 +596,46 @@ def build_llama_memory_loading_status(runtime: RuntimeConfig) -> dict[str, Any]:
     }
 
 
+_MODEL_LOADING_INACTIVE: dict[str, Any] = {
+    "active": False,
+    "progress_percent": None,
+    "resident_bytes": None,
+    "model_size_bytes": None,
+}
+
+
+def compute_model_loading_progress(
+    *,
+    state: str,
+    has_model: bool,
+    model_size_bytes: int,
+    no_mmap_env: str,
+    llama_rss: dict[str, Any],
+) -> dict[str, Any]:
+    if state != "BOOTING" or not has_model or model_size_bytes <= 0:
+        return dict(_MODEL_LOADING_INACTIVE)
+    if not llama_rss.get("available"):
+        return dict(_MODEL_LOADING_INACTIVE)
+    if no_mmap_env == "1":
+        resident_bytes = llama_rss.get("rss_anon_bytes")
+    elif no_mmap_env == "auto":
+        anon = llama_rss.get("rss_anon_bytes") or 0
+        file = llama_rss.get("rss_file_bytes") or 0
+        resident_bytes = max(anon, file) if (anon or file) else None
+    else:
+        resident_bytes = llama_rss.get("rss_file_bytes")
+    if resident_bytes is None or not isinstance(resident_bytes, (int, float)):
+        return dict(_MODEL_LOADING_INACTIVE)
+    resident_bytes = int(resident_bytes)
+    progress_percent = min(100, max(0, int(resident_bytes * 100 / model_size_bytes)))
+    return {
+        "active": True,
+        "progress_percent": progress_percent,
+        "resident_bytes": resident_bytes,
+        "model_size_bytes": model_size_bytes,
+    }
+
+
 def build_llama_large_model_override_status(runtime: RuntimeConfig) -> dict[str, Any]:
     settings = read_llama_runtime_settings(runtime)
     enabled = normalize_allow_unsupported_large_models(settings.get("allow_unsupported_large_models"))

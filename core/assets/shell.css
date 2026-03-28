@@ -740,6 +740,12 @@
       transform: none;
     }
 
+    @property --load-pct {
+      syntax: "<number>";
+      inherits: false;
+      initial-value: 0;
+    }
+
     .chip-spinner {
       width: 14px;
       height: 14px;
@@ -748,6 +754,22 @@
       border-top-color: currentColor;
       animation: chip-spin 0.9s linear infinite;
       flex: 0 0 auto;
+    }
+
+    .chip-spinner.has-progress {
+      border: none;
+      background: conic-gradient(
+        currentColor calc(var(--load-pct) * 3.6deg),
+        color-mix(in srgb, currentColor 15%, transparent) calc(var(--load-pct) * 3.6deg)
+      );
+      -webkit-mask: radial-gradient(circle, transparent 3px, black 4px);
+      mask: radial-gradient(circle, transparent 3px, black 4px);
+      animation: chip-spin 6s linear infinite;
+      transition: --load-pct 0.3s ease-out;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chip-spinner, .chip-spinner.has-progress { animation: none; }
     }
 
     .chip-cancel-btn {

@@ -46,7 +46,8 @@ Tests are organized under `tests/`:
 - First-time Playwright setup: `npx playwright install chromium`
 
 ### Pi deployment
-- Fast asset deploy: `sshpass -e rsync -az --delete --rsync-path="sudo rsync" -e "ssh -o StrictHostKeyChecking=accept-new" core/ pi@potato.local:/opt/potato/app/`
+- Fast core deploy: `sshpass -e rsync -az --delete --rsync-path="sudo rsync" -e "ssh -o StrictHostKeyChecking=accept-new" core/ pi@potato.local:/opt/potato/core/`
+- Fast apps deploy: `sshpass -e rsync -az --rsync-path="sudo rsync" -e "ssh -o StrictHostKeyChecking=accept-new" apps/ pi@potato.local:/opt/potato/apps/`
 - Full install: `sshpass -e ssh pi@potato.local "cd /tmp/potato-os && sudo ./bin/install_dev.sh"`
 - Restart service: `sshpass -e ssh pi@potato.local "sudo systemctl restart potato"`
 

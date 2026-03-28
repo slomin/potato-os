@@ -95,11 +95,13 @@ try:
         POWER_CALIBRATION_DEFAULT_A,
         POWER_CALIBRATION_DEFAULT_B,
         RuntimeConfig,
+        _MODEL_LOADING_INACTIVE,
         build_large_model_compatibility,
         build_llama_large_model_override_status,
         build_llama_memory_loading_status,
         build_llama_runtime_status,
         build_power_calibration_status,
+        compute_model_loading_progress,
         build_power_estimate_status,
         check_llama_health,
         check_runtime_device_compatibility,
@@ -216,11 +218,13 @@ except ModuleNotFoundError:
         POWER_CALIBRATION_DEFAULT_A,
         POWER_CALIBRATION_DEFAULT_B,
         RuntimeConfig,
+        _MODEL_LOADING_INACTIVE,
         build_large_model_compatibility,
         build_llama_large_model_override_status,
         build_llama_memory_loading_status,
         build_llama_runtime_status,
         build_power_calibration_status,
+        compute_model_loading_progress,
         build_power_estimate_status,
         check_llama_health,
         check_runtime_device_compatibility,
@@ -727,6 +731,15 @@ def _build_status_fs(
         classify_runtime_device(pi_model_name=raw_system_snapshot.get("pi_model_name") if isinstance(raw_system_snapshot, dict) else None)
     )
 
+    memory_loading_status = build_llama_memory_loading_status(runtime)
+    model_loading = compute_model_loading_progress(
+        state=state,
+        has_model=has_model,
+        model_size_bytes=active_model_size_bytes,
+        no_mmap_env=memory_loading_status.get("no_mmap_env", "0"),
+        llama_rss=system_payload.get("llama_rss", {}),
+    )
+
     try:
         from core.__version__ import __version__ as _app_version
     except ModuleNotFoundError:
@@ -747,6 +760,7 @@ def _build_status_fs(
         "models": models_payload,
         "download": download_payload,
         "upload": upload_snapshot,
+        "model_loading": model_loading,
         "llama_server": {
             "running": llama_running or llama_transport_healthy,
             "healthy": llama_ready,
@@ -799,6 +813,7 @@ async def build_status(
             })
             result["backend"]["active"] = active_backend
             result["backend"]["fallback_active"] = fallback_active
+            result["model_loading"] = dict(_MODEL_LOADING_INACTIVE)
     return result
 
 

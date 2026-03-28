@@ -14,6 +14,7 @@ from core.runtime_state import (
     check_llama_health,
     check_runtime_device_compatibility,
     collect_system_metrics_snapshot,
+    compute_model_loading_progress,
     compute_required_download_bytes,
     classify_runtime_device,
     decode_throttled_bits,
@@ -1227,3 +1228,162 @@ def test_parse_llama_rss_handles_none():
     result = _parse_llama_rss_from_proc_status(None)
 
     assert result["available"] is False
+
+
+# -- compute_model_loading_progress ------------------------------------------------
+
+
+def _rss(*, available=True, rss_bytes=None, rss_anon_bytes=None, rss_file_bytes=None):
+    return {
+        "available": available,
+        "rss_bytes": rss_bytes,
+        "rss_anon_bytes": rss_anon_bytes,
+        "rss_file_bytes": rss_file_bytes,
+    }
+
+
+def test_compute_model_loading_progress_mmap_mode():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=2_500_000_000,
+        no_mmap_env="0",
+        llama_rss=_rss(rss_file_bytes=1_500_000_000, rss_anon_bytes=100_000),
+    )
+    assert result["active"] is True
+    assert result["progress_percent"] == 60
+    assert result["resident_bytes"] == 1_500_000_000
+    assert result["model_size_bytes"] == 2_500_000_000
+
+
+def test_compute_model_loading_progress_no_mmap_mode():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=2_500_000_000,
+        no_mmap_env="1",
+        llama_rss=_rss(rss_anon_bytes=625_000_000, rss_file_bytes=0),
+    )
+    assert result["active"] is True
+    assert result["progress_percent"] == 25
+    assert result["resident_bytes"] == 625_000_000
+
+
+def test_compute_model_loading_progress_clamps_to_100():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=1_000_000,
+        no_mmap_env="0",
+        llama_rss=_rss(rss_file_bytes=1_200_000),
+    )
+    assert result["active"] is True
+    assert result["progress_percent"] == 100
+
+
+def test_compute_model_loading_progress_zero_resident():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=2_000_000_000,
+        no_mmap_env="0",
+        llama_rss=_rss(rss_file_bytes=0),
+    )
+    assert result["active"] is True
+    assert result["progress_percent"] == 0
+
+
+def test_compute_model_loading_progress_inactive_when_ready():
+    result = compute_model_loading_progress(
+        state="READY",
+        has_model=True,
+        model_size_bytes=2_000_000_000,
+        no_mmap_env="0",
+        llama_rss=_rss(rss_file_bytes=2_000_000_000),
+    )
+    assert result["active"] is False
+    assert result["progress_percent"] is None
+    assert result["resident_bytes"] is None
+    assert result["model_size_bytes"] is None
+
+
+def test_compute_model_loading_progress_inactive_when_no_model():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=False,
+        model_size_bytes=0,
+        no_mmap_env="0",
+        llama_rss=_rss(rss_file_bytes=500_000),
+    )
+    assert result["active"] is False
+
+
+def test_compute_model_loading_progress_inactive_when_rss_unavailable():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=2_000_000_000,
+        no_mmap_env="0",
+        llama_rss=_rss(available=False),
+    )
+    assert result["active"] is False
+
+
+def test_compute_model_loading_progress_inactive_when_model_size_zero():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=0,
+        no_mmap_env="0",
+        llama_rss=_rss(rss_file_bytes=500_000),
+    )
+    assert result["active"] is False
+
+
+def test_compute_model_loading_progress_inactive_when_bucket_none():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=2_000_000_000,
+        no_mmap_env="0",
+        llama_rss=_rss(rss_file_bytes=None),
+    )
+    assert result["active"] is False
+
+
+def test_compute_model_loading_progress_uses_floor():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=1000,
+        no_mmap_env="0",
+        llama_rss=_rss(rss_file_bytes=997),
+    )
+    assert result["active"] is True
+    assert result["progress_percent"] == 99
+
+
+def test_compute_model_loading_progress_auto_mode_uses_anon_when_larger():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=2_000_000_000,
+        no_mmap_env="auto",
+        llama_rss=_rss(rss_anon_bytes=1_000_000_000, rss_file_bytes=100_000),
+    )
+    assert result["active"] is True
+    assert result["progress_percent"] == 50
+    assert result["resident_bytes"] == 1_000_000_000
+
+
+def test_compute_model_loading_progress_auto_mode_uses_file_when_larger():
+    result = compute_model_loading_progress(
+        state="BOOTING",
+        has_model=True,
+        model_size_bytes=2_000_000_000,
+        no_mmap_env="auto",
+        llama_rss=_rss(rss_anon_bytes=50_000, rss_file_bytes=1_500_000_000),
+    )
+    assert result["active"] is True
+    assert result["progress_percent"] == 75
+    assert result["resident_bytes"] == 1_500_000_000

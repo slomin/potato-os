@@ -138,6 +138,7 @@ function makeStatusPayload(overrides = {}) {
       },
     ],
     upload: { active: false, model_id: null, bytes_total: 0, bytes_received: 0, percent: 0, error: null },
+    model_loading: { active: false, progress_percent: null, resident_bytes: null, model_size_bytes: null },
     download: {
       bytes_total: 0,
       bytes_downloaded: 0,

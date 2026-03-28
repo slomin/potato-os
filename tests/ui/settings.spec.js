@@ -1,6 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const {
   waitUntilReady,
+  waitForStatusApplied,
   openSettingsModal,
   closeSettingsModal,
   openAdvancedSettingsModal,
@@ -79,6 +80,7 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await closeSettingsModal(page);
 
   await page.reload();
+  await waitForStatusApplied(page);
   await openSettingsModal(page);
   await expect(page.locator("#generationMode")).toHaveValue("deterministic");
   await expect(page.locator("#seed")).toHaveValue("1337");

@@ -37,7 +37,11 @@ import { formatBytes, formatCountdownSeconds } from "./utils.js";
       badge.classList.remove("online", "loading", "failed", "offline");
       dot.classList.remove("online", "loading", "failed", "offline");
       dot.hidden = false;
-      if (spinner) spinner.hidden = true;
+      if (spinner) {
+        spinner.hidden = true;
+        spinner.classList.remove("has-progress");
+        spinner.style.removeProperty("--load-pct");
+      }
       if (backendMode === "fake" && isReady) {
         badge.classList.add("online");
         dot.classList.add("online");
@@ -51,7 +55,13 @@ import { formatBytes, formatCountdownSeconds } from "./utils.js";
         dot.classList.add("loading");
         dot.hidden = true;
         if (spinner) spinner.hidden = false;
-        label.textContent = `LOADING:llama.cpp${modelSuffix}`;
+        const loadPct = statusPayload?.model_loading?.progress_percent;
+        if (spinner && typeof loadPct === "number") {
+          spinner.classList.add("has-progress");
+          spinner.style.setProperty("--load-pct", loadPct);
+        }
+        const pctSuffix = typeof loadPct === "number" ? `:${loadPct}%` : modelSuffix;
+        label.textContent = `LOADING:llama.cpp${pctSuffix}`;
       } else if (isFailed) {
         badge.classList.add("failed");
         dot.classList.add("failed");

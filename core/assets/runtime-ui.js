@@ -153,10 +153,15 @@ import { formatBytes, formatPercent, formatClockMHz, percentFromRatio, applyRunt
           : "";
         if (llamaRssDetail) llamaRssDetail.textContent = `${formatBytes(llamaRssBytes)}${llPct}`;
         if (modelRamRow) modelRamRow.style.display = "";
+        const ml = statusPayload?.model_loading;
         if (modelRamDetail) {
-          modelRamDetail.textContent = Number.isFinite(modelRamBytes) && modelRamBytes > 0
-            ? formatBytes(modelRamBytes)
-            : "--";
+          if (ml?.active === true && typeof ml.progress_percent === "number") {
+            modelRamDetail.textContent = `${formatBytes(ml.resident_bytes)} / ${formatBytes(ml.model_size_bytes)} (${ml.progress_percent}%)`;
+          } else {
+            modelRamDetail.textContent = Number.isFinite(modelRamBytes) && modelRamBytes > 0
+              ? formatBytes(modelRamBytes)
+              : "--";
+          }
         }
       } else {
         if (llamaRssRow) llamaRssRow.style.display = "none";

@@ -771,6 +771,91 @@ test("memory severity uses PSI thresholds when pressure data available", async (
   await expect(page.locator("#runtimeDetailPressureValue")).toHaveText("15.0%");
 });
 
+test("composer chip shows determinate loading progress when model_loading is active", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        state: "BOOTING",
+        llama_server: { healthy: false, running: true, url: "http://127.0.0.1:8080" },
+        model_loading: {
+          active: true,
+          progress_percent: 67,
+          resident_bytes: 1_700_000_000,
+          model_size_bytes: 2_500_000_000,
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  // Badge shows loading state with progress ring and percentage
+  await expect(page.locator("#statusLabel")).toHaveText("LOADING:llama.cpp:67%");
+  await expect(page.locator("#statusBadge")).toHaveClass(/loading/);
+  await expect(page.locator("#statusSpinner")).toBeVisible();
+  await expect(page.locator("#statusSpinner")).toHaveClass(/has-progress/);
+  // Send button disabled during loading
+  await expect(page.locator("#sendBtn")).toBeDisabled();
+});
+
+test("runtime detail shows loading progress in model RAM row", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        state: "BOOTING",
+        llama_server: { healthy: false, running: true, url: "http://127.0.0.1:8080" },
+        model_loading: {
+          active: true,
+          progress_percent: 67,
+          resident_bytes: 1_700_000_000,
+          model_size_bytes: 2_500_000_000,
+        },
+        system: {
+          available: true,
+          cpu_percent: 50,
+          cpu_cores_percent: [50, 50, 50, 50],
+          cpu_clock_arm_hz: 2400000000,
+          memory_total_bytes: 8_000_000_000,
+          memory_used_bytes: 4_000_000_000,
+          memory_free_bytes: 4_000_000_000,
+          memory_available_bytes: 4_000_000_000,
+          memory_percent: 50,
+          memory_pressure: { available: false },
+          llama_rss: {
+            available: true,
+            rss_bytes: 2_000_000_000,
+            rss_anon_bytes: 300_000_000,
+            rss_file_bytes: 1_700_000_000,
+          },
+          swap_total_bytes: 0,
+          swap_used_bytes: 0,
+          swap_percent: 0,
+          storage_total_bytes: 32_000_000_000,
+          storage_used_bytes: 16_000_000_000,
+          storage_free_bytes: 16_000_000_000,
+          storage_percent: 50,
+          temperature_c: 50,
+          throttling: { raw: 0 },
+        },
+        llama_runtime: {
+          current: { family: "ik_llama", llama_cpp_commit: "abc12345", profile: "pi5-opt", has_server_binary: true },
+          available_runtimes: [{ family: "ik_llama", is_active: true, compatible: true }],
+          switch: { active: false, target_family: null, error: null },
+          memory_loading: { mode: "auto", label: "Automatic", no_mmap_env: "0" },
+          large_model_override: { enabled: false },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await page.locator("#systemRuntimeCard").click();
+  await expect(page.locator("#runtimeDetailModelRamValue")).toContainText("67%");
+});
+
 test("large-model warning is hidden when model fits within storage limits", async ({ page }) => {
   await page.route("**/status", async (route) => {
     await route.fulfill({

@@ -767,3 +767,29 @@ def test_restart_llama_terminates_stale_processes_when_no_managed_process(runtim
     body = response.json()
     assert body["restarted"] is True
     assert body["reason"] == "terminated_stale_processes"
+
+
+# -- model_loading field in /status ------------------------------------------------
+
+
+def test_status_includes_model_loading_inactive_when_ready(client, runtime, monkeypatch):
+    monkeypatch.setattr("core.main.check_llama_health", _healthy_true)
+    runtime.model_path.write_bytes(b"gguf")
+
+    body = client.get("/status").json()
+
+    ml = body["model_loading"]
+    assert ml["active"] is False
+    assert ml["progress_percent"] is None
+    assert ml["resident_bytes"] is None
+    assert ml["model_size_bytes"] is None
+
+
+def test_status_includes_model_loading_inactive_when_booting(client, monkeypatch):
+    monkeypatch.setattr("core.main.check_llama_health", _healthy_false)
+
+    body = client.get("/status").json()
+
+    assert body["state"] == "BOOTING"
+    ml = body["model_loading"]
+    assert ml["active"] is False

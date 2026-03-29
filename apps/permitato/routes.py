@@ -14,7 +14,8 @@ from apps.permitato.exceptions import ExceptionStore, build_domain_regex
 from apps.permitato.intent import parse_llm_response, strip_action_markers
 from apps.permitato.modes import get_mode, MODES
 from apps.permitato.pihole_adapter import PiholeUnavailableError
-from apps.permitato.state import apply_mode_to_client
+from apps.permitato.net_resolve import resolve_requester_ipv4
+from apps.permitato.state import apply_mode_to_client, validate_client
 from apps.permitato.system_prompt import build_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ async def permitato_status(request: Request):
         return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
 
     mode_def = get_mode(state.mode)
+    await validate_client(state)
     return {
         "mode": state.mode,
         "mode_display": mode_def.display_name,
@@ -47,6 +49,7 @@ async def permitato_status(request: Request):
         "pihole_available": state.pihole_available,
         "degraded_since": state.degraded_since,
         "client_id": state.client_id,
+        "client_valid": state.client_valid,
     }
 
 
@@ -104,8 +107,54 @@ async def set_client(request: Request):
     state.client_id = client_id
     state.persist()
     await apply_mode_to_client(state)
+    await validate_client(state, force_refresh=True)
 
-    return {"client_id": client_id, "mode": state.mode}
+    warning = None
+    if state.client_valid is False:
+        warning = "Client not found in Pi-hole's known clients"
+
+    return {
+        "client_id": client_id,
+        "mode": state.mode,
+        "client_valid": state.client_valid,
+        "warning": warning,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /clients
+# ---------------------------------------------------------------------------
+
+
+@router.get("/clients")
+async def list_clients(request: Request):
+    """Discover Pi-hole clients for onboarding."""
+    state = _get_state(request)
+    if state is None:
+        return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
+    if not state.pihole_available or not state.adapter:
+        return {"clients": [], "pihole_available": False}
+
+    try:
+        raw = await state.adapter.get_clients()
+    except PiholeUnavailableError:
+        return {"clients": [], "pihole_available": False}
+
+    requester_ip = request.headers.get("x-real-ip") or (request.client.host if request.client else None)
+    client_ips = {c.get("client", "") for c in raw}
+    resolved_ip = resolve_requester_ipv4(requester_ip, client_ips)
+
+    clients = [
+        {
+            "client": c.get("client", ""),
+            "name": c.get("name", ""),
+            "id": c.get("id"),
+            "selected": c.get("client", "") == state.client_id,
+            "is_requester": c.get("client", "") == resolved_ip,
+        }
+        for c in raw
+    ]
+    return {"clients": clients, "pihole_available": True}
 
 
 # ---------------------------------------------------------------------------

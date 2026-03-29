@@ -1,5 +1,153 @@
 /* Permitato — scoped styles */
 
+/* Onboarding overlay */
+.permitato-onboarding {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.permitato-onboarding[hidden] {
+  display: none;
+}
+
+.permitato-onboarding-card {
+  max-width: 420px;
+  width: 100%;
+  padding: 32px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.permitato-onboarding-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.permitato-onboarding-desc {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0 0 16px;
+}
+
+.permitato-onboarding-status {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+}
+
+.permitato-client-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.permitato-client-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
+  font-size: 0.9rem;
+}
+
+.permitato-client-list li.this-device {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.client-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.client-label {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.this-device .client-label {
+  color: #22c55e;
+}
+
+.client-sub {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.client-select-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.client-select-btn:hover {
+  border-color: var(--focus);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.permitato-onboarding-error {
+  color: #ef4444;
+  font-size: 0.85rem;
+  margin-top: 12px;
+}
+
+.permitato-onboarding-error[hidden] {
+  display: none;
+}
+
+/* Recovery banner */
+.permitato-recovery-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  margin: 8px 16px 0;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.permitato-recovery-banner[hidden] {
+  display: none;
+}
+
+.permitato-reconfigure-btn {
+  padding: 3px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 6px;
+  background: transparent;
+  color: #f59e0b;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.permitato-reconfigure-btn:hover {
+  background: rgba(245, 158, 11, 0.15);
+}
+
 .permitato-status-bar {
   display: flex;
   align-items: center;

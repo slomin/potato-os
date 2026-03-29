@@ -4,6 +4,9 @@ let _shell = null;
 let _statusTimer = null;
 let _history = [];
 let _requestInFlight = false;
+let _onboardingVisible = false;
+let _pendingClientSelection = false;
+let _lastClientFetchTs = 0;
 
 const PERMITATO_API = "/app/permitato/api";
 
@@ -28,6 +31,9 @@ export function init(shellApi) {
       }
     });
   }
+
+  const reconfigBtn = document.getElementById("permitatoReconfigureBtn");
+  if (reconfigBtn) reconfigBtn.addEventListener("click", () => _showOnboarding());
 
   _pollStatus();
   _statusTimer = setInterval(_pollStatus, 5000);
@@ -73,6 +79,23 @@ async function _switchMode(mode) {
 }
 
 function _updateStatusBar(data) {
+  // Onboarding: show overlay when no client is selected
+  if (!data.client_id && !_pendingClientSelection) {
+    _showOnboarding();
+    return;
+  }
+  if (data.client_id && _onboardingVisible && !_pendingClientSelection) {
+    _hideOnboarding();
+  }
+
+  // Recovery: show banner when client is invalid
+  const banner = document.getElementById("permitatoRecoveryBanner");
+  if (data.client_id && data.client_valid === false) {
+    _showRecoveryBanner(data.client_id);
+  } else if (banner) {
+    banner.hidden = true;
+  }
+
   const badge = document.getElementById("permitatoModeValue");
   if (badge) {
     const mode = data.mode_display || data.mode || "--";
@@ -201,6 +224,136 @@ function _appendMessage(role, text) {
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
   return el;
+}
+
+// --- Onboarding ---
+
+async function _showOnboarding() {
+  const overlay = document.getElementById("permitatoOnboarding");
+  if (!overlay) return;
+  overlay.hidden = false;
+  const wasAlreadyVisible = _onboardingVisible;
+  _onboardingVisible = true;
+  // First open: fetch immediately. Already open: refresh every 30s to avoid flicker.
+  const now = Date.now();
+  if (!wasAlreadyVisible || (now - _lastClientFetchTs > 30000 && !_pendingClientSelection)) {
+    await _fetchClients();
+  }
+}
+
+function _hideOnboarding() {
+  const overlay = document.getElementById("permitatoOnboarding");
+  if (overlay) overlay.hidden = true;
+  _onboardingVisible = false;
+  _pendingClientSelection = false;
+}
+
+async function _fetchClients() {
+  const list = document.getElementById("permitatoClientList");
+  const status = document.getElementById("permitatoOnboardingStatus");
+  if (!list) return;
+
+  // Only show "Loading..." on first fetch (avoid flicker on refresh)
+  if (!list.children.length && status) status.textContent = "Loading...";
+
+  try {
+    const resp = await fetch(`${PERMITATO_API}/clients`);
+    if (!resp.ok) {
+      if (status) status.textContent = "Failed to load clients.";
+      return;
+    }
+    const data = await resp.json();
+
+    if (!data.pihole_available) {
+      list.innerHTML = "";
+      if (status) status.textContent = "Pi-hole is not connected. Connect Pi-hole to discover devices.";
+      return;
+    }
+
+    if (data.clients.length === 0) {
+      list.innerHTML = "";
+      if (status) status.textContent = "No devices discovered by Pi-hole yet.";
+      return;
+    }
+
+    // Successful fetch with clients — throttle further refreshes to avoid flicker
+    _lastClientFetchTs = Date.now();
+    if (status) status.textContent = "";
+    list.innerHTML = "";
+
+    for (const c of data.clients) {
+      const li = document.createElement("li");
+      if (c.is_requester) li.classList.add("this-device");
+
+      const info = document.createElement("div");
+      info.className = "client-info";
+
+      const label = document.createElement("span");
+      label.className = "client-label";
+      if (c.is_requester) {
+        label.textContent = "Your device";
+      } else if (c.name) {
+        label.textContent = c.name;
+      } else {
+        label.textContent = c.client;
+      }
+      info.appendChild(label);
+
+      const sub = document.createElement("span");
+      sub.className = "client-sub";
+      sub.textContent = c.is_requester || c.name ? c.client : "";
+      if (sub.textContent) info.appendChild(sub);
+
+      li.appendChild(info);
+
+      const btn = document.createElement("button");
+      btn.className = "client-select-btn";
+      btn.textContent = c.is_requester ? "Select this device" : "Select";
+      btn.addEventListener("click", () => _selectClient(c.client));
+      li.appendChild(btn);
+
+      // Your device goes to top
+      if (c.is_requester) {
+        list.prepend(li);
+      } else {
+        list.appendChild(li);
+      }
+    }
+  } catch {
+    if (status) status.textContent = "Failed to load clients.";
+  }
+}
+
+async function _selectClient(clientId) {
+  _pendingClientSelection = true;
+  const errEl = document.getElementById("permitatoOnboardingError");
+
+  try {
+    const resp = await fetch(`${PERMITATO_API}/client`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: clientId }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      if (errEl) { errEl.textContent = err.error || "Failed to set client."; errEl.hidden = false; }
+      _pendingClientSelection = false;
+      return;
+    }
+    _hideOnboarding();
+    _pollStatus();
+  } catch {
+    if (errEl) { errEl.textContent = "Connection error."; errEl.hidden = false; }
+    _pendingClientSelection = false;
+  }
+}
+
+function _showRecoveryBanner(clientId) {
+  const banner = document.getElementById("permitatoRecoveryBanner");
+  const text = document.getElementById("permitatoRecoveryText");
+  if (!banner || !text) return;
+  text.textContent = `Your controlled device (${clientId}) is no longer available in Pi-hole.`;
+  banner.hidden = false;
 }
 
 // --- Session persistence (IndexedDB) ---

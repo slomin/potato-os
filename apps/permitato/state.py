@@ -34,6 +34,9 @@ class PermitState:
     exception_group_id: int = 0
     pihole_available: bool = False
     degraded_since: float | None = None
+    client_valid: bool | None = None
+    _client_cache_ts: float = 0
+    _cached_clients: list = field(default_factory=list)
     data_dir: Path = field(default_factory=lambda: Path("/opt/potato/data/permitato"))
 
     def persist(self) -> None:
@@ -93,12 +96,44 @@ async def initialize_permitato(
             logger.info("Cleaned up %d expired exceptions on startup", len(revoked))
             state.exception_store.persist()
 
+        await validate_client(state)
+
     except PiholeUnavailableError:
         state.pihole_available = False
         state.degraded_since = time.time()
         logger.warning("Pi-hole unavailable at %s — running in degraded mode", pihole_base_url)
 
     return state
+
+
+async def validate_client(state: PermitState, force_refresh: bool = False) -> bool | None:
+    """Check if the saved client_id exists in Pi-hole. Uses a 30s cache."""
+    if not state.client_id:
+        state.client_valid = None
+        return None
+    if not state.pihole_available or not state.adapter:
+        state.client_valid = None
+        return None
+
+    now = time.time()
+    cache_expired = now - state._client_cache_ts > 30
+    if cache_expired or force_refresh:
+        try:
+            state._cached_clients = await state.adapter.get_clients()
+            state._client_cache_ts = now
+        except PiholeUnavailableError:
+            # Pi-hole went down — enter degraded mode so reconnect loop picks it up
+            state._client_cache_ts = now
+            state.pihole_available = False
+            if state.degraded_since is None:
+                state.degraded_since = now
+            state.client_valid = None
+            logger.warning("Pi-hole became unreachable during client validation")
+            return None
+
+    known_ids = {c.get("client", "") for c in state._cached_clients}
+    state.client_valid = state.client_id in known_ids
+    return state.client_valid
 
 
 async def shutdown_permitato(state: PermitState) -> None:

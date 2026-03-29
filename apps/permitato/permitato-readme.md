@@ -9,10 +9,10 @@ Epic: #219 | Milestone: [Permitato](https://github.com/slomin/potato-os/mileston
 
 These two tickets fix the ground everything else builds on. Sequential — #222 uses the hardened persistence from #221.
 
-| Order | Ticket | Summary | Key files |
-|-------|--------|---------|-----------|
-| 1 | **#221** | Harden Pi-hole recovery, persistence, exception consistency | `state.py`, `exceptions.py`, `audit.py`, `lifecycle.py`, `pihole_adapter.py` |
-| 2 | **#222** | Install and controlled-client onboarding flow | `routes.py`, `state.py`, `assets/*`, new onboarding UI |
+| Order | Ticket | Summary | Status |
+|-------|--------|---------|--------|
+| 1 | **#221** | Harden Pi-hole recovery, persistence, exception consistency | Done (PR #228) |
+| 2 | **#222** | Install and controlled-client onboarding flow | In progress |
 
 **#221 in detail** (first ticket):
 - Atomic writes for `state.json` and `exceptions.json` (write-tmp + `os.replace`)

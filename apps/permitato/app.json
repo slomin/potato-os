@@ -9,5 +9,7 @@
   "socket": "permitato.sock",
   "inferno": true,
   "routes": "routes.py",
+  "lifecycle": "lifecycle.py",
+  "icon": "assets/icon.svg",
   "description": "Conversational AI attention guard on Pi-hole"
 }

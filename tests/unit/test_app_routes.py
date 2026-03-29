@@ -155,3 +155,92 @@ def test_load_app_router_returns_none_when_file_missing(tmp_path):
     )
     result = load_app_router(manifest, app_dir)
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# route_prefix — None vs empty string matters
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_route_prefix_none_by_default():
+    from core.app_manifest import AppManifest
+
+    manifest = AppManifest(id="t", name="T", entry="main.py")
+    assert manifest.route_prefix is None
+
+
+def test_manifest_route_prefix_parses_empty_string(tmp_path):
+    import json
+    from core.app_manifest import AppManifest
+
+    p = tmp_path / "app.json"
+    p.write_text(json.dumps({"id": "t", "name": "T", "entry": "main.py", "route_prefix": ""}))
+    m = AppManifest.from_file(p)
+    assert m.route_prefix == ""
+
+
+def test_load_app_router_uses_custom_prefix(tmp_path):
+    from core.app_manifest import AppManifest
+    from core.app_routes import load_app_router
+
+    app_dir = tmp_path / "apps" / "myapp"
+    app_dir.mkdir(parents=True)
+    (app_dir / "routes.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+    )
+    manifest = AppManifest(id="myapp", name="My", entry="main.py", routes="routes.py", route_prefix="")
+    _, prefix = load_app_router(manifest, app_dir)
+    assert prefix == ""
+
+
+def test_load_app_router_uses_default_prefix_when_none(tmp_path):
+    from core.app_manifest import AppManifest
+    from core.app_routes import load_app_router
+
+    app_dir = tmp_path / "apps" / "myapp"
+    app_dir.mkdir(parents=True)
+    (app_dir / "routes.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+    )
+    manifest = AppManifest(id="myapp", name="My", entry="main.py", routes="routes.py")
+    _, prefix = load_app_router(manifest, app_dir)
+    assert prefix == "/app/myapp/api"
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle module loading
+# ---------------------------------------------------------------------------
+
+
+def test_load_app_lifecycle_returns_module(tmp_path):
+    from core.app_manifest import AppManifest
+    from core.app_lifecycle import load_app_lifecycle
+
+    app_dir = tmp_path / "apps" / "myapp"
+    app_dir.mkdir(parents=True)
+    (app_dir / "lifecycle.py").write_text(
+        "async def on_startup(app, app_dir, data_dir): pass\n"
+        "async def on_shutdown(app): pass\n"
+    )
+    manifest = AppManifest(id="myapp", name="My", entry="main.py", lifecycle="lifecycle.py")
+    mod = load_app_lifecycle(manifest, app_dir)
+    assert mod is not None
+    assert hasattr(mod, "on_startup")
+    assert hasattr(mod, "on_shutdown")
+
+
+def test_load_app_lifecycle_returns_none_when_not_declared():
+    from core.app_manifest import AppManifest
+    from core.app_lifecycle import load_app_lifecycle
+    from pathlib import Path
+
+    manifest = AppManifest(id="t", name="T", entry="main.py")
+    assert load_app_lifecycle(manifest, Path("/nonexistent")) is None
+
+
+def test_load_app_lifecycle_returns_none_when_file_missing(tmp_path):
+    from core.app_manifest import AppManifest
+    from core.app_lifecycle import load_app_lifecycle
+
+    manifest = AppManifest(id="t", name="T", entry="main.py", lifecycle="lifecycle.py")
+    assert load_app_lifecycle(manifest, tmp_path) is None

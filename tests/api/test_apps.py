@@ -7,6 +7,8 @@ def test_internal_apps_returns_empty_list_when_no_apps(client):
     body = response.json()
     assert "apps" in body
     assert isinstance(body["apps"], list)
+    assert "ui_apps" in body
+    assert isinstance(body["ui_apps"], list)
 
 
 def test_internal_apps_returns_discovered_app(client, runtime, monkeypatch):

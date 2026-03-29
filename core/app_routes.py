@@ -30,7 +30,7 @@ def load_app_router(
 
     try:
         # Ensure the apps parent directory is importable so app modules can
-        # use absolute imports like `from apps.permitato.modes import ...`
+        # use absolute imports like `from apps.myapp.models import ...`
         apps_parent = str(app_dir.parent.parent)
         if apps_parent not in sys.path:
             sys.path.insert(0, apps_parent)
@@ -47,5 +47,8 @@ def load_app_router(
         logger.warning("App %s routes module has no 'router' attribute: %s", manifest.id, routes_path)
         return None
 
-    prefix = f"/app/{manifest.id}/api"
+    if manifest.route_prefix is not None:
+        prefix = manifest.route_prefix
+    else:
+        prefix = f"/app/{manifest.id}/api"
     return router, prefix

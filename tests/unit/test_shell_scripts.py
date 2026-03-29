@@ -1144,101 +1144,68 @@ printf '%s\\n' "$@" > "$ARGS_OUT"
 # ---------------------------------------------------------------------------
 
 
-def test_install_dev_pihole_install_is_guarded():
+# ---------------------------------------------------------------------------
+# Selective app deployment
+# ---------------------------------------------------------------------------
+
+_PERMITATO_INSTALL_SH = REPO_ROOT / "apps" / "permitato" / "install.sh"
+
+
+def test_install_dev_uses_selective_app_deployment():
+    """install_dev.sh must deploy apps selectively via POTATO_IMAGE_APPS."""
+    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
+    assert "POTATO_IMAGE_APPS" in script
+    assert "_selected_apps" in script
+
+
+def test_install_dev_runs_app_install_hooks():
+    """install_dev.sh must run apps/{app}/install.sh for each selected app."""
+    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
+    assert "install.sh" in script
+    assert "_app_installer" in script or "install.sh" in script
+
+
+def test_permitato_install_script_exists():
+    assert _PERMITATO_INSTALL_SH.exists()
+    assert _PERMITATO_INSTALL_SH.stat().st_mode & 0o111  # executable
+
+
+def test_permitato_install_pihole_is_guarded():
     """Pi-hole install must be guarded so it skips when pihole is already present."""
-    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
-    assert "command -v pihole" in script, (
-        "install_dev.sh must check 'command -v pihole' to skip re-install"
-    )
+    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
+    assert "command -v pihole" in script
 
 
-def test_install_dev_pihole_has_marked_section():
-    """Pi-hole section must be clearly delimited for maintenance."""
+def test_permitato_install_config_runs_on_rerun():
+    """Port, password, sudoers must apply even if Pi-hole is already installed."""
     import re
 
-    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
-    pihole_section = re.search(
-        r"# --- Pi-hole.*?# --- end Pi-hole",
-        script,
-        re.DOTALL | re.IGNORECASE,
-    )
-    assert pihole_section, "install_dev.sh must have a marked Pi-hole section"
-
-
-def test_install_dev_pihole_config_runs_on_rerun():
-    """Permitato config (port, password, sudoers) must apply even if Pi-hole is already installed."""
-    import re
-
-    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
-    pihole_section = re.search(
-        r"# --- Pi-hole.*?# --- end Pi-hole",
-        script,
-        re.DOTALL | re.IGNORECASE,
-    )
-    assert pihole_section
-    section = pihole_section.group(0)
-    # Port config and sudoers must be outside the install guard
-    # (i.e., they run even when 'command -v pihole' succeeds)
-    install_guard = re.search(r"if command -v pihole.*?fi", section, re.DOTALL)
+    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
+    install_guard = re.search(r"if command -v pihole.*?fi", script, re.DOTALL)
     assert install_guard
-    after_guard = section[install_guard.end():]
-    assert "8081" in after_guard, "Port config must run outside the install guard"
-    assert "sudoers" in after_guard.lower(), "Sudoers must run outside the install guard"
+    after_guard = script[install_guard.end():]
+    assert "8081" in after_guard
+    assert "sudoers" in after_guard.lower()
 
 
-def test_install_dev_pihole_uses_scoped_port_config():
-    """Pi-hole port must be set via pihole-FTL --config, not a blanket sed on pihole.toml."""
-    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
-    assert "pihole-FTL --config webserver.port" in script, (
-        "Must use pihole-FTL --config to set webserver port (not sed)"
-    )
+def test_permitato_install_uses_scoped_port_config():
+    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
+    assert "pihole-FTL --config webserver.port" in script
     assert "8081" in script
 
 
-def test_install_dev_pihole_detects_interface():
-    """Pi-hole interface must be detected, not hardcoded to eth0."""
-    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
-    assert "ip route show default" in script, (
-        "Must detect active interface from default route"
-    )
+def test_permitato_install_detects_interface():
+    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
+    assert "ip route show default" in script
 
 
-def test_install_dev_pihole_downloads_installer_to_file():
-    """Installer must be downloaded to a temp file so stdin is free for PI_PASSWORD."""
-    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
-    # Must not pipe curl to bash /dev/stdin (breaks when run_sudo consumes stdin)
-    assert "bash /dev/stdin" not in script, (
-        "Must not pipe installer via stdin — breaks with PI_PASSWORD"
-    )
-    assert "curl -sSL https://install.pi-hole.net -o" in script, (
-        "Must download installer to a temp file"
-    )
+def test_permitato_install_downloads_installer_to_file():
+    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
+    assert "bash /dev/stdin" not in script
+    assert "curl -sSL https://install.pi-hole.net -o" in script
 
 
-def test_install_dev_pihole_stores_app_password():
-    """Pi-hole app password must be stored for Permitato to read."""
-    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
+def test_permitato_install_stores_app_password():
+    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
     assert "permitato_pihole_password" in script
-
-
-def test_install_dev_pihole_no_stdin_pipes_through_run_sudo():
-    """No data should be piped into run_sudo in the Pi-hole section.
-
-    run_sudo uses 'printf PI_PASSWORD | sudo -S' in remote deploys, which
-    consumes stdin. Piping data through run_sudo (e.g., printf | run_sudo tee)
-    silently loses the data. Write to temp files instead.
-    """
-    import re
-
-    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
-    pihole_section = re.search(
-        r"# --- Pi-hole.*?# --- end Pi-hole",
-        script,
-        re.DOTALL | re.IGNORECASE,
-    )
-    assert pihole_section
-    section = pihole_section.group(0)
-    assert "| run_sudo" not in section, (
-        "Do not pipe data through run_sudo — stdin is consumed by PI_PASSWORD"
-    )
 

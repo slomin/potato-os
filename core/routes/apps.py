@@ -10,6 +10,7 @@ router = APIRouter()
 @router.get("/internal/apps")
 async def list_apps(request: Request):
     instances = getattr(request.app.state, "app_instances", {})
+    ui_apps = getattr(request.app.state, "discovered_ui_apps", [])
     return {
         "apps": [
             {
@@ -24,4 +25,5 @@ async def list_apps(request: Request):
             }
             for inst in instances.values()
         ],
+        "ui_apps": ui_apps,
     }

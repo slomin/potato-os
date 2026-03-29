@@ -149,7 +149,7 @@ trap 'rm -rf "\${tmpdir}"' EXIT
 tar -xzf "\${PAYLOAD}" -C "\${tmpdir}"
 
 cd "\${tmpdir}/payload/potato-os"
-PI_PASSWORD="\${PI_PASSWORD:-raspberry}" POTATO_LLAMA_BUNDLE_SRC="\${tmpdir}/payload/llama_bundle" ./bin/install_dev.sh
+PI_PASSWORD="\${PI_PASSWORD:-raspberry}" POTATO_LLAMA_BUNDLE_SRC="\${tmpdir}/payload/llama_bundle" POTATO_IMAGE_APPS="${POTATO_IMAGE_APPS:-chat}" ./bin/install_dev.sh
 
 touch "\${DONE_MARKER}"
 echo "[potato-bundle] complete: \$(date -Iseconds)"
@@ -244,6 +244,26 @@ rsync -a --delete \
   --exclude 'raspberry_os_clean_image' \
   --exclude 'references' \
   "${REPO_ROOT}/" "${payload_repo}/"
+
+# Remove non-selected apps from payload (default: chat only).
+# Chat is always kept — /v1/chat/completions is a platform endpoint.
+POTATO_IMAGE_APPS="${POTATO_IMAGE_APPS:-chat}"
+IFS=',' read -ra _selected_apps <<< "${POTATO_IMAGE_APPS}"
+if [ -d "${payload_repo}/apps" ]; then
+  for _app_dir in "${payload_repo}/apps"/*/; do
+    [ -d "${_app_dir}" ] || continue
+    _app_name="$(basename "${_app_dir}")"
+    _keep=false
+    for _a in "${_selected_apps[@]}"; do
+      [ "${_a}" = "${_app_name}" ] && _keep=true
+    done
+    [ "${_app_name}" = "chat" ] && _keep=true
+    [ "${_app_name}" = "skeleton" ] && _keep=true
+    if [ "${_keep}" = "false" ]; then
+      rm -rf "${_app_dir}"
+    fi
+  done
+fi
 
 rsync -a --delete "${bundle_src}/" "${payload_llama}/"
 

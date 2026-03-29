@@ -8,5 +8,8 @@
   "ui_path": "assets/",
   "socket": "chat.sock",
   "inferno": true,
+  "routes": "routes.py",
+  "route_prefix": "",
+  "icon": "assets/icon.svg",
   "description": "Chat interface — the first Potato app"
 }

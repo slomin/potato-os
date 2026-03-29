@@ -26,18 +26,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Late-bound references set by main.py during app creation
-_build_status = None
-_get_status_download_context = None
-_forward_headers = None
-
-
-def register_chat_helpers(*, build_status, get_status_download_context, forward_headers):
-    global _build_status, _get_status_download_context, _forward_headers
-    _build_status = build_status
-    _get_status_download_context = get_status_download_context
-    _forward_headers = forward_headers
-
 
 @router.post("/v1/chat/completions")
 async def chat_completions(
@@ -64,6 +52,9 @@ async def chat_completions(
     await lock.acquire()
     released = False
     try:
+        _get_status_download_context = request.app.state.get_status_download_context
+        _build_status = request.app.state.build_status
+
         download_active, auto_start_remaining = await _get_status_download_context(request.app, runtime_cfg)
         status_payload = await _build_status(
             runtime_cfg,
@@ -90,7 +81,7 @@ async def chat_completions(
             payload,
             active_model_filename=str(status_payload.get("model", {}).get("filename") or ""),
         )
-        headers = _forward_headers(request)
+        headers = request.app.state.forward_headers(request)
         active_backend = status_payload["backend"]["active"]
 
         try:

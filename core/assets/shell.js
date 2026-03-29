@@ -395,21 +395,62 @@ import { registerPlatformShell } from "./platform-controls.js";
       }, 2000);
     }
 
-    // --- Dynamic app switching ---
-    const APP_REGISTRY = {
-      chat: { module: "/app/chat/assets/app.js", title: "Potato Chat" },
-      permitato: { module: "/app/permitato/assets/app.js", title: "Permitato" },
-    };
+    // --- Dynamic app switching (built from /internal/apps) ---
+    let _appRegistry = {};
     let _activeAppId = null;
     let _activeAppModule = null;
     const _appWrappers = {};   // appId → persistent wrapper div (stays in DOM)
     const _appModules = {};    // appId → loaded module
     const shellApi = { pollStatus, setSidebarOpen, isMobileSidebarViewport, registerEscapeHandler, bindModelSwitcher };
 
+    async function _discoverApps() {
+      let uiApps = [{ id: "chat", name: "Potato Chat", icon: "/app/chat/assets/icon.svg" }];
+      try {
+        const resp = await fetch("/internal/apps");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.ui_apps && data.ui_apps.length > 0) uiApps = data.ui_apps;
+        }
+      } catch { /* fallback to chat-only */ }
+
+      _appRegistry = {};
+      for (const a of uiApps) {
+        _appRegistry[a.id] = { module: `/app/${a.id}/assets/app.js`, title: a.name, icon: a.icon };
+      }
+      _buildSwitcher(uiApps);
+    }
+
+    function _buildSwitcher(uiApps) {
+      const nav = document.getElementById("appSwitcher");
+      if (!nav) return;
+      nav.innerHTML = "";
+      // Hide switcher when only one app is installed
+      nav.style.display = uiApps.length <= 1 ? "none" : "";
+      for (const a of uiApps) {
+        const btn = document.createElement("button");
+        btn.className = "app-switcher-btn" + (a.id === (_activeAppId || "chat") ? " active" : "");
+        btn.dataset.app = a.id;
+        btn.setAttribute("aria-label", a.name);
+        btn.title = a.name;
+        if (a.icon) {
+          const img = document.createElement("img");
+          img.src = a.icon;
+          img.className = "app-switcher-icon";
+          img.alt = "";
+          img.setAttribute("aria-hidden", "true");
+          btn.appendChild(img);
+        }
+        btn.addEventListener("click", () => {
+          if (a.id !== _activeAppId) switchApp(a.id);
+        });
+        nav.appendChild(btn);
+      }
+    }
+
     async function switchApp(appId) {
       const container = document.getElementById("appContainer");
       if (!container) return;
-      const entry = APP_REGISTRY[appId];
+      const entry = _appRegistry[appId];
       if (!entry) return;
 
       // Hide all app wrappers
@@ -451,25 +492,13 @@ import { registerPlatformShell } from "./platform-controls.js";
       }
     }
 
-    // Bind app switcher buttons and hide unavailable apps
-    document.querySelectorAll(".app-switcher-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const appId = btn.dataset.app;
-        if (appId && appId !== _activeAppId) switchApp(appId);
-      });
-      // Hide non-default apps whose assets aren't installed
-      const appId = btn.dataset.app;
-      if (appId && appId !== "chat" && APP_REGISTRY[appId]) {
-        fetch(APP_REGISTRY[appId].module, { method: "HEAD" }).then(r => {
-          if (!r.ok) btn.style.display = "none";
-        }).catch(() => { btn.style.display = "none"; });
-      }
-    });
-
-    // Load default app (chat), then start polling
+    // Discover apps, then load the first available UI app, then start polling
     const appContainer = document.getElementById("appContainer");
     if (appContainer) {
-      switchApp("chat").then(() => startPollingLoop()).catch(() => startPollingLoop());
+      _discoverApps().then(() => {
+        const defaultApp = Object.keys(_appRegistry)[0] || "chat";
+        return switchApp(defaultApp);
+      }).then(() => startPollingLoop()).catch(() => startPollingLoop());
     } else {
       startPollingLoop();
     }

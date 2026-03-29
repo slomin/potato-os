@@ -25,6 +25,9 @@ class AppManifest:
     inferno: bool = False
     description: str = ""
     routes: str = ""
+    lifecycle: str = ""
+    route_prefix: str | None = None
+    icon: str = ""
 
     @classmethod
     def from_file(cls, path: Path) -> AppManifest:
@@ -49,6 +52,9 @@ class AppManifest:
             inferno=bool(data.get("inferno", False)),
             description=str(data.get("description", "")),
             routes=str(data.get("routes", "")),
+            lifecycle=str(data.get("lifecycle", "")),
+            route_prefix=data.get("route_prefix"),
+            icon=str(data.get("icon", "")),
         )
 
     def validate(self) -> list[str]:

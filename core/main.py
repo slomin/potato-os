@@ -1676,54 +1676,39 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
                 name="potato-app-supervisor",
             )
 
-        # Permitato: init state + background expiry task
-        app.state.permit_state = None
-        app.state.permit_expiry_task = None
+        # App lifecycle hooks — discover and run on_startup for installed apps
         try:
-            # Ensure apps/ is importable (on Pi, cwd is core/ not repo root)
-            _apps_parent = str(Path(__file__).resolve().parent.parent)
-            if _apps_parent not in sys.path:
-                sys.path.insert(0, _apps_parent)
-            from apps.permitato.state import initialize_permitato, shutdown_permitato
-            pw_path = app.state.runtime.base_dir / "config" / "permitato_pihole_password"
-            if pw_path.exists():
-                pihole_pw = pw_path.read_text(encoding="utf-8").strip()
-                data_dir = app.state.runtime.base_dir / "data" / "permitato"
-                app.state.permit_state = await initialize_permitato(
-                    data_dir=data_dir,
-                    pihole_password=pihole_pw,
-                )
+            from core.app_manifest import discover_apps as _discover_apps_lifecycle
+            from core.app_lifecycle import load_app_lifecycle
+        except ModuleNotFoundError:
+            from app_manifest import discover_apps as _discover_apps_lifecycle  # type: ignore[no-redef]
+            from app_lifecycle import load_app_lifecycle  # type: ignore[no-redef]
 
-                async def _exception_expiry_loop():
-                    while True:
-                        await asyncio.sleep(30)
-                        state = app.state.permit_state
-                        if state and state.exception_store:
-                            # Revoke Pi-hole allow rules BEFORE removing from store
-                            for exc in state.exception_store.get_expired():
-                                if state.adapter and state.pihole_available:
-                                    try:
-                                        await state.adapter.delete_domain_rule(
-                                            exc.regex_pattern, "allow", "regex",
-                                        )
-                                    except Exception:
-                                        pass
-                                from apps.permitato.audit import write_audit_entry
-                                write_audit_entry(state.data_dir, {
-                                    "event": "exception_expired",
-                                    "domain": exc.domain,
-                                    "exception_id": exc.id,
-                                })
-                            revoked = state.exception_store.cleanup_expired()
-                            if revoked:
-                                state.exception_store.persist()
+        _apps_parent = str(Path(__file__).resolve().parent.parent)
+        if _apps_parent not in sys.path:
+            sys.path.insert(0, _apps_parent)
 
-                app.state.permit_expiry_task = asyncio.create_task(
-                    _exception_expiry_loop(),
-                    name="permitato-expiry",
-                )
-        except (ImportError, Exception) as exc:
-            logger.debug("Permitato init skipped: %s", exc)
+        _lifecycle_modules = []
+        _lc_seen_ids: set[str] = set()
+        _lc_repo_apps = Path(__file__).resolve().parent.parent / "apps"
+        _lc_runtime_apps = app.state.runtime.base_dir / "apps"
+        _lc_data_dir = app.state.runtime.base_dir / "data"
+        for _lc_apps_dir in (_lc_runtime_apps, _lc_repo_apps):
+            if not _lc_apps_dir.is_dir():
+                continue
+            for _lc_manifest in _discover_apps_lifecycle(_lc_apps_dir):
+                if _lc_manifest.id in _lc_seen_ids:
+                    continue
+                _lc_seen_ids.add(_lc_manifest.id)
+                _lc_app_dir = _lc_apps_dir / _lc_manifest.id
+                _lc_mod = load_app_lifecycle(_lc_manifest, _lc_app_dir)
+                if _lc_mod is not None:
+                    try:
+                        await _lc_mod.on_startup(app, _lc_app_dir, _lc_data_dir)
+                        _lifecycle_modules.append(_lc_mod)
+                    except Exception:
+                        logger.warning("App %s lifecycle startup failed", _lc_manifest.id, exc_info=True)
+        app.state._app_lifecycle_modules = _lifecycle_modules
 
         try:
             yield
@@ -1782,20 +1767,12 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
                 except asyncio.CancelledError:
                     pass
 
-            # Permitato shutdown
-            expiry_task = app.state.permit_expiry_task
-            if expiry_task is not None:
-                expiry_task.cancel()
+            # App lifecycle shutdown (reverse order)
+            for _lc_mod in reversed(getattr(app.state, "_app_lifecycle_modules", [])):
                 try:
-                    await expiry_task
-                except asyncio.CancelledError:
-                    pass
-            if app.state.permit_state is not None:
-                try:
-                    from apps.permitato.state import shutdown_permitato
-                    await shutdown_permitato(app.state.permit_state)
-                except (ImportError, Exception):
-                    pass
+                    await _lc_mod.on_shutdown(app)
+                except Exception:
+                    logger.warning("App lifecycle shutdown error", exc_info=True)
 
     try:
         from core.__version__ import __version__ as _app_version
@@ -1836,9 +1813,8 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
     if enable_orchestrator is not None:
         app.state.runtime.enable_orchestrator = enable_orchestrator
 
-    # Routes — extracted to app/routes/*.py
+    # Platform routes — app-specific routes loaded via app discovery below
     try:
-        from core.routes.chat import router as chat_router, register_chat_helpers
         from core.routes.settings import router as settings_router, register_settings_helpers
         from core.routes.status import router as status_router, register_status_helpers
         from core.routes.runtime import router as runtime_router, register_runtime_helpers
@@ -1847,7 +1823,6 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
         from core.routes.terminal import router as terminal_router, register_terminal_helpers
         from core.routes.apps import router as apps_router
     except ModuleNotFoundError:
-        from routes.chat import router as chat_router, register_chat_helpers  # type: ignore[no-redef]
         from routes.settings import router as settings_router, register_settings_helpers  # type: ignore[no-redef]
         from routes.status import router as status_router, register_status_helpers  # type: ignore[no-redef]
         from routes.runtime import router as runtime_router, register_runtime_helpers  # type: ignore[no-redef]
@@ -1856,11 +1831,11 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
         from routes.terminal import router as terminal_router, register_terminal_helpers  # type: ignore[no-redef]
         from routes.apps import router as apps_router  # type: ignore[no-redef]
 
-    register_chat_helpers(
-        build_status=build_status,
-        get_status_download_context=get_status_download_context,
-        forward_headers=_forward_headers,
-    )
+    # Platform helpers on app.state — used by chat routes (and any future app)
+    app.state.build_status = build_status
+    app.state.get_status_download_context = get_status_download_context
+    app.state.forward_headers = _forward_headers
+
     register_settings_helpers(
         restart_managed_llama_process=restart_managed_llama_process,
     )
@@ -1871,7 +1846,6 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
     register_models_helpers(main_module=_this_module)
     register_update_helpers(main_module=_this_module)
     register_terminal_helpers()
-    app.include_router(chat_router)
     app.include_router(settings_router)
     app.include_router(status_router)
     app.include_router(runtime_router)
@@ -1893,6 +1867,7 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
     _repo_apps = Path(__file__).resolve().parent.parent / "apps"
     _runtime_apps = app.state.runtime.base_dir / "apps"
     _mounted_app_ids: set[str] = set()
+    _discovered_ui_apps: list[dict] = []
     for apps_dir in (_runtime_apps, _repo_apps):
         if not apps_dir.is_dir():
             continue
@@ -1914,7 +1889,23 @@ def create_app(runtime: RuntimeConfig | None = None, enable_orchestrator: bool |
                         StaticFiles(directory=str(app_assets_dir)),
                         name=f"app-{manifest.id}",
                     )
+                if manifest.icon:
+                    icon_file = manifest.icon.split("/")[-1]
+                    _discovered_ui_apps.append({
+                        "id": manifest.id,
+                        "name": manifest.name,
+                        "has_ui": True,
+                        "icon": f"/app/{manifest.id}/assets/{icon_file}",
+                    })
+                else:
+                    _discovered_ui_apps.append({
+                        "id": manifest.id,
+                        "name": manifest.name,
+                        "has_ui": True,
+                        "icon": "",
+                    })
             _mounted_app_ids.add(manifest.id)
+    app.state.discovered_ui_apps = _discovered_ui_apps
 
     return app
 

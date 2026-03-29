@@ -166,9 +166,19 @@ build_stage_payload() {
 
   rsync -a "${repo_root}/core/" "${potato_root}/core/"
   rsync -a "${repo_root}/bin/" "${potato_root}/bin/"
-  if [ -d "${repo_root}/apps" ]; then
-    rsync -a "${repo_root}/apps/" "${potato_root}/apps/"
-  fi
+  # Deploy selected apps (default: chat only).
+  # Chat is always included — /v1/chat/completions is a platform endpoint.
+  local _img_apps="${POTATO_IMAGE_APPS:-chat}"
+  IFS=',' read -ra _sel_apps <<< "${_img_apps}"
+  local _has_chat=false
+  for _a in "${_sel_apps[@]}"; do [ "$_a" = "chat" ] && _has_chat=true; done
+  if [ "$_has_chat" = "false" ]; then _sel_apps+=("chat"); fi
+  for _app_name in "${_sel_apps[@]}"; do
+    if [ -d "${repo_root}/apps/${_app_name}" ]; then
+      mkdir -p "${potato_root}/apps/${_app_name}"
+      rsync -a "${repo_root}/apps/${_app_name}/" "${potato_root}/apps/${_app_name}/"
+    fi
+  done
   rsync -a "${repo_root}/systemd/" "${potato_root}/systemd/"
   rsync -a "${repo_root}/nginx/" "${potato_root}/nginx/"
   install -m 0644 "${repo_root}/requirements.txt" "${potato_root}/core/requirements.txt"

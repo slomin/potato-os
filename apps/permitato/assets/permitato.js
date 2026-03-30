@@ -10,6 +10,9 @@ let _lastClientFetchTs = 0;
 let _panelOpen = false;
 let _schedulePanelOpen = false;
 let _statsPanelOpen = false;
+let _customListPanelOpen = false;
+let _customListTab = "work";
+let _latestCustomDomains = [];
 let _ttlTimer = null;
 let _latestExceptions = [];
 let _latestPiholeAvailable = true;
@@ -58,6 +61,22 @@ export function init(shellApi) {
 
   const cancelRuleBtn = document.getElementById("permitatoCancelRuleBtn");
   if (cancelRuleBtn) cancelRuleBtn.addEventListener("click", _hideAddRuleForm);
+
+  const customToggle = document.getElementById("permitatoCustomListToggle");
+  if (customToggle) customToggle.addEventListener("click", _toggleCustomListPanel);
+
+  const addCustomBtn = document.getElementById("permitatoAddCustomBtn");
+  if (addCustomBtn) addCustomBtn.addEventListener("click", _showAddCustomForm);
+
+  const saveCustomBtn = document.getElementById("permitatoSaveCustomBtn");
+  if (saveCustomBtn) saveCustomBtn.addEventListener("click", _saveCustomDomain);
+
+  const cancelCustomBtn = document.getElementById("permitatoCancelCustomBtn");
+  if (cancelCustomBtn) cancelCustomBtn.addEventListener("click", _hideAddCustomForm);
+
+  document.querySelectorAll(".permitato-custom-tab").forEach(tab => {
+    tab.addEventListener("click", () => _switchCustomTab(tab.dataset.tab));
+  });
 
   _pollStatus();
   _statusTimer = setInterval(_pollStatus, 5000);
@@ -526,6 +545,124 @@ async function _deleteScheduleRule(id) {
       _fetchSchedule();
       _pollStatus();
     }
+  } catch {
+    // silent
+  }
+}
+
+// --- Custom Lists ---
+
+function _toggleCustomListPanel() {
+  _customListPanelOpen = !_customListPanelOpen;
+  const panel = document.getElementById("permitatoCustomListPanel");
+  const toggle = document.getElementById("permitatoCustomListToggle");
+  if (panel) panel.hidden = !_customListPanelOpen;
+  if (toggle) toggle.setAttribute("aria-expanded", String(_customListPanelOpen));
+  if (_customListPanelOpen) _fetchCustomDomains();
+}
+
+async function _fetchCustomDomains() {
+  try {
+    const resp = await fetch(`${PERMITATO_API}/custom-domains`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    _latestCustomDomains = data.entries || [];
+    _renderCustomDomains();
+  } catch {
+    // silent
+  }
+}
+
+function _renderCustomDomains() {
+  const list = document.getElementById("permitatoCustomList");
+  const empty = document.getElementById("permitatoCustomListEmpty");
+  if (!list) return;
+
+  const filtered = _latestCustomDomains.filter(e => e.mode === _customListTab);
+
+  if (filtered.length === 0) {
+    list.innerHTML = "";
+    if (empty) empty.hidden = false;
+    return;
+  }
+  if (empty) empty.hidden = true;
+  list.innerHTML = "";
+
+  for (const entry of filtered) {
+    const li = document.createElement("li");
+
+    const domain = document.createElement("span");
+    domain.className = "custom-domain-name";
+    domain.textContent = entry.domain;
+    li.appendChild(domain);
+
+    const btn = document.createElement("button");
+    btn.className = "custom-domain-remove-btn";
+    btn.textContent = "Remove";
+    btn.addEventListener("click", () => _deleteCustomDomain(entry.id));
+    li.appendChild(btn);
+
+    list.appendChild(li);
+  }
+}
+
+function _switchCustomTab(tab) {
+  _customListTab = tab;
+  document.querySelectorAll(".permitato-custom-tab").forEach(el => {
+    el.classList.toggle("active", el.dataset.tab === tab);
+  });
+  _renderCustomDomains();
+}
+
+function _showAddCustomForm() {
+  const form = document.getElementById("permitatoAddCustomForm");
+  const errEl = document.getElementById("permitatoCustomError");
+  const modeSelect = document.getElementById("permitatoCustomMode");
+  if (form) form.hidden = false;
+  if (errEl) errEl.hidden = true;
+  if (modeSelect) modeSelect.value = _customListTab;
+}
+
+function _hideAddCustomForm() {
+  const form = document.getElementById("permitatoAddCustomForm");
+  const domainInput = document.getElementById("permitatoCustomDomain");
+  if (form) form.hidden = true;
+  if (domainInput) domainInput.value = "";
+}
+
+async function _saveCustomDomain() {
+  const mode = document.getElementById("permitatoCustomMode")?.value;
+  const domainInput = document.getElementById("permitatoCustomDomain");
+  const domain = domainInput?.value?.trim();
+  const errEl = document.getElementById("permitatoCustomError");
+
+  if (!domain) {
+    if (errEl) { errEl.textContent = "Enter a domain."; errEl.hidden = false; }
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${PERMITATO_API}/custom-domains`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, domain }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      if (errEl) { errEl.textContent = err.error || "Failed to add domain."; errEl.hidden = false; }
+      return;
+    }
+    _hideAddCustomForm();
+    _fetchCustomDomains();
+  } catch {
+    if (errEl) { errEl.textContent = "Connection error."; errEl.hidden = false; }
+  }
+}
+
+async function _deleteCustomDomain(id) {
+  try {
+    const resp = await fetch(`${PERMITATO_API}/custom-domains/${id}`, { method: "DELETE" });
+    if (resp.ok) _fetchCustomDomains();
   } catch {
     // silent
   }

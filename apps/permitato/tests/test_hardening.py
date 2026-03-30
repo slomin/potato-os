@@ -368,6 +368,124 @@ async def test_compensation_noop_without_exception_group(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Custom list compensation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_compensate_custom_lists_readds_missing(tmp_path):
+    from apps.permitato.state import PermitState, compensate_custom_lists
+    from apps.permitato.custom_lists import CustomListStore
+
+    adapter = AsyncMock()
+    adapter.get_domain_rules = AsyncMock(return_value=[])
+    adapter.add_domain_rule = AsyncMock()
+
+    store = CustomListStore(data_dir=tmp_path)
+    store.add("work", "facebook.com")
+
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        custom_list_store=store,
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    await compensate_custom_lists(state)
+
+    adapter.add_domain_rule.assert_called_once()
+    call_kw = adapter.add_domain_rule.call_args.kwargs
+    assert call_kw["rule_type"] == "deny"
+    assert call_kw["comment"].startswith("Permitato-custom:")
+
+
+@pytest.mark.anyio
+async def test_compensate_custom_lists_removes_orphaned(tmp_path):
+    from apps.permitato.state import PermitState, compensate_custom_lists
+    from apps.permitato.custom_lists import CustomListStore
+
+    adapter = AsyncMock()
+    adapter.get_domain_rules = AsyncMock(return_value=[
+        {"domain": r"(^|\.)old\.com$", "groups": [1], "comment": "Permitato-custom: old.com"},
+    ])
+    adapter.delete_domain_rule = AsyncMock()
+
+    store = CustomListStore(data_dir=tmp_path)
+
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        custom_list_store=store,
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    await compensate_custom_lists(state)
+
+    adapter.delete_domain_rule.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_compensate_custom_lists_skips_builtin_rules(tmp_path):
+    from apps.permitato.state import PermitState, compensate_custom_lists
+    from apps.permitato.custom_lists import CustomListStore
+
+    adapter = AsyncMock()
+    adapter.get_domain_rules = AsyncMock(return_value=[
+        {"domain": r"(^|\.)facebook\.com$", "groups": [1], "comment": "Permitato: work mode"},
+    ])
+    adapter.delete_domain_rule = AsyncMock()
+    adapter.add_domain_rule = AsyncMock()
+
+    store = CustomListStore(data_dir=tmp_path)
+
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        custom_list_store=store,
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    await compensate_custom_lists(state)
+
+    adapter.delete_domain_rule.assert_not_called()
+    adapter.add_domain_rule.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_compensate_custom_lists_noop_when_in_sync(tmp_path):
+    from apps.permitato.state import PermitState, compensate_custom_lists
+    from apps.permitato.custom_lists import CustomListStore
+    from apps.permitato.exceptions import build_domain_regex
+
+    adapter = AsyncMock()
+    regex = build_domain_regex("facebook.com")
+    adapter.get_domain_rules = AsyncMock(return_value=[
+        {"domain": regex, "groups": [1], "comment": "Permitato-custom: facebook.com"},
+    ])
+    adapter.delete_domain_rule = AsyncMock()
+    adapter.add_domain_rule = AsyncMock()
+
+    store = CustomListStore(data_dir=tmp_path)
+    store.add("work", "facebook.com")
+
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        custom_list_store=store,
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    await compensate_custom_lists(state)
+
+    adapter.delete_domain_rule.assert_not_called()
+    adapter.add_domain_rule.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Audit rotation
 # ---------------------------------------------------------------------------
 

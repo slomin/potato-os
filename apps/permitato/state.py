@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime
 
 from apps.permitato.audit import write_audit_entry
+from apps.permitato.custom_lists import CustomListStore
 from apps.permitato.exceptions import ExceptionStore
 from apps.permitato.modes import MODES, get_mode, WORK_DENY_DOMAINS, SFW_DENY_DOMAINS
 from apps.permitato.pihole_adapter import PiholeAdapter, PiholeUnavailableError
@@ -33,6 +34,7 @@ class PermitState:
     mode: str = "normal"
     adapter: PiholeAdapter | None = None
     exception_store: ExceptionStore | None = None
+    custom_list_store: CustomListStore | None = None
     schedule_store: ScheduleStore | None = None
     override_mode: str | None = None
     override_scheduled_mode: str | None = None
@@ -92,6 +94,9 @@ async def initialize_permitato(
     state.exception_store = ExceptionStore(data_dir=data_dir)
     state.exception_store.load()
 
+    state.custom_list_store = CustomListStore(data_dir=data_dir)
+    state.custom_list_store.load()
+
     state.adapter = PiholeAdapter(base_url=pihole_base_url, password=pihole_password)
     try:
         await state.adapter.connect()
@@ -105,6 +110,7 @@ async def initialize_permitato(
 
         # Seed deny-list domains (idempotent — duplicates are ignored by Pi-hole)
         await _seed_domain_lists(state.adapter, state.group_map)
+        await _seed_custom_lists(state.adapter, state.group_map, state.custom_list_store)
 
         # Revoke Pi-hole rules for exceptions that expired while we were down
         for exc in state.exception_store.get_expired():
@@ -161,6 +167,8 @@ async def shutdown_permitato(state: PermitState) -> None:
     """Clean shutdown: persist state and disconnect."""
     if state.exception_store:
         state.exception_store.persist()
+    if state.custom_list_store:
+        state.custom_list_store.persist()
     state.persist()
     if state.adapter:
         await state.adapter.disconnect()
@@ -215,6 +223,29 @@ async def _seed_domain_lists(adapter: PiholeAdapter, group_map: dict[str, int]) 
                 pass
 
 
+async def _seed_custom_lists(
+    adapter: PiholeAdapter, group_map: dict[str, int], store: CustomListStore | None,
+) -> None:
+    """Seed user-defined custom deny-list entries into Pi-hole (idempotent)."""
+    if not store:
+        return
+    for mode_name in ("work", "sfw"):
+        gid = group_map.get(f"permitato_{mode_name}")
+        if gid is None:
+            continue
+        for entry in store.entries_for_mode(mode_name):
+            try:
+                await adapter.add_domain_rule(
+                    domain=entry.regex_pattern,
+                    rule_type="deny",
+                    kind="regex",
+                    groups=[gid],
+                    comment=f"Permitato-custom: {entry.domain}",
+                )
+            except Exception:
+                pass  # duplicate or transient — skip silently
+
+
 async def apply_mode_to_client(state: PermitState) -> None:
     """Apply the current mode to the controlled client in Pi-hole."""
     if not state.pihole_available or not state.adapter or not state.client_id:
@@ -254,7 +285,9 @@ async def reconnect_pihole(state: PermitState) -> None:
         state.group_map = await _ensure_groups(state.adapter)
         state.exception_group_id = state.group_map.get("permitato_exceptions", 0)
         await _seed_domain_lists(state.adapter, state.group_map)
+        await _seed_custom_lists(state.adapter, state.group_map, state.custom_list_store)
         await compensate_exceptions(state)
+        await compensate_custom_lists(state)
     except Exception:
         logger.warning("Pi-hole connected but recovery failed — staying degraded", exc_info=True)
         return
@@ -312,6 +345,54 @@ async def compensate_exceptions(state: PermitState) -> None:
                 logger.info("Compensation: removed orphaned allow rule %s", rule["domain"])
             except Exception:
                 logger.warning("Compensation: failed to remove orphaned rule %s", rule["domain"])
+
+
+async def compensate_custom_lists(state: PermitState) -> None:
+    """Reconcile local custom list store with Pi-hole deny rules."""
+    if not state.adapter or not state.custom_list_store:
+        return
+
+    # Fetch all deny regex rules from Pi-hole
+    all_rules = await state.adapter.get_domain_rules("deny", "regex")
+
+    # Filter to Permitato-custom-owned rules only
+    pihole_custom = [
+        r for r in all_rules
+        if r.get("comment", "").startswith("Permitato-custom:")
+    ]
+    pihole_domains = {r["domain"] for r in pihole_custom}
+
+    # What we expect
+    local_entries = state.custom_list_store.list_entries()
+    local_patterns = {e["regex_pattern"] for e in local_entries}
+
+    # Re-add missing
+    for entry in local_entries:
+        if entry["regex_pattern"] not in pihole_domains:
+            mode_name = entry["mode"]
+            gid = state.group_map.get(f"permitato_{mode_name}")
+            if gid is None:
+                continue
+            try:
+                await state.adapter.add_domain_rule(
+                    domain=entry["regex_pattern"],
+                    rule_type="deny",
+                    kind="regex",
+                    groups=[gid],
+                    comment=f"Permitato-custom: {entry['domain']}",
+                )
+                logger.info("Compensation: re-added missing custom rule for %s", entry["domain"])
+            except Exception:
+                logger.warning("Compensation: failed to re-add custom rule for %s", entry["domain"])
+
+    # Remove orphaned custom rules
+    for rule in pihole_custom:
+        if rule["domain"] not in local_patterns:
+            try:
+                await state.adapter.delete_domain_rule(rule["domain"], "deny", "regex")
+                logger.info("Compensation: removed orphaned custom rule %s", rule["domain"])
+            except Exception:
+                logger.warning("Compensation: failed to remove orphaned custom rule %s", rule["domain"])
 
 
 async def apply_startup_schedule(state: PermitState, now: datetime | None = None) -> None:

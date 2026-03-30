@@ -32,6 +32,7 @@
     <span id="permitatoScheduleLabel">Schedule</span>
   </button>
   <button id="permitatoStatsToggle" class="permitato-stats-toggle" type="button">Stats</button>
+  <button id="permitatoCustomListToggle" class="permitato-custom-list-toggle" type="button">Custom Lists</button>
   <div id="permitatoPiholeStatus" class="permitato-pihole-status">
     <span id="permitatoPiholeDot" class="permitato-pihole-dot"></span>
     <span id="permitatoPiholeLabel">Checking...</span>
@@ -117,6 +118,37 @@
   <div id="permitatoStatsEmpty" class="permitato-stats-empty" hidden>No activity recorded yet</div>
   <div id="permitatoStatsFooter" class="permitato-stats-footer" hidden>
     Based on last <span id="permitatoDataSpan">0</span> days
+  </div>
+</section>
+
+<section id="permitatoCustomListPanel" class="permitato-custom-list-panel" hidden>
+  <div class="permitato-custom-list-header">
+    <h3>Custom Blocked Domains</h3>
+    <button id="permitatoAddCustomBtn" class="permitato-add-custom-btn">+ Add Domain</button>
+  </div>
+  <div id="permitatoCustomListTabs" class="permitato-custom-list-tabs">
+    <button class="permitato-custom-tab active" data-tab="work">Work</button>
+    <button class="permitato-custom-tab" data-tab="sfw">SFW</button>
+  </div>
+  <ul id="permitatoCustomList" class="permitato-custom-list"></ul>
+  <div id="permitatoCustomListEmpty" class="permitato-custom-list-empty">No custom domains</div>
+  <div id="permitatoAddCustomForm" class="permitato-add-custom-form" hidden>
+    <div class="permitato-custom-row">
+      <label>Mode</label>
+      <select id="permitatoCustomMode">
+        <option value="work">Work</option>
+        <option value="sfw">SFW</option>
+      </select>
+    </div>
+    <div class="permitato-custom-row">
+      <label>Domain</label>
+      <input type="text" id="permitatoCustomDomain" placeholder="example.com">
+    </div>
+    <div id="permitatoCustomError" class="permitato-custom-error" hidden></div>
+    <div class="permitato-add-custom-actions">
+      <button id="permitatoSaveCustomBtn" class="permitato-save-custom-btn">Save</button>
+      <button id="permitatoCancelCustomBtn" class="permitato-cancel-custom-btn">Cancel</button>
+    </div>
   </div>
 </section>
 

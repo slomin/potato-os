@@ -29,9 +29,11 @@ async function openPermitato(page, { statusRoute, permitatoStatusRoute, clientsR
   await page.locator('button[data-app="permitato"]').click();
   // Wait for Permitato to load its HTML — either the status bar or the onboarding overlay becomes visible
   await page.waitForFunction(() => {
-    const bar = document.getElementById("permitatoStatusBar");
+    const badge = document.getElementById("permitatoModeValue");
     const onb = document.getElementById("permitatoOnboarding");
-    return (bar && bar.offsetParent !== null) || (onb && !onb.hidden);
+    // Wait until either the mode badge is updated (poll completed with client)
+    // or the onboarding overlay is shown (poll completed without client)
+    return (badge && badge.textContent !== "--" && badge.textContent !== "") || (onb && !onb.hidden);
   }, { timeout: 10000 });
 }
 

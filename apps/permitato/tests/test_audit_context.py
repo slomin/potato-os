@@ -292,3 +292,27 @@ def test_full_pipeline_write_read_build(tmp_path):
     )
     assert "Recent Activity" in prompt
     assert "twitter.com" in prompt
+
+
+def test_custom_domain_added_formats_correctly():
+    from apps.permitato.audit import build_recent_context
+
+    entries = [
+        _entry("custom_domain_added", 300, domain="facebook.com", mode="work"),
+    ]
+    result = build_recent_context(entries, now=NOW)
+    assert "custom block" in result.lower()
+    assert "facebook.com" in result
+    assert "work" in result
+
+
+def test_custom_domain_removed_formats_correctly():
+    from apps.permitato.audit import build_recent_context
+
+    entries = [
+        _entry("custom_domain_removed", 600, domain="facebook.com", mode="work"),
+    ]
+    result = build_recent_context(entries, now=NOW)
+    assert "removed" in result.lower()
+    assert "facebook.com" in result
+    assert "work" in result

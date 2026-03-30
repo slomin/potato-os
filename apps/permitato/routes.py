@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from apps.permitato.audit import build_recent_context, read_audit_log, write_audit_entry
+from apps.permitato.custom_lists import CustomListStore
 from apps.permitato.exceptions import ExceptionStore, build_domain_regex
 from apps.permitato.intent import parse_llm_response, strip_action_markers
 from apps.permitato.stats import compute_stats
@@ -81,6 +82,7 @@ async def permitato_status(request: Request):
         "scheduled_mode": scheduled_mode,
         "override_active": state.override_mode is not None,
         "override_mode": state.override_mode,
+        "custom_domain_count": len(state.custom_list_store.list_entries()) if state.custom_list_store else 0,
     }
 
 
@@ -418,6 +420,116 @@ async def delete_schedule_rule(request: Request, rule_id: str):
     })
 
     await _apply_schedule_tick(state, _schedule_now())
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# GET /custom-domains
+# ---------------------------------------------------------------------------
+
+
+@router.get("/custom-domains")
+async def get_custom_domains(request: Request):
+    state = _get_state(request)
+    if state is None:
+        return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
+
+    mode = request.query_params.get("mode")
+    store = state.custom_list_store
+    entries = store.list_entries(mode=mode) if store else []
+    return {"entries": entries}
+
+
+# ---------------------------------------------------------------------------
+# POST /custom-domains
+# ---------------------------------------------------------------------------
+
+
+@router.post("/custom-domains")
+async def add_custom_domain(request: Request):
+    state = _get_state(request)
+    if state is None:
+        return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
+    if not state.custom_list_store:
+        return JSONResponse(status_code=503, content={"error": "Custom lists not available"})
+
+    body = await request.json()
+    mode = body.get("mode", "").strip().lower()
+    domain = body.get("domain", "").strip()
+
+    try:
+        entry = state.custom_list_store.add(mode, domain)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    # Push deny rule to Pi-hole
+    if state.pihole_available and state.adapter:
+        gid = state.group_map.get(f"permitato_{mode}")
+        if gid is not None:
+            try:
+                await state.adapter.add_domain_rule(
+                    domain=entry.regex_pattern,
+                    rule_type="deny",
+                    kind="regex",
+                    groups=[gid],
+                    comment=f"Permitato-custom: {entry.domain}",
+                )
+            except PiholeUnavailableError:
+                state.pihole_available = False
+                logger.warning("Failed to add Pi-hole deny rule for %s", domain)
+
+    state.custom_list_store.persist()
+    write_audit_entry(state.data_dir, {
+        "event": "custom_domain_added",
+        "domain": entry.domain,
+        "mode": mode,
+        "entry_id": entry.id,
+    })
+
+    return {"entry": entry.to_dict()}
+
+
+# ---------------------------------------------------------------------------
+# DELETE /custom-domains/{entry_id}
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/custom-domains/{entry_id}")
+async def delete_custom_domain(request: Request, entry_id: str):
+    state = _get_state(request)
+    if state is None:
+        return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
+    if not state.custom_list_store:
+        return JSONResponse(status_code=503, content={"error": "Custom lists not available"})
+
+    store = state.custom_list_store
+    if entry_id not in {e["id"] for e in store.list_entries()}:
+        return JSONResponse(status_code=404, content={"error": f"No custom domain with id: {entry_id}"})
+
+    # Try Pi-hole delete first — only remove locally if it succeeds or Pi-hole
+    # is already known to be unavailable (compensation handles cleanup on reconnect).
+    if state.pihole_available and state.adapter:
+        entry_data = next(e for e in store.list_entries() if e["id"] == entry_id)
+        try:
+            await state.adapter.delete_domain_rule(entry_data["regex_pattern"], "deny", "regex")
+        except PiholeUnavailableError:
+            state.pihole_available = False
+            state.degraded_since = state.degraded_since or __import__("time").time()
+            logger.warning("Pi-hole became unreachable removing deny rule for %s", entry_data["domain"])
+            return JSONResponse(status_code=503, content={"error": "Pi-hole became unreachable — retry later"})
+        except Exception:
+            logger.warning("Failed to remove Pi-hole deny rule for %s", entry_data["domain"])
+            return JSONResponse(status_code=502, content={"error": "Failed to remove Pi-hole rule — retry later"})
+
+    entry = store.remove(entry_id)
+    store.persist()
+    write_audit_entry(state.data_dir, {
+        "event": "custom_domain_removed",
+        "domain": entry.domain,
+        "mode": entry.mode,
+        "entry_id": entry_id,
+    })
+
     return {"deleted": True}
 
 

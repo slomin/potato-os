@@ -13,9 +13,8 @@ async function openPermitato(page, { permitatoStatusRoute } = {}) {
   await page.waitForSelector('button[data-app="permitato"]', { timeout: 5000 });
   await page.locator('button[data-app="permitato"]').click();
   await page.waitForFunction(() => {
-    const bar = document.getElementById("permitatoStatusBar");
-    const onb = document.getElementById("permitatoOnboarding");
-    return (bar && bar.offsetParent !== null) || (onb && !onb.hidden);
+    const badge = document.getElementById("permitatoModeValue");
+    return badge && badge.textContent !== "--" && badge.textContent !== "";
   }, { timeout: 10000 });
 }
 

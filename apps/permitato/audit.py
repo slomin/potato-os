@@ -41,6 +41,8 @@ _CONTEXT_EVENTS = frozenset({
     "exception_denied",
     "exception_expired",
     "exception_revoked",
+    "custom_domain_added",
+    "custom_domain_removed",
 })
 
 
@@ -83,6 +85,14 @@ def _format_entry(entry: dict, now: float) -> str:
         return f"- {ago}: unblock for {entry.get('domain', '?')} expired"
     if event == "exception_revoked":
         return f"- {ago}: unblock for {entry.get('domain', '?')} revoked"
+    if event == "custom_domain_added":
+        domain = entry.get("domain", "?")
+        mode = entry.get("mode", "?")
+        return f"- {ago}: added custom block {domain} to {mode}"
+    if event == "custom_domain_removed":
+        domain = entry.get("domain", "?")
+        mode = entry.get("mode", "?")
+        return f"- {ago}: removed custom block {domain} from {mode}"
     return f"- {ago}: {event}"
 
 

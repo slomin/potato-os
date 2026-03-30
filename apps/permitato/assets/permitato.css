@@ -864,3 +864,226 @@
   text-align: center;
   padding-top: 6px;
 }
+
+/* Custom Lists toggle */
+.permitato-custom-list-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin: -2px 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-muted);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.permitato-custom-list-toggle:hover {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.permitato-custom-list-toggle[aria-expanded="true"] {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Custom Lists panel */
+.permitato-custom-list-panel {
+  margin: 0 16px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.permitato-custom-list-panel[hidden] {
+  display: none;
+}
+
+.permitato-custom-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.permitato-custom-list-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.permitato-add-custom-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.permitato-add-custom-btn:hover {
+  border-color: var(--focus);
+  color: var(--text);
+}
+
+.permitato-custom-list-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.permitato-custom-tab {
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.permitato-custom-tab.active {
+  border-color: var(--focus);
+  color: var(--text);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.permitato-custom-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.permitato-custom-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.custom-domain-name {
+  font-weight: 500;
+}
+
+.custom-domain-remove-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.custom-domain-remove-btn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.permitato-custom-list-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 8px;
+}
+
+.permitato-add-custom-form {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.permitato-add-custom-form[hidden] {
+  display: none;
+}
+
+.permitato-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.permitato-custom-row > label:first-child {
+  width: 50px;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.permitato-custom-row select,
+.permitato-custom-row input[type="text"] {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.permitato-custom-error {
+  color: #ef4444;
+  font-size: 0.8rem;
+}
+
+.permitato-custom-error[hidden] {
+  display: none;
+}
+
+.permitato-add-custom-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.permitato-save-custom-btn {
+  padding: 4px 14px;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.permitato-save-custom-btn:hover {
+  opacity: 0.85;
+}
+
+.permitato-cancel-custom-btn {
+  padding: 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.permitato-cancel-custom-btn:hover {
+  border-color: var(--text);
+  color: var(--text);
+}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, Request
@@ -15,7 +16,8 @@ from apps.permitato.intent import parse_llm_response, strip_action_markers
 from apps.permitato.modes import get_mode, MODES
 from apps.permitato.pihole_adapter import PiholeUnavailableError
 from apps.permitato.net_resolve import resolve_requester_ipv4
-from apps.permitato.state import apply_mode_to_client, validate_client
+from apps.permitato.lifecycle import _apply_schedule_tick
+from apps.permitato.state import PermitState, apply_mode_to_client, validate_client
 from apps.permitato.system_prompt import build_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,26 @@ router = APIRouter()
 
 def _get_state(request: Request):
     return getattr(request.app.state, "permit_state", None)
+
+
+def _schedule_now() -> datetime:
+    """Return current local time. Extracted for test patching."""
+    return datetime.now()
+
+
+def _record_override(
+    state: PermitState, new_mode: str, now: datetime | None = None,
+) -> None:
+    """Set or clear override state based on whether new_mode deviates from schedule."""
+    scheduled_mode = None
+    if state.schedule_store:
+        scheduled_mode = state.schedule_store.evaluate(now)
+    if scheduled_mode is not None and new_mode != scheduled_mode:
+        state.override_mode = new_mode
+        state.override_scheduled_mode = scheduled_mode
+    else:
+        state.override_mode = None
+        state.override_scheduled_mode = None
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +62,10 @@ async def permitato_status(request: Request):
 
     mode_def = get_mode(state.mode)
     await validate_client(state)
+
+    now = _schedule_now()
+    scheduled_mode = state.schedule_store.evaluate(now) if state.schedule_store else None
+
     return {
         "mode": state.mode,
         "mode_display": mode_def.display_name,
@@ -50,6 +76,10 @@ async def permitato_status(request: Request):
         "degraded_since": state.degraded_since,
         "client_id": state.client_id,
         "client_valid": state.client_valid,
+        "schedule_active": scheduled_mode is not None,
+        "scheduled_mode": scheduled_mode,
+        "override_active": state.override_mode is not None,
+        "override_mode": state.override_mode,
     }
 
 
@@ -75,6 +105,7 @@ async def switch_mode(request: Request):
 
     old_mode = state.mode
     state.mode = mode_name
+    _record_override(state, mode_name)
     state.persist()
     await apply_mode_to_client(state)
 
@@ -82,6 +113,7 @@ async def switch_mode(request: Request):
         "event": "mode_switch",
         "from_mode": old_mode,
         "to_mode": mode_name,
+        "override": state.override_mode is not None,
     })
 
     return {"mode": mode_name, "mode_display": mode_def.display_name}
@@ -254,6 +286,127 @@ async def revoke_exception(request: Request, exception_id: str):
 
 
 # ---------------------------------------------------------------------------
+# GET /schedule
+# ---------------------------------------------------------------------------
+
+
+@router.get("/schedule")
+async def get_schedule(request: Request):
+    state = _get_state(request)
+    if state is None:
+        return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
+
+    store = state.schedule_store
+    now = _schedule_now()
+    scheduled_mode = store.evaluate(now) if store else None
+    next_trans = store.next_transition(now) if store else None
+
+    return {
+        "rules": store.list_rules() if store else [],
+        "scheduled_mode": scheduled_mode,
+        "next_transition": next_trans,
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /schedule
+# ---------------------------------------------------------------------------
+
+
+@router.post("/schedule")
+async def create_schedule_rule(request: Request):
+    state = _get_state(request)
+    if state is None:
+        return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
+    if not state.schedule_store:
+        return JSONResponse(status_code=503, content={"error": "Schedule not available"})
+
+    body = await request.json()
+    try:
+        rule = state.schedule_store.add_rule(
+            mode=body.get("mode", ""),
+            days=body.get("days", []),
+            start_time=body.get("start_time", ""),
+            end_time=body.get("end_time", ""),
+        )
+    except (ValueError, TypeError) as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    state.schedule_store.persist()
+    write_audit_entry(state.data_dir, {
+        "event": "schedule_rule_created",
+        "rule_id": rule.id,
+        "mode": rule.mode,
+        "days": rule.days,
+        "start_time": rule.start_time,
+        "end_time": rule.end_time,
+    })
+
+    await _apply_schedule_tick(state, _schedule_now())
+    return {"rule": rule.to_dict()}
+
+
+# ---------------------------------------------------------------------------
+# PUT /schedule/{rule_id}
+# ---------------------------------------------------------------------------
+
+
+@router.put("/schedule/{rule_id}")
+async def update_schedule_rule(request: Request, rule_id: str):
+    state = _get_state(request)
+    if state is None:
+        return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
+    if not state.schedule_store:
+        return JSONResponse(status_code=503, content={"error": "Schedule not available"})
+
+    body = await request.json()
+    try:
+        rule = state.schedule_store.update_rule(rule_id, **body)
+    except KeyError:
+        return JSONResponse(status_code=404, content={"error": f"No rule with id: {rule_id}"})
+    except (ValueError, TypeError) as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    state.schedule_store.persist()
+    write_audit_entry(state.data_dir, {
+        "event": "schedule_rule_updated",
+        "rule_id": rule.id,
+    })
+
+    await _apply_schedule_tick(state, _schedule_now())
+    return {"rule": rule.to_dict()}
+
+
+# ---------------------------------------------------------------------------
+# DELETE /schedule/{rule_id}
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/schedule/{rule_id}")
+async def delete_schedule_rule(request: Request, rule_id: str):
+    state = _get_state(request)
+    if state is None:
+        return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
+    if not state.schedule_store:
+        return JSONResponse(status_code=503, content={"error": "Schedule not available"})
+
+    try:
+        rule = state.schedule_store.remove_rule(rule_id)
+    except KeyError:
+        return JSONResponse(status_code=404, content={"error": f"No rule with id: {rule_id}"})
+
+    state.schedule_store.persist()
+    write_audit_entry(state.data_dir, {
+        "event": "schedule_rule_deleted",
+        "rule_id": rule.id,
+        "mode": rule.mode,
+    })
+
+    await _apply_schedule_tick(state, _schedule_now())
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
 # POST /chat
 # ---------------------------------------------------------------------------
 
@@ -270,11 +423,21 @@ async def permitato_chat(request: Request):
 
     # Build system prompt with current state
     mode_def = get_mode(state.mode)
+
+    schedule_status = "No schedule configured"
+    if state.schedule_store:
+        scheduled = state.schedule_store.evaluate()
+        if scheduled is not None and state.override_mode is not None:
+            schedule_status = f"Manually overridden from scheduled {scheduled} mode"
+        elif scheduled is not None:
+            schedule_status = f"Scheduled ({scheduled} mode active)"
+
     system_prompt = build_system_prompt(
         current_mode=mode_def.display_name,
         mode_description=mode_def.description,
         exception_count=state.exception_store.active_count() if state.exception_store else 0,
         active_exceptions=state.exception_store.list_active() if state.exception_store else [],
+        schedule_status=schedule_status,
     )
 
     # Build messages array for LLM
@@ -357,12 +520,14 @@ async def _execute_action(state, intent, user_message: str) -> dict:
 
         old_mode = state.mode
         state.mode = mode_name
+        _record_override(state, mode_name)
         state.persist()
         await apply_mode_to_client(state)
         write_audit_entry(state.data_dir, {
             "event": "mode_switch",
             "from_mode": old_mode,
             "to_mode": mode_name,
+            "override": state.override_mode is not None,
             "user_message": user_message,
         })
         return {"type": "mode_switched", "mode": mode_name, "display": mode_def.display_name}

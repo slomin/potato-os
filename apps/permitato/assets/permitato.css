@@ -374,6 +374,306 @@
   padding: 8px;
 }
 
+/* Schedule indicator */
+.permitato-schedule-indicator {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.permitato-schedule-indicator[hidden] {
+  display: none;
+}
+
+/* Schedule toggle */
+.permitato-schedule-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin: -2px 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-muted);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.permitato-schedule-toggle:hover {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.permitato-schedule-toggle[aria-expanded="true"] {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Schedule panel */
+.permitato-schedule-panel {
+  margin: 0 16px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.permitato-schedule-panel[hidden] {
+  display: none;
+}
+
+.permitato-schedule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.permitato-schedule-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.permitato-add-rule-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.permitato-add-rule-btn:hover {
+  border-color: var(--focus);
+  color: var(--text);
+}
+
+.permitato-schedule-next {
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.permitato-schedule-next[hidden] {
+  display: none;
+}
+
+.permitato-schedule-rules {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.permitato-schedule-rules li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.sched-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sched-mode {
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.sched-mode[data-mode="work"] {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.sched-mode[data-mode="sfw"] {
+  background: #f59e0b;
+  color: #fff;
+}
+
+.sched-mode[data-mode="normal"] {
+  background: var(--border);
+  color: var(--text);
+}
+
+.sched-days {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.sched-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+}
+
+.sched-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.sched-disabled {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-style: italic;
+}
+
+.sched-delete-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sched-delete-btn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.permitato-schedule-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 8px;
+}
+
+/* Add rule form */
+.permitato-add-rule-form {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.permitato-add-rule-form[hidden] {
+  display: none;
+}
+
+.permitato-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.permitato-rule-row > label:first-child {
+  width: 44px;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.permitato-rule-row select,
+.permitato-rule-row input[type="time"] {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.permitato-day-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.permitato-day-picker label {
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.permitato-time-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.permitato-time-picker span {
+  color: var(--text-muted);
+}
+
+.permitato-rule-error {
+  color: #ef4444;
+  font-size: 0.8rem;
+}
+
+.permitato-rule-error[hidden] {
+  display: none;
+}
+
+.permitato-add-rule-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.permitato-save-rule-btn {
+  padding: 4px 14px;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.permitato-save-rule-btn:hover {
+  opacity: 0.85;
+}
+
+.permitato-cancel-rule-btn {
+  padding: 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.permitato-cancel-rule-btn:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
 .permitato-pihole-status {
   display: flex;
   align-items: center;

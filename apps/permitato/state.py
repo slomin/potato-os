@@ -9,9 +9,12 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from datetime import datetime
+
 from apps.permitato.exceptions import ExceptionStore
 from apps.permitato.modes import MODES, get_mode, WORK_DENY_DOMAINS, SFW_DENY_DOMAINS
 from apps.permitato.pihole_adapter import PiholeAdapter, PiholeUnavailableError
+from apps.permitato.schedule import ScheduleStore
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,9 @@ class PermitState:
     mode: str = "normal"
     adapter: PiholeAdapter | None = None
     exception_store: ExceptionStore | None = None
+    schedule_store: ScheduleStore | None = None
+    override_mode: str | None = None
+    override_scheduled_mode: str | None = None
     client_id: str = ""
     group_map: dict = field(default_factory=dict)
     exception_group_id: int = 0
@@ -42,9 +48,11 @@ class PermitState:
     def persist(self) -> None:
         path = self.data_dir / "state.json"
         atomic_write(path, json.dumps({
-            "version": 1,
+            "version": 2,
             "mode": self.mode,
             "client_id": self.client_id,
+            "override_mode": self.override_mode,
+            "override_scheduled_mode": self.override_scheduled_mode,
         }, indent=2))
 
     def load(self) -> None:
@@ -55,8 +63,20 @@ class PermitState:
             data = json.loads(path.read_text(encoding="utf-8"))
             self.mode = data.get("mode", "normal")
             self.client_id = data.get("client_id", "")
+            self.override_mode = data.get("override_mode")
+            self.override_scheduled_mode = data.get("override_scheduled_mode")
         except (json.JSONDecodeError, KeyError):
             logger.warning("Failed to load state from %s", path)
+
+    def effective_mode(self, now: datetime | None = None) -> str:
+        """Return the mode that should actually be applied."""
+        if self.override_mode is not None:
+            return self.override_mode
+        if self.schedule_store:
+            scheduled = self.schedule_store.evaluate(now)
+            if scheduled is not None:
+                return scheduled
+        return "normal"
 
 
 async def initialize_permitato(
@@ -291,3 +311,29 @@ async def compensate_exceptions(state: PermitState) -> None:
                 logger.info("Compensation: removed orphaned allow rule %s", rule["domain"])
             except Exception:
                 logger.warning("Compensation: failed to remove orphaned rule %s", rule["domain"])
+
+
+async def apply_startup_schedule(state: PermitState, now: datetime | None = None) -> None:
+    """Evaluate schedule on startup, clear stale overrides, and sync Pi-hole."""
+    if not state.schedule_store:
+        return
+
+    scheduled_mode = state.schedule_store.evaluate(now)
+
+    # Clear override if the schedule has moved past the overridden window
+    if state.override_mode is not None:
+        if scheduled_mode != state.override_scheduled_mode:
+            logger.info(
+                "Clearing stale override (was %s for %s, schedule now %s)",
+                state.override_mode, state.override_scheduled_mode, scheduled_mode,
+            )
+            state.override_mode = None
+            state.override_scheduled_mode = None
+            state.persist()
+
+    effective = state.effective_mode(now)
+    if effective != state.mode:
+        logger.info("Startup schedule: switching %s → %s", state.mode, effective)
+        state.mode = effective
+        state.persist()
+        await apply_mode_to_client(state)

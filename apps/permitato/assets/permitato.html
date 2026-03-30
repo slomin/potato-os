@@ -17,6 +17,7 @@
   <div class="permitato-mode">
     <span class="permitato-mode-label">Mode:</span>
     <span id="permitatoModeValue" class="permitato-mode-badge">--</span>
+    <span id="permitatoScheduleIndicator" class="permitato-schedule-indicator" hidden></span>
   </div>
   <button id="permitatoExceptionsToggle" class="permitato-exceptions" type="button">
     <span id="permitatoExceptionCount" class="permitato-exception-count">0</span>
@@ -27,6 +28,9 @@
     <button class="permitato-mode-btn" data-mode="work">Work</button>
     <button class="permitato-mode-btn" data-mode="sfw">SFW</button>
   </div>
+  <button id="permitatoScheduleToggle" class="permitato-schedule-toggle" type="button">
+    <span id="permitatoScheduleLabel">Schedule</span>
+  </button>
   <div id="permitatoPiholeStatus" class="permitato-pihole-status">
     <span id="permitatoPiholeDot" class="permitato-pihole-dot"></span>
     <span id="permitatoPiholeLabel">Checking...</span>
@@ -39,6 +43,51 @@
   </div>
   <ul id="permitatoExceptionsList" class="permitato-exceptions-list"></ul>
   <div id="permitatoExceptionsEmpty" class="permitato-exceptions-empty">No active exceptions</div>
+</section>
+
+<section id="permitatoSchedulePanel" class="permitato-schedule-panel" hidden>
+  <div class="permitato-schedule-header">
+    <h3>Weekly Schedule</h3>
+    <button id="permitatoAddRuleBtn" class="permitato-add-rule-btn">+ Add Rule</button>
+  </div>
+  <div id="permitatoScheduleNext" class="permitato-schedule-next" hidden></div>
+  <ul id="permitatoScheduleRules" class="permitato-schedule-rules"></ul>
+  <div id="permitatoScheduleEmpty" class="permitato-schedule-empty">No schedule rules configured</div>
+  <div id="permitatoAddRuleForm" class="permitato-add-rule-form" hidden>
+    <div class="permitato-rule-row">
+      <label>Mode</label>
+      <select id="permitatoRuleMode">
+        <option value="work">Work</option>
+        <option value="sfw">SFW</option>
+        <option value="normal">Normal</option>
+      </select>
+    </div>
+    <div class="permitato-rule-row">
+      <label>Days</label>
+      <div class="permitato-day-picker" id="permitatoDayPicker">
+        <label><input type="checkbox" value="0"> Mon</label>
+        <label><input type="checkbox" value="1"> Tue</label>
+        <label><input type="checkbox" value="2"> Wed</label>
+        <label><input type="checkbox" value="3"> Thu</label>
+        <label><input type="checkbox" value="4"> Fri</label>
+        <label><input type="checkbox" value="5"> Sat</label>
+        <label><input type="checkbox" value="6"> Sun</label>
+      </div>
+    </div>
+    <div class="permitato-rule-row">
+      <label>Time</label>
+      <div class="permitato-time-picker">
+        <input type="time" id="permitatoRuleStart" value="09:00">
+        <span>to</span>
+        <input type="time" id="permitatoRuleEnd" value="17:00">
+      </div>
+    </div>
+    <div id="permitatoRuleError" class="permitato-rule-error" hidden></div>
+    <div class="permitato-add-rule-actions">
+      <button id="permitatoSaveRuleBtn" class="permitato-save-rule-btn">Save</button>
+      <button id="permitatoCancelRuleBtn" class="permitato-cancel-rule-btn">Cancel</button>
+    </div>
+  </div>
 </section>
 
 <section id="permitatoMessages" class="permitato-messages"></section>

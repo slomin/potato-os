@@ -11,6 +11,7 @@ You are not a rigid gatekeeper. You are a thoughtful friend who asks "do you rea
 
 ## Current State
 Mode: {current_mode} ({mode_description})
+Schedule: {schedule_status}
 Active exceptions: {exception_count}
 {exception_details}
 
@@ -49,6 +50,7 @@ def build_system_prompt(
     mode_description: str,
     exception_count: int,
     active_exceptions: list[dict],
+    schedule_status: str = "No schedule configured",
 ) -> str:
     """Build the system prompt with current state injected."""
     if active_exceptions:
@@ -64,4 +66,5 @@ def build_system_prompt(
         mode_description=mode_description,
         exception_count=exception_count,
         exception_details=details,
+        schedule_status=schedule_status,
     )

@@ -28,7 +28,9 @@ async def test_on_startup_initializes_state(tmp_path, monkeypatch):
 
     fake_state = MagicMock()
     mock_init = AsyncMock(return_value=fake_state)
+    mock_startup_sched = AsyncMock()
     monkeypatch.setattr(lifecycle, "initialize_permitato", mock_init)
+    monkeypatch.setattr(lifecycle, "apply_startup_schedule", mock_startup_sched)
     monkeypatch.setattr(asyncio, "create_task", lambda coro, **kw: (coro.close(), MagicMock())[1])
 
     app = MagicMock()
@@ -59,12 +61,15 @@ async def test_on_shutdown_cleans_up(monkeypatch):
 
     expiry_task = _FakeTask()
     reconnect_task = _FakeTask()
+    schedule_task = _FakeTask()
     app.state.permit_expiry_task = expiry_task
     app.state.permit_reconnect_task = reconnect_task
+    app.state.permit_schedule_task = schedule_task
     app.state.permit_state = MagicMock()
 
     await lifecycle.on_shutdown(app)
 
     assert expiry_task.cancel_called
     assert reconnect_task.cancel_called
+    assert schedule_task.cancel_called
     mock_shutdown.assert_awaited_once_with(app.state.permit_state)

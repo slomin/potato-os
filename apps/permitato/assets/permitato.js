@@ -8,6 +8,7 @@ let _onboardingVisible = false;
 let _pendingClientSelection = false;
 let _lastClientFetchTs = 0;
 let _panelOpen = false;
+let _schedulePanelOpen = false;
 let _ttlTimer = null;
 let _latestExceptions = [];
 let _latestPiholeAvailable = true;
@@ -41,6 +42,18 @@ export function init(shellApi) {
 
   const excToggle = document.getElementById("permitatoExceptionsToggle");
   if (excToggle) excToggle.addEventListener("click", _toggleExceptionsPanel);
+
+  const schedToggle = document.getElementById("permitatoScheduleToggle");
+  if (schedToggle) schedToggle.addEventListener("click", _toggleSchedulePanel);
+
+  const addRuleBtn = document.getElementById("permitatoAddRuleBtn");
+  if (addRuleBtn) addRuleBtn.addEventListener("click", _showAddRuleForm);
+
+  const saveRuleBtn = document.getElementById("permitatoSaveRuleBtn");
+  if (saveRuleBtn) saveRuleBtn.addEventListener("click", _saveScheduleRule);
+
+  const cancelRuleBtn = document.getElementById("permitatoCancelRuleBtn");
+  if (cancelRuleBtn) cancelRuleBtn.addEventListener("click", _hideAddRuleForm);
 
   _pollStatus();
   _statusTimer = setInterval(_pollStatus, 5000);
@@ -109,6 +122,20 @@ function _updateStatusBar(data) {
     const mode = data.mode_display || data.mode || "--";
     badge.textContent = mode;
     badge.setAttribute("data-mode", data.mode || "");
+  }
+
+  // Schedule/override indicator
+  const indicator = document.getElementById("permitatoScheduleIndicator");
+  if (indicator) {
+    if (data.override_active) {
+      indicator.textContent = "(override)";
+      indicator.hidden = false;
+    } else if (data.schedule_active) {
+      indicator.textContent = "(scheduled)";
+      indicator.hidden = false;
+    } else {
+      indicator.hidden = true;
+    }
   }
 
   // Highlight active mode button
@@ -342,6 +369,160 @@ async function _revokeException(id) {
     if (resp.ok) _pollStatus();
   } catch {
     // silent — next poll will update state
+  }
+}
+
+// --- Schedule panel ---
+
+const _DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function _toggleSchedulePanel() {
+  _schedulePanelOpen = !_schedulePanelOpen;
+  const panel = document.getElementById("permitatoSchedulePanel");
+  const toggle = document.getElementById("permitatoScheduleToggle");
+  if (panel) panel.hidden = !_schedulePanelOpen;
+  if (toggle) toggle.setAttribute("aria-expanded", String(_schedulePanelOpen));
+  if (_schedulePanelOpen) _fetchSchedule();
+}
+
+async function _fetchSchedule() {
+  try {
+    const resp = await fetch(`${PERMITATO_API}/schedule`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    _renderScheduleRules(data.rules || []);
+    _renderNextTransition(data.next_transition);
+  } catch {
+    // silent
+  }
+}
+
+function _renderScheduleRules(rules) {
+  const list = document.getElementById("permitatoScheduleRules");
+  const empty = document.getElementById("permitatoScheduleEmpty");
+  if (!list) return;
+
+  if (rules.length === 0) {
+    list.innerHTML = "";
+    if (empty) empty.hidden = false;
+    return;
+  }
+  if (empty) empty.hidden = true;
+  list.innerHTML = "";
+
+  for (const rule of rules) {
+    const li = document.createElement("li");
+
+    const info = document.createElement("div");
+    info.className = "sched-info";
+
+    const mode = document.createElement("span");
+    mode.className = "sched-mode";
+    mode.textContent = rule.mode.charAt(0).toUpperCase() + rule.mode.slice(1);
+    mode.setAttribute("data-mode", rule.mode);
+    info.appendChild(mode);
+
+    const days = document.createElement("span");
+    days.className = "sched-days";
+    days.textContent = rule.days.map(d => _DAY_NAMES[d]).join(", ");
+    info.appendChild(days);
+
+    const time = document.createElement("span");
+    time.className = "sched-time";
+    time.textContent = `${rule.start_time} – ${rule.end_time}`;
+    info.appendChild(time);
+
+    li.appendChild(info);
+
+    const right = document.createElement("div");
+    right.className = "sched-right";
+
+    if (!rule.enabled) {
+      const dis = document.createElement("span");
+      dis.className = "sched-disabled";
+      dis.textContent = "disabled";
+      right.appendChild(dis);
+    }
+
+    const btn = document.createElement("button");
+    btn.className = "sched-delete-btn";
+    btn.textContent = "Delete";
+    btn.addEventListener("click", () => _deleteScheduleRule(rule.id));
+    right.appendChild(btn);
+
+    li.appendChild(right);
+    list.appendChild(li);
+  }
+}
+
+function _renderNextTransition(next) {
+  const el = document.getElementById("permitatoScheduleNext");
+  if (!el) return;
+  if (!next) {
+    el.hidden = true;
+    return;
+  }
+  const dayName = _DAY_NAMES[next.day];
+  el.textContent = `Next: ${next.mode.charAt(0).toUpperCase() + next.mode.slice(1)} at ${dayName} ${next.time}`;
+  el.hidden = false;
+}
+
+function _showAddRuleForm() {
+  const form = document.getElementById("permitatoAddRuleForm");
+  const errEl = document.getElementById("permitatoRuleError");
+  if (form) form.hidden = false;
+  if (errEl) errEl.hidden = true;
+}
+
+function _hideAddRuleForm() {
+  const form = document.getElementById("permitatoAddRuleForm");
+  if (form) form.hidden = true;
+}
+
+async function _saveScheduleRule() {
+  const mode = document.getElementById("permitatoRuleMode")?.value;
+  const startTime = document.getElementById("permitatoRuleStart")?.value;
+  const endTime = document.getElementById("permitatoRuleEnd")?.value;
+  const errEl = document.getElementById("permitatoRuleError");
+
+  const days = [];
+  document.querySelectorAll("#permitatoDayPicker input:checked").forEach(cb => {
+    days.push(Number(cb.value));
+  });
+
+  if (days.length === 0) {
+    if (errEl) { errEl.textContent = "Select at least one day."; errEl.hidden = false; }
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${PERMITATO_API}/schedule`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, days, start_time: startTime, end_time: endTime }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      if (errEl) { errEl.textContent = err.error || "Failed to save rule."; errEl.hidden = false; }
+      return;
+    }
+    _hideAddRuleForm();
+    _fetchSchedule();
+    _pollStatus();
+  } catch {
+    if (errEl) { errEl.textContent = "Connection error."; errEl.hidden = false; }
+  }
+}
+
+async function _deleteScheduleRule(id) {
+  try {
+    const resp = await fetch(`${PERMITATO_API}/schedule/${id}`, { method: "DELETE" });
+    if (resp.ok) {
+      _fetchSchedule();
+      _pollStatus();
+    }
+  } catch {
+    // silent
   }
 }
 

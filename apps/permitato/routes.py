@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _parse_json(request: Request) -> dict | JSONResponse:
+    """Parse JSON body, returning a 400 JSONResponse on malformed input."""
+    try:
+        return await request.json()
+    except (json.JSONDecodeError, ValueError):
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+
+
 def _get_state(request: Request):
     return getattr(request.app.state, "permit_state", None)
 
@@ -113,7 +121,9 @@ async def switch_mode(request: Request):
     if not state.pihole_available:
         return JSONResponse(status_code=503, content={"error": "Pi-hole is unreachable"})
 
-    body = await request.json()
+    body = await _parse_json(request)
+    if isinstance(body, JSONResponse):
+        return body
     mode_name = body.get("mode", "").lower()
     try:
         mode_def = get_mode(mode_name)
@@ -148,7 +158,9 @@ async def set_client(request: Request):
     if state is None:
         return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
 
-    body = await request.json()
+    body = await _parse_json(request)
+    if isinstance(body, JSONResponse):
+        return body
     client_id = body.get("client_id", "").strip()
     if not client_id:
         return JSONResponse(status_code=400, content={"error": "client_id is required"})
@@ -232,7 +244,9 @@ async def grant_exception(request: Request):
     if not state.pihole_available:
         return JSONResponse(status_code=503, content={"error": "Pi-hole is unreachable"})
 
-    body = await request.json()
+    body = await _parse_json(request)
+    if isinstance(body, JSONResponse):
+        return body
     domain = body.get("domain", "").strip()
     reason = body.get("reason", "")
     ttl_seconds = int(body.get("ttl_seconds", 3600))
@@ -338,7 +352,9 @@ async def create_schedule_rule(request: Request):
     if not state.schedule_store:
         return JSONResponse(status_code=503, content={"error": "Schedule not available"})
 
-    body = await request.json()
+    body = await _parse_json(request)
+    if isinstance(body, JSONResponse):
+        return body
     try:
         rule = state.schedule_store.add_rule(
             mode=body.get("mode", ""),
@@ -376,7 +392,9 @@ async def update_schedule_rule(request: Request, rule_id: str):
     if not state.schedule_store:
         return JSONResponse(status_code=503, content={"error": "Schedule not available"})
 
-    body = await request.json()
+    body = await _parse_json(request)
+    if isinstance(body, JSONResponse):
+        return body
     try:
         rule = state.schedule_store.update_rule(rule_id, **body)
     except KeyError:
@@ -453,7 +471,9 @@ async def add_custom_domain(request: Request):
     if not state.custom_list_store:
         return JSONResponse(status_code=503, content={"error": "Custom lists not available"})
 
-    body = await request.json()
+    body = await _parse_json(request)
+    if isinstance(body, JSONResponse):
+        return body
     mode = body.get("mode", "").strip().lower()
     domain = body.get("domain", "").strip()
 
@@ -544,7 +564,9 @@ async def permitato_chat(request: Request):
     if state is None:
         return JSONResponse(status_code=503, content={"error": "Permitato not initialized"})
 
-    body = await request.json()
+    body = await _parse_json(request)
+    if isinstance(body, JSONResponse):
+        return body
     user_message = body.get("message", "")
     history = body.get("history", [])
 

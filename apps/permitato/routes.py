@@ -10,7 +10,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from apps.permitato.audit import write_audit_entry
+from apps.permitato.audit import build_recent_context, read_audit_log, write_audit_entry
 from apps.permitato.exceptions import ExceptionStore, build_domain_regex
 from apps.permitato.intent import parse_llm_response, strip_action_markers
 from apps.permitato.modes import get_mode, MODES
@@ -432,12 +432,16 @@ async def permitato_chat(request: Request):
         elif scheduled is not None:
             schedule_status = f"Scheduled ({scheduled} mode active)"
 
+    recent_entries = read_audit_log(state.data_dir, limit=50)
+    recent_context = build_recent_context(recent_entries)
+
     system_prompt = build_system_prompt(
         current_mode=mode_def.display_name,
         mode_description=mode_def.description,
         exception_count=state.exception_store.active_count() if state.exception_store else 0,
         active_exceptions=state.exception_store.list_active() if state.exception_store else [],
         schedule_status=schedule_status,
+        recent_context=recent_context,
     )
 
     # Build messages array for LLM

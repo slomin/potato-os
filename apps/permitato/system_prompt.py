@@ -14,7 +14,7 @@ Mode: {current_mode} ({mode_description})
 Schedule: {schedule_status}
 Active exceptions: {exception_count}
 {exception_details}
-
+{recent_activity_section}
 ## Available Modes
 - Normal: No extra restrictions beyond baseline Pi-hole blocking
 - Work: Social media, entertainment, news, and gaming blocked
@@ -45,12 +45,19 @@ To deny an unblock request:
 """
 
 
+_RECENT_ACTIVITY_GUIDANCE = """\
+Use this context to calibrate your responses. If a domain keeps reappearing
+(especially after denials), be more direct about whether this is a pattern.
+Repeated requests deserve firmer but still respectful pushback."""
+
+
 def build_system_prompt(
     current_mode: str,
     mode_description: str,
     exception_count: int,
     active_exceptions: list[dict],
     schedule_status: str = "No schedule configured",
+    recent_context: str = "",
 ) -> str:
     """Build the system prompt with current state injected."""
     if active_exceptions:
@@ -61,10 +68,19 @@ def build_system_prompt(
     else:
         details = "No active exceptions."
 
+    if recent_context:
+        recent_section = (
+            f"## Recent Activity\n{recent_context}\n\n"
+            f"{_RECENT_ACTIVITY_GUIDANCE}\n\n"
+        )
+    else:
+        recent_section = ""
+
     return SYSTEM_PROMPT_TEMPLATE.format(
         current_mode=current_mode,
         mode_description=mode_description,
         exception_count=exception_count,
         exception_details=details,
         schedule_status=schedule_status,
+        recent_activity_section=recent_section,
     )

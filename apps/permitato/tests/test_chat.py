@@ -137,3 +137,69 @@ async def test_chat_stream_last_marker_wins(tmp_path):
     active = state.exception_store.list_active()
     assert len(active) == 1
     assert active[0]["domain"] == "youtube.com"
+
+
+@pytest.mark.anyio
+async def test_chat_unblock_flushes_dns_cache(tmp_path):
+    """Chat-initiated unblock must flush DNS cache."""
+    state = _make_state(tmp_path)
+    app = _build_app(state)
+
+    sse_body = _make_sse(
+        "Sure! ",
+        "[ACTION:request_unblock:test-domain.com:research]",
+    )
+
+    with respx.mock() as router:
+        router.post("http://127.0.0.1:1983/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                text=sse_body,
+                headers={"content-type": "text/event-stream"},
+            )
+        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/chat",
+                json={"message": "unblock test-domain.com"},
+            )
+
+    assert resp.status_code == 200
+    state.adapter.flush_dns_cache.assert_awaited()
+
+
+@pytest.mark.anyio
+async def test_chat_mode_switch_flushes_dns_cache(tmp_path):
+    """Chat-initiated mode switch must flush DNS cache."""
+    state = _make_state(tmp_path)
+    state.client_id = "192.168.1.10"
+    state.group_map = {"permitato_work": 1, "permitato_sfw": 2}
+    app = _build_app(state)
+
+    sse_body = _make_sse(
+        "Switching to normal. ",
+        "[ACTION:switch_mode:normal:]",
+    )
+
+    with respx.mock() as router:
+        router.post("http://127.0.0.1:1983/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                text=sse_body,
+                headers={"content-type": "text/event-stream"},
+            )
+        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/chat",
+                json={"message": "switch to normal mode"},
+            )
+
+    assert resp.status_code == 200
+    state.adapter.flush_dns_cache.assert_awaited()

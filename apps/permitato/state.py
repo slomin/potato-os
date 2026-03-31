@@ -270,6 +270,16 @@ async def apply_mode_to_client(state: PermitState) -> None:
             logger.warning("Failed to set client groups for %s", state.client_id, exc_info=True)
 
 
+async def flush_dns_cache_safe(state: PermitState) -> None:
+    """Flush Pi-hole DNS cache, swallowing errors."""
+    if not state.pihole_available or not state.adapter:
+        return
+    try:
+        await state.adapter.flush_dns_cache()
+    except Exception:
+        logger.warning("DNS cache flush failed", exc_info=True)
+
+
 async def reconnect_pihole(state: PermitState) -> None:
     """Attempt to reconnect to Pi-hole if currently degraded."""
     if state.pihole_available or not state.adapter:
@@ -425,3 +435,4 @@ async def apply_startup_schedule(state: PermitState, now: datetime | None = None
             "to_mode": effective,
         })
         await apply_mode_to_client(state)
+        await flush_dns_cache_safe(state)

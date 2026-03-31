@@ -200,3 +200,54 @@ async def test_add_domain_rule_with_groups():
     assert body["domain"] == r"(^|\.)facebook\.com$"
     assert body["groups"] == [3]
     await adapter.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# DNS cache flush
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_flush_dns_cache_calls_restartdns():
+    adapter = _adapter()
+    adapter._sid = "sid1"
+    with respx.mock() as router:
+        route = router.post("http://pihole.test:8081/api/action/restartdns").mock(
+            return_value=Response(200, json={"status": "restarting"})
+        )
+        await adapter.flush_dns_cache()
+
+    assert route.called
+    assert route.calls[0].request.headers["X-FTL-SID"] == "sid1"
+    await adapter.disconnect()
+
+
+@pytest.mark.anyio
+async def test_flush_dns_cache_raises_on_http_error():
+    from apps.permitato.pihole_adapter import PiholeUnavailableError
+
+    adapter = _adapter()
+    adapter._sid = "sid1"
+    with respx.mock() as router:
+        router.post("http://pihole.test:8081/api/action/restartdns").mock(
+            return_value=Response(500, json={"error": "internal"})
+        )
+        with pytest.raises(PiholeUnavailableError):
+            await adapter.flush_dns_cache()
+    await adapter.disconnect()
+
+
+@pytest.mark.anyio
+async def test_flush_dns_cache_raises_on_network_error():
+    import httpx
+    from apps.permitato.pihole_adapter import PiholeUnavailableError
+
+    adapter = _adapter()
+    adapter._sid = "sid1"
+    with respx.mock() as router:
+        router.post("http://pihole.test:8081/api/action/restartdns").mock(
+            side_effect=httpx.ConnectError("Connection refused")
+        )
+        with pytest.raises(PiholeUnavailableError):
+            await adapter.flush_dns_cache()
+    await adapter.disconnect()

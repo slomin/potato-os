@@ -127,6 +127,19 @@ class PiholeAdapter:
 
     # -- Health ----------------------------------------------------------------
 
+    async def flush_dns_cache(self) -> None:
+        """Flush DNS cache by restarting the DNS resolver.
+
+        Requires webserver.api.allow_destructive=true in Pi-hole config.
+        """
+        try:
+            resp = await self._request("POST", "/action/restartdns")
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise PiholeUnavailableError(
+                f"DNS cache flush failed: {exc.response.status_code}"
+            ) from exc
+
     async def is_healthy(self) -> bool:
         try:
             resp = await self._request("GET", "/dns/blocking")

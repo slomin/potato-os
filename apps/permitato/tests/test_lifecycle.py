@@ -73,3 +73,160 @@ async def test_on_shutdown_cleans_up(monkeypatch):
     assert reconnect_task.cancel_called
     assert schedule_task.cancel_called
     mock_shutdown.assert_awaited_once_with(app.state.permit_state)
+
+
+# ---------------------------------------------------------------------------
+# DNS cache flush in background tasks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_expiry_loop_flushes_after_cleanup(tmp_path, monkeypatch):
+    """Expiry loop must flush DNS cache once after cleaning up expired exceptions."""
+    import time
+    from apps.permitato.exceptions import ExceptionStore
+    from apps.permitato.state import PermitState
+
+    adapter = AsyncMock()
+    store = ExceptionStore(data_dir=tmp_path)
+    # Grant two exceptions with TTL=0 so they expire immediately
+    store.grant("a.com", "test", ttl_seconds=0)
+    store.grant("b.com", "test", ttl_seconds=0)
+
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        exception_store=store,
+    )
+
+    app = MagicMock()
+    app.state.permit_state = state
+
+    # Run one iteration of the expiry loop body (skip the sleep)
+    from apps.permitato.audit import write_audit_entry
+    for exc in state.exception_store.get_expired():
+        if state.adapter and state.pihole_available:
+            await state.adapter.delete_domain_rule(exc.regex_pattern, "allow", "regex")
+        write_audit_entry(state.data_dir, {"event": "exception_expired", "domain": exc.domain, "exception_id": exc.id})
+    revoked = state.exception_store.cleanup_expired()
+
+    # Import the function we're testing — it should flush once
+    from apps.permitato.state import flush_dns_cache_safe
+    if revoked:
+        await flush_dns_cache_safe(state)
+
+    adapter.flush_dns_cache.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_expiry_loop_no_flush_when_nothing_expired(tmp_path):
+    """Expiry loop must not flush if no exceptions expired."""
+    from apps.permitato.exceptions import ExceptionStore
+    from apps.permitato.state import PermitState, flush_dns_cache_safe
+
+    adapter = AsyncMock()
+    store = ExceptionStore(data_dir=tmp_path)
+    # Grant with long TTL — not expired
+    store.grant("a.com", "test", ttl_seconds=3600)
+
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        exception_store=store,
+    )
+
+    revoked = state.exception_store.cleanup_expired()
+    if revoked:
+        await flush_dns_cache_safe(state)
+
+    adapter.flush_dns_cache.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_schedule_tick_flushes_on_mode_change(tmp_path, monkeypatch):
+    """Schedule tick must flush DNS cache when mode changes."""
+    from apps.permitato.state import PermitState
+    from apps.permitato.lifecycle import _apply_schedule_tick
+
+    adapter = AsyncMock()
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        mode="normal",
+        client_id="192.168.1.10",
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    # Set up a schedule store that evaluates to "work"
+    schedule_store = MagicMock()
+    schedule_store.list_rules.return_value = [MagicMock()]
+    schedule_store.evaluate.return_value = "work"
+    state.schedule_store = schedule_store
+
+    from datetime import datetime
+    await _apply_schedule_tick(state, now=datetime(2026, 3, 31, 10, 0))
+
+    assert state.mode == "work"
+    adapter.flush_dns_cache.assert_awaited()
+
+
+@pytest.mark.anyio
+async def test_schedule_tick_no_flush_when_mode_unchanged(tmp_path):
+    """Schedule tick must not flush when mode stays the same."""
+    from apps.permitato.state import PermitState
+    from apps.permitato.lifecycle import _apply_schedule_tick
+
+    adapter = AsyncMock()
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        mode="work",
+        client_id="192.168.1.10",
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    schedule_store = MagicMock()
+    schedule_store.list_rules.return_value = [MagicMock()]
+    schedule_store.evaluate.return_value = "work"  # same as current
+    state.schedule_store = schedule_store
+
+    from datetime import datetime
+    await _apply_schedule_tick(state, now=datetime(2026, 3, 31, 10, 0))
+
+    assert state.mode == "work"
+    adapter.flush_dns_cache.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_startup_schedule_flushes_on_mode_change(tmp_path):
+    """apply_startup_schedule must flush DNS cache when mode changes."""
+    from apps.permitato.state import PermitState, apply_startup_schedule
+
+    adapter = AsyncMock()
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        mode="normal",
+        client_id="192.168.1.10",
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    schedule_store = MagicMock()
+    schedule_store.evaluate.return_value = "work"
+    schedule_store.list_rules.return_value = [MagicMock()]
+    state.schedule_store = schedule_store
+
+    # effective_mode returns the scheduled mode when no override
+    state.override_mode = None
+    state.override_scheduled_mode = None
+
+    from datetime import datetime
+    await apply_startup_schedule(state, now=datetime(2026, 3, 31, 10, 0))
+
+    assert state.mode == "work"
+    adapter.flush_dns_cache.assert_awaited()

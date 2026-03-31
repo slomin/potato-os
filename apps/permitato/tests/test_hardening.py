@@ -598,3 +598,237 @@ async def test_adapter_get_domain_rules():
     assert len(result) == 2
     assert result[0]["domain"] == r"(^|\.)twitter\.com$"
     await adapter.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# DNS cache flush safety
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_flush_dns_cache_safe_calls_adapter(tmp_path):
+    from apps.permitato.state import PermitState, flush_dns_cache_safe
+
+    adapter = AsyncMock()
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+    )
+
+    await flush_dns_cache_safe(state)
+
+    adapter.flush_dns_cache.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_flush_dns_cache_safe_skips_when_unavailable(tmp_path):
+    from apps.permitato.state import PermitState, flush_dns_cache_safe
+
+    adapter = AsyncMock()
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=False,
+    )
+
+    await flush_dns_cache_safe(state)
+
+    adapter.flush_dns_cache.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_flush_dns_cache_safe_skips_when_no_adapter(tmp_path):
+    from apps.permitato.state import PermitState, flush_dns_cache_safe
+
+    state = PermitState(data_dir=tmp_path, adapter=None, pihole_available=True)
+
+    await flush_dns_cache_safe(state)  # no error
+
+
+@pytest.mark.anyio
+async def test_flush_dns_cache_safe_swallows_pihole_error(tmp_path):
+    from apps.permitato.pihole_adapter import PiholeUnavailableError
+    from apps.permitato.state import PermitState, flush_dns_cache_safe
+
+    adapter = AsyncMock()
+    adapter.flush_dns_cache = AsyncMock(side_effect=PiholeUnavailableError("fail"))
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+    )
+
+    await flush_dns_cache_safe(state)  # must not raise
+
+
+@pytest.mark.anyio
+async def test_flush_dns_cache_safe_swallows_unexpected_error(tmp_path):
+    from apps.permitato.state import PermitState, flush_dns_cache_safe
+
+    adapter = AsyncMock()
+    adapter.flush_dns_cache = AsyncMock(side_effect=RuntimeError("boom"))
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+    )
+
+    await flush_dns_cache_safe(state)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# DNS cache flush — route integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_grant_exception_flushes_dns_cache(tmp_path):
+    from apps.permitato.exceptions import ExceptionStore
+    from apps.permitato.state import PermitState
+
+    adapter = AsyncMock()
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        exception_store=ExceptionStore(data_dir=tmp_path),
+        exception_group_id=3,
+        mode="normal",
+    )
+
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from apps.permitato.routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+    app.state.permit_state = state
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/exceptions", json={"domain": "twitter.com", "reason": "DMs"})
+
+    assert resp.status_code == 200
+    adapter.flush_dns_cache.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_revoke_exception_flushes_dns_cache(tmp_path):
+    from apps.permitato.exceptions import ExceptionStore
+    from apps.permitato.state import PermitState
+
+    adapter = AsyncMock()
+    store = ExceptionStore(data_dir=tmp_path)
+    exc = store.grant("twitter.com", "DMs", ttl_seconds=3600)
+
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        exception_store=store,
+        exception_group_id=3,
+        mode="normal",
+    )
+
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from apps.permitato.routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+    app.state.permit_state = state
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.delete(f"/exceptions/{exc.id}")
+
+    assert resp.status_code == 200
+    adapter.flush_dns_cache.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_mode_switch_flushes_dns_cache(tmp_path):
+    from apps.permitato.state import PermitState
+
+    adapter = AsyncMock()
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        mode="normal",
+        client_id="192.168.1.10",
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from apps.permitato.routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+    app.state.permit_state = state
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/mode", json={"mode": "work"})
+
+    assert resp.status_code == 200
+    adapter.flush_dns_cache.assert_awaited()
+
+
+@pytest.mark.anyio
+async def test_flush_failure_does_not_fail_grant(tmp_path):
+    from apps.permitato.exceptions import ExceptionStore
+    from apps.permitato.pihole_adapter import PiholeUnavailableError
+    from apps.permitato.state import PermitState
+
+    adapter = AsyncMock()
+    adapter.flush_dns_cache = AsyncMock(side_effect=PiholeUnavailableError("fail"))
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        exception_store=ExceptionStore(data_dir=tmp_path),
+        exception_group_id=3,
+        mode="normal",
+    )
+
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from apps.permitato.routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+    app.state.permit_state = state
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/exceptions", json={"domain": "twitter.com", "reason": "DMs"})
+
+    assert resp.status_code == 200
+    assert "exception" in resp.json()
+
+
+@pytest.mark.anyio
+async def test_set_client_flushes_dns_cache(tmp_path):
+    from apps.permitato.state import PermitState
+
+    adapter = AsyncMock()
+    state = PermitState(
+        data_dir=tmp_path,
+        adapter=adapter,
+        pihole_available=True,
+        mode="work",
+        group_map={"permitato_work": 1, "permitato_sfw": 2},
+    )
+
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from apps.permitato.routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+    app.state.permit_state = state
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/client", json={"client_id": "192.168.1.50"})
+
+    assert resp.status_code == 200
+    adapter.flush_dns_cache.assert_awaited()

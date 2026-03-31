@@ -10,7 +10,8 @@ from datetime import datetime
 
 from apps.permitato.state import (
     PermitState, apply_mode_to_client, apply_startup_schedule,
-    initialize_permitato, shutdown_permitato, reconnect_pihole,
+    flush_dns_cache_safe, initialize_permitato, shutdown_permitato,
+    reconnect_pihole,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,7 @@ async def _exception_expiry_loop(app) -> None:
             revoked = state.exception_store.cleanup_expired()
             if revoked:
                 state.exception_store.persist()
+                await flush_dns_cache_safe(state)
 
 
 async def _pihole_reconnection_loop(app) -> None:
@@ -152,6 +154,7 @@ async def _apply_schedule_tick(
         state.mode = effective
         state.persist()
         await apply_mode_to_client(state)
+        await flush_dns_cache_safe(state)
         write_audit_entry(state.data_dir, {
             "event": "scheduled_mode_switch",
             "from_mode": old_mode,

@@ -40,8 +40,10 @@ PIHOLE_VARS
 fi
 
 # Set web server to port 8081 (avoids conflict with llama-server on 8080)
+# Enable allow_destructive so Permitato can flush DNS cache via restartdns.
 if command -v pihole-FTL >/dev/null 2>&1; then
   pihole-FTL --config webserver.port 8081 || true
+  pihole-FTL --config webserver.api.allow_destructive true || true
 fi
 
 # Generate app password if not already stored

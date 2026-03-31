@@ -19,7 +19,7 @@ from apps.permitato.modes import get_mode, MODES
 from apps.permitato.pihole_adapter import PiholeUnavailableError
 from apps.permitato.net_resolve import resolve_requester_ipv4
 from apps.permitato.lifecycle import _apply_schedule_tick
-from apps.permitato.state import PermitState, apply_mode_to_client, validate_client
+from apps.permitato.state import PermitState, apply_mode_to_client, flush_dns_cache_safe, validate_client
 from apps.permitato.system_prompt import build_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -135,6 +135,7 @@ async def switch_mode(request: Request):
     _record_override(state, mode_name)
     state.persist()
     await apply_mode_to_client(state)
+    await flush_dns_cache_safe(state)
 
     write_audit_entry(state.data_dir, {
         "event": "mode_switch",
@@ -168,6 +169,7 @@ async def set_client(request: Request):
     state.client_id = client_id
     state.persist()
     await apply_mode_to_client(state)
+    await flush_dns_cache_safe(state)
     await validate_client(state, force_refresh=True)
 
     warning = None
@@ -271,6 +273,8 @@ async def grant_exception(request: Request):
         state.pihole_available = False
         logger.warning("Failed to add Pi-hole allow rule for %s", domain)
 
+    await flush_dns_cache_safe(state)
+
     state.exception_store.persist()
     write_audit_entry(state.data_dir, {
         "event": "exception_granted",
@@ -305,6 +309,8 @@ async def revoke_exception(request: Request, exception_id: str):
             await state.adapter.delete_domain_rule(exc.regex_pattern, "allow", "regex")
         except (PiholeUnavailableError, Exception):
             logger.warning("Failed to remove Pi-hole allow rule for %s", exc.domain)
+
+    await flush_dns_cache_safe(state)
 
     state.exception_store.persist()
     write_audit_entry(state.data_dir, {
@@ -447,6 +453,7 @@ async def delete_schedule_rule(request: Request, rule_id: str):
             state.mode = "normal"
             state.persist()
             await apply_mode_to_client(state)
+            await flush_dns_cache_safe(state)
             write_audit_entry(state.data_dir, {
                 "event": "scheduled_mode_switch",
                 "from_mode": old_mode,
@@ -514,6 +521,8 @@ async def add_custom_domain(request: Request):
                 state.pihole_available = False
                 logger.warning("Failed to add Pi-hole deny rule for %s", domain)
 
+    await flush_dns_cache_safe(state)
+
     state.custom_list_store.persist()
     write_audit_entry(state.data_dir, {
         "event": "custom_domain_added",
@@ -556,6 +565,8 @@ async def delete_custom_domain(request: Request, entry_id: str):
         except Exception:
             logger.warning("Failed to remove Pi-hole deny rule for %s", entry_data["domain"])
             return JSONResponse(status_code=502, content={"error": "Failed to remove Pi-hole rule — retry later"})
+
+    await flush_dns_cache_safe(state)
 
     entry = store.remove(entry_id)
     store.persist()
@@ -701,6 +712,7 @@ async def _execute_action(state, intent, user_message: str) -> dict:
         _record_override(state, mode_name)
         state.persist()
         await apply_mode_to_client(state)
+        await flush_dns_cache_safe(state)
         write_audit_entry(state.data_dir, {
             "event": "mode_switch",
             "from_mode": old_mode,
@@ -734,6 +746,8 @@ async def _execute_action(state, intent, user_message: str) -> dict:
                 )
             except PiholeUnavailableError:
                 state.pihole_available = False
+
+        await flush_dns_cache_safe(state)
 
         state.exception_store.persist()
         write_audit_entry(state.data_dir, {

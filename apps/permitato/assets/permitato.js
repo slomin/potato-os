@@ -10,6 +10,7 @@ let _lastClientFetchTs = 0;
 let _panelOpen = false;
 let _schedulePanelOpen = false;
 let _statsPanelOpen = false;
+let _lastRenderedMode = null;
 let _customListPanelOpen = false;
 let _customListTab = "work";
 let _latestCustomDomains = [];
@@ -152,6 +153,13 @@ function _updateStatusBar(data) {
     const mode = data.mode_display || data.mode || "--";
     badge.textContent = mode;
     badge.setAttribute("data-mode", data.mode || "");
+    if (_lastRenderedMode !== null && data.mode !== _lastRenderedMode) {
+      badge.classList.remove("mode-changed");
+      void badge.offsetWidth;
+      badge.classList.add("mode-changed");
+      badge.addEventListener("animationend", () => badge.classList.remove("mode-changed"), { once: true });
+    }
+    _lastRenderedMode = data.mode;
   }
 
   // Schedule/override indicator
@@ -320,6 +328,7 @@ function _renderExceptions() {
   const empty = document.getElementById("permitatoExceptionsEmpty");
   const degraded = document.getElementById("permitatoExceptionsDegraded");
   if (!list) return;
+  if (list.querySelector(".confirm-pending")) return;
 
   if (degraded) degraded.hidden = _latestPiholeAvailable;
 
@@ -360,7 +369,7 @@ function _renderExceptions() {
     const btn = document.createElement("button");
     btn.className = "exc-revoke-btn";
     btn.textContent = "Revoke";
-    btn.addEventListener("click", () => _revokeException(exc.id));
+    btn.addEventListener("click", () => _confirmAction(btn, () => _revokeException(exc.id)));
     right.appendChild(btn);
 
     li.appendChild(right);
@@ -480,7 +489,7 @@ function _renderScheduleRules(rules) {
     const btn = document.createElement("button");
     btn.className = "sched-delete-btn";
     btn.textContent = "Delete";
-    btn.addEventListener("click", () => _deleteScheduleRule(rule.id));
+    btn.addEventListener("click", () => _confirmAction(btn, () => _deleteScheduleRule(rule.id)));
     right.appendChild(btn);
 
     li.appendChild(right);
@@ -608,7 +617,7 @@ function _renderCustomDomains() {
     const btn = document.createElement("button");
     btn.className = "custom-domain-remove-btn";
     btn.textContent = "Remove";
-    btn.addEventListener("click", () => _deleteCustomDomain(entry.id));
+    btn.addEventListener("click", () => _confirmAction(btn, () => _deleteCustomDomain(entry.id)));
     li.appendChild(btn);
 
     list.appendChild(li);
@@ -805,6 +814,32 @@ function _showRecoveryBanner(clientId) {
   if (!banner || !text) return;
   text.textContent = `Your controlled device (${clientId}) is no longer available in Pi-hole.`;
   banner.hidden = false;
+}
+
+// --- Confirm-before-delete utility ---
+
+function _confirmAction(btn, action) {
+  if (btn.dataset.confirming) return;
+  const original = btn.textContent;
+  btn.textContent = "Sure?";
+  btn.classList.add("confirm-pending");
+  btn.dataset.confirming = "1";
+
+  const timer = setTimeout(() => revert(), 3000);
+
+  function onConfirm() {
+    clearTimeout(timer);
+    revert();
+    action();
+  }
+  function revert() {
+    btn.removeEventListener("click", onConfirm);
+    btn.textContent = original;
+    btn.classList.remove("confirm-pending");
+    delete btn.dataset.confirming;
+  }
+
+  btn.addEventListener("click", onConfirm, { once: true });
 }
 
 // --- Session persistence (IndexedDB) ---

@@ -129,6 +129,9 @@ test("removing a domain calls DELETE and refreshes list", async ({ page }) => {
   await page.locator("#permitatoCustomListToggle").click();
   await expect(page.locator("#permitatoCustomList li")).toHaveCount(1);
 
+  // Click remove — enters confirm state
+  await page.locator(".custom-domain-remove-btn").first().click();
+  // Confirm by clicking again
   await page.locator(".custom-domain-remove-btn").first().click();
 
   // After remove, Work tab should be empty

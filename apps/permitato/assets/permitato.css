@@ -1109,3 +1109,21 @@
   border-color: var(--text);
   color: var(--text);
 }
+
+/* Mode switch pulse feedback */
+@keyframes mode-pulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+.permitato-mode-badge.mode-changed {
+  animation: mode-pulse 0.35s ease-out;
+}
+
+/* Destructive action confirm state */
+.confirm-pending {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+  font-weight: 600;
+}

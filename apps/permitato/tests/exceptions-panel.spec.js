@@ -104,7 +104,9 @@ test("revoke calls DELETE and refreshes the panel", async ({ page }) => {
   await page.locator("#permitatoExceptionsToggle").click();
   await expect(page.locator("#permitatoExceptionsList li")).toHaveCount(2);
 
-  // Click revoke on first item
+  // Click revoke on first item — enters confirm state
+  await page.locator(".exc-revoke-btn").first().click();
+  // Confirm by clicking again
   await page.locator(".exc-revoke-btn").first().click();
 
   // Should update to 1 exception after the re-poll

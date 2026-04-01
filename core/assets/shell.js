@@ -468,6 +468,7 @@ import { registerPlatformShell } from "./platform-controls.js";
       if (titleEl) titleEl.textContent = entry.title;
 
       _activeAppId = appId;
+      try { localStorage.setItem("potato_active_app", appId); } catch { /* quota */ }
 
       // Show existing wrapper if app was already initialized
       if (_appWrappers[appId]) {
@@ -495,9 +496,15 @@ import { registerPlatformShell } from "./platform-controls.js";
     // Discover apps, then load the first available UI app, then start polling
     const appContainer = document.getElementById("appContainer");
     if (appContainer) {
-      _discoverApps().then(() => {
-        const defaultApp = Object.keys(_appRegistry)[0] || "chat";
-        return switchApp(defaultApp);
+      _discoverApps().then(async () => {
+        // Read saved app before any switchApp call (which overwrites localStorage).
+        const saved = localStorage.getItem("potato_active_app");
+        // Always init chat first — it binds shell controls (settings, model switcher).
+        const firstApp = Object.keys(_appRegistry)[0] || "chat";
+        await switchApp(firstApp);
+        if (saved && saved !== firstApp && _appRegistry[saved]) {
+          await switchApp(saved);
+        }
       }).then(() => startPollingLoop()).catch(() => startPollingLoop());
     } else {
       startPollingLoop();

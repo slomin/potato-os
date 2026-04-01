@@ -137,6 +137,40 @@ test("revoke button enters confirm state before firing DELETE", async ({ page })
 });
 
 
+test("status bar stays visible after long chat response", async ({ page }) => {
+  // Build an SSE response with enough text to overflow the messages area
+  const longText = "This is a detailed response about your request. ".repeat(40);
+  const chunks = longText.match(/.{1,60}/g);
+  const sseBody = chunks.map(c =>
+    `data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}`
+  ).join("\n") + "\ndata: [DONE]\n";
+
+  await page.route("**/app/permitato/api/chat", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+      body: sseBody,
+    });
+  });
+
+  await openPermitato(page, {
+    permitatoStatusRoute: async (route) => {
+      await route.fulfill({ status: 200, body: JSON.stringify(WORK_STATUS) });
+    },
+  });
+
+  // Send a message
+  await page.locator("#permitatoPrompt").fill("Tell me something long");
+  await page.locator("#permitatoSendBtn").click();
+
+  // Wait for the assistant response to render
+  await expect(page.locator(".permitato-msg.assistant").last()).toContainText("detailed response", { timeout: 5000 });
+
+  // Status bar must remain in viewport — not scrolled off the page
+  await expect(page.locator("#permitatoStatusBar")).toBeInViewport();
+});
+
+
 test("confirm state reverts after timeout", async ({ page }) => {
   await openPermitato(page, {
     permitatoStatusRoute: async (route) => {

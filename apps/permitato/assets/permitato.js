@@ -222,6 +222,7 @@ async function _onSubmit(e) {
   _requestInFlight = true;
 
   const assistantEl = _appendMessage("assistant", "");
+  const messagesContainer = document.getElementById("permitatoMessages");
 
   try {
     const resp = await fetch(`${PERMITATO_API}/chat`, {
@@ -267,6 +268,7 @@ async function _onSubmit(e) {
           if (parsed.error) {
             const msg = parsed.error.message || parsed.error.detail || "LLM unavailable";
             assistantEl.textContent = msg;
+            if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
             accumulated = msg;
             continue;
           }
@@ -275,6 +277,7 @@ async function _onSubmit(e) {
           if (delta) {
             accumulated += delta;
             assistantEl.textContent = accumulated.replace(/\[ACTION:[^\]]*\]/g, "").trim();
+            if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
           }
         } catch {
           // incomplete JSON — will be completed in next chunk
@@ -284,6 +287,7 @@ async function _onSubmit(e) {
 
     const cleanText = accumulated.replace(/\[ACTION:[^\]]*\]/g, "").trim();
     assistantEl.textContent = cleanText;
+    if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
     _history.push({ role: "assistant", content: cleanText });
     _saveSession();
 

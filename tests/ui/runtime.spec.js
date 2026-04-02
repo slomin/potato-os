@@ -157,6 +157,7 @@ test("llama booting with model present shows loading badge", async ({ page }) =>
         model: { filename: "Qwen3.5-2B-Q4_K_M.gguf" },
         llama_server: { healthy: false, running: false, url: "http://127.0.0.1:8080" },
         backend: { mode: "llama", active: "llama", fallback_active: false },
+        llama_runtime: { current: { family: "ik_llama" } },
         download: {
           bytes_total: 2497282336,
           bytes_downloaded: 2497282336,
@@ -174,7 +175,7 @@ test("llama booting with model present shows loading badge", async ({ page }) =>
 
   await page.goto("/");
   await waitForStatusApplied(page);
-  await expect(page.locator("#statusLabel")).toHaveText("LOADING:llama.cpp:Qwen3.5-2B-Q4_K_M.gguf");
+  await expect(page.locator("#statusLabel")).toHaveText("LOADING:ik_llama:Qwen3.5-2B-Q4_K_M.gguf");
   await expect(page.locator("#statusBadge")).toHaveClass(/loading/);
 });
 
@@ -189,6 +190,7 @@ test("llama error state shows failed badge", async ({ page }) => {
         model: { filename: "Qwen3.5-2B-Q4_K_M.gguf" },
         llama_server: { healthy: false, running: false, url: "http://127.0.0.1:8080" },
         backend: { mode: "llama", active: "llama", fallback_active: false },
+        llama_runtime: { current: { family: "ik_llama" } },
         download: {
           bytes_total: 2497282336,
           bytes_downloaded: 2497282336,
@@ -206,8 +208,74 @@ test("llama error state shows failed badge", async ({ page }) => {
 
   await page.goto("/");
   await waitForStatusApplied(page);
-  await expect(page.locator("#statusLabel")).toHaveText("FAILED:llama.cpp:Qwen3.5-2B-Q4_K_M.gguf");
+  await expect(page.locator("#statusLabel")).toHaveText("FAILED:ik_llama:Qwen3.5-2B-Q4_K_M.gguf");
   await expect(page.locator("#statusBadge")).toHaveClass(/failed/);
+});
+
+test("status badge shows ik_llama runtime family when connected", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload()),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await expect(page.locator("#statusLabel")).toHaveText(/CONNECTED:ik_llama/);
+});
+
+test("status badge shows llama.cpp when llama_cpp runtime family is active", async ({ page }) => {
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        llama_runtime: {
+          current: { family: "llama_cpp", llama_cpp_commit: "def67890", profile: "universal", has_server_binary: true },
+          available_runtimes: [
+            { family: "ik_llama", commit: "abc12345", is_active: false, compatible: true },
+            { family: "llama_cpp", commit: "def67890", is_active: true, compatible: true },
+          ],
+          switch: { active: false, target_family: null, error: null },
+          memory_loading: { mode: "auto", label: "Automatic", no_mmap_env: "0" },
+          large_model_override: { enabled: false },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await expect(page.locator("#statusLabel")).toHaveText(/CONNECTED:llama\.cpp/);
+});
+
+test("status badge updates runtime family after runtime switch", async ({ page }) => {
+  let currentFamily = "ik_llama";
+  await page.route("**/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(makeStatusPayload({
+        llama_runtime: {
+          current: { family: currentFamily, llama_cpp_commit: "abc12345", profile: "pi5-opt", has_server_binary: true },
+          available_runtimes: [
+            { family: "ik_llama", commit: "abc12345", is_active: currentFamily === "ik_llama", compatible: true },
+            { family: "llama_cpp", commit: "def67890", is_active: currentFamily === "llama_cpp", compatible: true },
+          ],
+          switch: { active: false, target_family: null, error: null },
+          memory_loading: { mode: "auto", label: "Automatic", no_mmap_env: "0" },
+          large_model_override: { enabled: false },
+        },
+      })),
+    });
+  });
+  await page.goto("/");
+  await waitForStatusApplied(page);
+  await expect(page.locator("#statusLabel")).toHaveText(/CONNECTED:ik_llama/);
+
+  currentFamily = "llama_cpp";
+  await page.waitForTimeout(2500);
+  await expect(page.locator("#statusLabel")).toHaveText(/CONNECTED:llama\.cpp/);
 });
 
 test("mobile hamburger controls sidebar drawer and keeps composer actions aligned", async ({ page }) => {
@@ -791,7 +859,7 @@ test("composer chip shows determinate loading progress when model_loading is act
   await page.goto("/");
   await waitForStatusApplied(page);
   // Badge shows loading state with progress ring and percentage
-  await expect(page.locator("#statusLabel")).toHaveText("LOADING:llama.cpp:67%");
+  await expect(page.locator("#statusLabel")).toHaveText("LOADING:ik_llama:67%");
   await expect(page.locator("#statusBadge")).toHaveClass(/loading/);
   await expect(page.locator("#statusSpinner")).toBeVisible();
   await expect(page.locator("#statusSpinner")).toHaveClass(/has-progress/);

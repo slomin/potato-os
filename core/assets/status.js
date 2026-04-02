@@ -34,6 +34,8 @@ import { formatBytes, formatCountdownSeconds } from "./utils.js";
       const isHealthy = isLocalModelConnected(statusPayload) || (backendMode === "fake" && isReady);
       const isLoading = backendMode === "llama" && hasModel && !llamaHealthy && statusState === "BOOTING";
       const isFailed = backendMode === "llama" && statusState === "ERROR";
+      const runtimeFamily = statusPayload?.llama_runtime?.current?.family;
+      const runtimeLabel = runtimeFamily === "llama_cpp" ? "llama.cpp" : (runtimeFamily || "llama.cpp");
       badge.classList.remove("online", "loading", "failed", "offline");
       dot.classList.remove("online", "loading", "failed", "offline");
       dot.hidden = false;
@@ -49,7 +51,7 @@ import { formatBytes, formatCountdownSeconds } from "./utils.js";
       } else if (isHealthy) {
         badge.classList.add("online");
         dot.classList.add("online");
-        label.textContent = `CONNECTED:llama.cpp${modelSuffix}`;
+        label.textContent = `CONNECTED:${runtimeLabel}${modelSuffix}`;
       } else if (isLoading) {
         badge.classList.add("loading");
         dot.classList.add("loading");
@@ -61,15 +63,15 @@ import { formatBytes, formatCountdownSeconds } from "./utils.js";
           spinner.style.setProperty("--load-pct", loadPct);
         }
         const pctSuffix = typeof loadPct === "number" ? `:${loadPct}%` : modelSuffix;
-        label.textContent = `LOADING:llama.cpp${pctSuffix}`;
+        label.textContent = `LOADING:${runtimeLabel}${pctSuffix}`;
       } else if (isFailed) {
         badge.classList.add("failed");
         dot.classList.add("failed");
-        label.textContent = `FAILED:llama.cpp${modelSuffix}`;
+        label.textContent = `FAILED:${runtimeLabel}${modelSuffix}`;
       } else {
         badge.classList.add("offline");
         dot.classList.add("offline");
-        label.textContent = "DISCONNECTED:llama.cpp";
+        label.textContent = `DISCONNECTED:${runtimeLabel}`;
       }
     }
 

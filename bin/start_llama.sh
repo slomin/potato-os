@@ -182,41 +182,56 @@ resolve_mmproj_repo() {
     return 0
   fi
 
-  if [[ "${model_name}" == *qwen*3.5*2b* ]]; then
+  if [[ "${model_name}" == *qwen*3.5*-2b[-_.]* ]]; then
     printf 'unsloth/Qwen3.5-2B-GGUF'
     return 0
   fi
-  if [[ "${model_name}" == *qwen*3.5*4b* ]]; then
+  if [[ "${model_name}" == *qwen*3.5*-4b[-_.]* ]]; then
     printf 'unsloth/Qwen3.5-4B-GGUF'
     return 0
   fi
+  if [[ "${model_name}" == *qwen*3.5*-9b[-_.]* ]]; then
+    printf 'unsloth/Qwen3.5-9B-GGUF'
+    return 0
+  fi
 
-  # Default fallback for unrecognized vision models
-  printf 'unsloth/Qwen3.5-2B-GGUF'
+  # No fallback — unrecognized sizes must not silently get a wrong projector (#258)
+  return 1
 }
 
-qwen35_mmproj_name_candidates() {
+_mmproj_candidates_for_precision() {
+  local precision="${1}" generic="${2:-}"
   local model_stem trimmed_stem next_stem
   model_stem="$(basename "${MODEL_PATH}")"
   model_stem="${model_stem%.gguf}"
   trimmed_stem="${model_stem}"
 
-  printf 'mmproj-%s-f16.gguf\n' "${model_stem}"
+  printf 'mmproj-%s-%s.gguf\n' "${model_stem}" "${precision}"
   while true; do
     next_stem="$(printf '%s\n' "${trimmed_stem}" | sed -E 's/-(I?Q[0-9]+(_[A-Za-z0-9]+)*|[0-9]+(\.[0-9]+)?bpw)$//I')"
     if [ -z "${next_stem}" ] || [ "${next_stem}" = "${trimmed_stem}" ]; then
       break
     fi
     trimmed_stem="${next_stem}"
-    printf 'mmproj-%s-f16.gguf\n' "${trimmed_stem}"
+    printf 'mmproj-%s-%s.gguf\n' "${trimmed_stem}" "${precision}"
   done
 
+  [ -n "${generic}" ] && printf '%s\n' "${generic}"
+}
+
+qwen35_mmproj_name_candidates() {
+  # Model-specific candidates first (f16 preferred, bf16 fallback),
+  # then generic F16 last. This ensures a downloaded model-specific
+  # bf16 projector is found before a stale generic F16.
+  _mmproj_candidates_for_precision f16
+  _mmproj_candidates_for_precision bf16
   printf '%s\n' "mmproj-F16.gguf"
 }
 
 mmproj_filename_candidates() {
   if model_is_qwen35_vision; then
     printf '%s\n' "mmproj-F16.gguf"
+    printf '%s\n' "mmproj-bf16.gguf"
   fi
 }
 
@@ -231,28 +246,37 @@ download_mmproj() {
   local tmp
   local candidate
   model_dir="$(dirname "${MODEL_PATH}")"
-  repo="$(resolve_mmproj_repo)"
+  repo="$(resolve_mmproj_repo || true)"
+  if [ -z "${repo}" ]; then
+    return 1
+  fi
 
   if ! command -v curl >/dev/null 2>&1; then
     return 1
   fi
 
-  # Determine preferred model-specific local name (last entry before generic).
+  # Determine preferred model-specific local names (last entry before each generic).
   preferred_local=""
+  preferred_local_bf16=""
   while read -r candidate; do
     [ -n "${candidate}" ] || continue
     [ "${candidate}" = "mmproj-F16.gguf" ] && break
     preferred_local="${candidate}"
-  done < <(qwen35_mmproj_name_candidates)
+  done < <(_mmproj_candidates_for_precision f16 mmproj-F16.gguf)
+  if [ -n "${preferred_local}" ]; then
+    preferred_local_bf16="${preferred_local%-f16.gguf}-bf16.gguf"
+  fi
 
   while read -r candidate; do
     [ -n "${candidate}" ] || continue
     url="https://huggingface.co/${repo}/resolve/main/${candidate}?download=true"
     remote_name="$(basename "${url%%\?*}")"
-    # When downloading the generic file, save with model-specific name
+    # When downloading a generic file, save with model-specific name
     # to prevent stale reuse across model switches (#136).
     if [ "${remote_name}" = "mmproj-F16.gguf" ] && [ -n "${preferred_local}" ]; then
       local_name="${preferred_local}"
+    elif [ "${remote_name}" = "mmproj-bf16.gguf" ] && [ -n "${preferred_local_bf16}" ]; then
+      local_name="${preferred_local_bf16}"
     else
       local_name="${remote_name}"
     fi
@@ -261,9 +285,10 @@ download_mmproj() {
     rm -f "${tmp}"
     if ionice -c3 nice -n 19 curl --fail --location --continue-at - --output "${tmp}" "${url}"; then
       mv -f "${tmp}" "${target}"
-      # Clean up stale generic after saving model-specific file.
-      if [ "${local_name}" != "mmproj-F16.gguf" ]; then
+      # Clean up stale generics after saving model-specific file.
+      if [ "${local_name}" != "mmproj-F16.gguf" ] && [ "${local_name}" != "mmproj-bf16.gguf" ]; then
         rm -f "${model_dir}/mmproj-F16.gguf"
+        rm -f "${model_dir}/mmproj-bf16.gguf"
       fi
       MMPROJ_PATH="${target}"
       return 0
@@ -317,10 +342,11 @@ pick_mmproj() {
   fi
 
   if model_is_qwen35_vision; then
-    # 1. Try exact model-specific match (skip generic — handled below).
+    # 1. Try exact model-specific match (skip generics — handled below).
     while read -r candidate_base; do
       [ -n "${candidate_base}" ] || continue
       [ "${candidate_base}" = "mmproj-F16.gguf" ] && continue
+      [ "${candidate_base}" = "mmproj-bf16.gguf" ] && continue
       for candidate in "${mmproj_candidates[@]}"; do
         if [ "$(basename "${candidate}")" = "${candidate_base}" ]; then
           MMPROJ_PATH="${candidate}"
@@ -338,6 +364,8 @@ pick_mmproj() {
     # 3. Offline fallback: accept only generic mmproj-F16.gguf.
     #    Do NOT accept other models' specific projectors — they have
     #    different embedding dimensions and would crash llama-server (#136).
+    #    Generic mmproj-bf16.gguf is also excluded: it's ByteShape-specific
+    #    and could be stale from a different model size.
     for candidate in "${mmproj_candidates[@]}"; do
       candidate_base="$(basename "${candidate}" | tr '[:upper:]' '[:lower:]')"
       if [[ "${candidate_base}" == mmproj-f16.gguf ]]; then

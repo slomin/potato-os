@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
 from typing import Final
 
 QWEN35_PROJECTOR_REPO_RULES: Final[tuple[tuple[tuple[str, ...], str], ...]] = (
     (("35b", "a3b", "hauhaucs"), "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive"),
     (("35b", "a3b"), "AesSedai/Qwen3.5-35B-A3B-GGUF"),
+    (("9b", "byteshape"), "byteshape/Qwen3.5-9B-GGUF"),
+    (("9b",), "unsloth/Qwen3.5-9B-GGUF"),
     (("4b", "hauhaucs"), "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive"),
     (("4b",), "unsloth/Qwen3.5-4B-GGUF"),
     (("2b",), "unsloth/Qwen3.5-2B-GGUF"),
@@ -21,16 +24,31 @@ def is_qwen35_filename(filename: str | None) -> bool:
     return bool(model_name) and "qwen" in model_name and "3.5" in model_name
 
 
-def _qwen35_projector_repo(filename: str | None) -> str | None:
+def _token_at_boundary(token: str, text: str) -> bool:
+    """Match token only when surrounded by non-alphanumeric boundaries.
+
+    Prevents substring collisions like '9b' matching inside '19b'
+    or '2b' matching inside '3.92bpw'.
+    """
+    return bool(re.search(r"(?<![a-z0-9])" + re.escape(token) + r"(?![a-z0-9])", text))
+
+
+def _qwen35_projector_repo(filename: str | None, source_url: str | None = None) -> str | None:
     model_name = _normalized_model_name(filename)
     if not is_qwen35_filename(model_name):
         return None
 
+    # Match tokens against filename + source URL so publisher-specific rules
+    # fire even when the filename itself doesn't contain the publisher name.
+    match_text = model_name
+    if source_url:
+        match_text = _normalized_model_name(source_url) + " " + match_text
+
     for required_tokens, repo in QWEN35_PROJECTOR_REPO_RULES:
-        if all(token in model_name for token in required_tokens):
+        if all(_token_at_boundary(token, match_text) for token in required_tokens):
             return repo
     return None
 
 
-def projector_repo_for_model(filename: str | None) -> str | None:
-    return _qwen35_projector_repo(filename)
+def projector_repo_for_model(filename: str | None, source_url: str | None = None) -> str | None:
+    return _qwen35_projector_repo(filename, source_url=source_url)

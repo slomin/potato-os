@@ -1139,6 +1139,55 @@ printf '%s\\n' "$@" > "$ARGS_OUT"
     assert str(generic_mmproj) in args
 
 
+def test_resolve_mmproj_repo_does_not_fallback_to_2b_for_unknown_qwen35():
+    """resolve_mmproj_repo must NOT return any repo for unrecognized Qwen3.5
+    sizes (e.g. 7B). Uses 7B to avoid token collisions. Regression test for #258."""
+    script_path = str(REPO_ROOT / "bin" / "start_llama.sh")
+    wrapper = r"""#!/usr/bin/env bash
+set -uo pipefail
+MODEL_PATH="/tmp/Qwen3.5-7B-Q4_K_M.gguf"
+HF_MMPROJ_REPO=""
+model_filename_lower() { basename "${MODEL_PATH}" | tr '[:upper:]' '[:lower:]'; }
+eval "$(sed -n '/^resolve_mmproj_repo()/,/^}/p' '__SCRIPT__')"
+output="$(resolve_mmproj_repo)" && rc=0 || rc=$?
+printf '%s' "$output"
+""".replace("__SCRIPT__", script_path)
+    result = subprocess.run(
+        ["bash", "-c", wrapper],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.stdout.strip() == "", (
+        f"resolve_mmproj_repo must not return any repo for unknown sizes: got {result.stdout!r}"
+    )
+
+
+def test_mmproj_filename_candidates_includes_bf16():
+    """mmproj_filename_candidates must include mmproj-bf16.gguf as a fallback
+    for repos that only ship BF16 projectors (e.g. ByteShape). #258."""
+    script_path = str(REPO_ROOT / "bin" / "start_llama.sh")
+    wrapper = r"""#!/usr/bin/env bash
+set -uo pipefail
+MODEL_PATH="/tmp/Qwen3.5-9B-Q4_K_S.gguf"
+model_is_qwen35_vision() { return 0; }
+eval "$(sed -n '/^mmproj_filename_candidates()/,/^}/p' '__SCRIPT__')"
+mmproj_filename_candidates
+""".replace("__SCRIPT__", script_path)
+    result = subprocess.run(
+        ["bash", "-c", wrapper],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    candidates = result.stdout.strip().splitlines()
+    assert "mmproj-F16.gguf" in candidates, "F16 must be listed first"
+    assert "mmproj-bf16.gguf" in candidates, "bf16 must be listed as fallback"
+    assert candidates.index("mmproj-F16.gguf") < candidates.index("mmproj-bf16.gguf"), (
+        "F16 must come before bf16"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Pi-hole installation section in install_dev.sh (#212)
 # ---------------------------------------------------------------------------

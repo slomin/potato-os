@@ -679,10 +679,14 @@ def default_projector_candidates_for_model(filename: str | None) -> list[str]:
                 stem_candidates.append(trimmed_stem)
 
         candidates: list[str] = []
-        for candidate_stem in stem_candidates:
-            candidate_name = f"mmproj-{candidate_stem}-f16.gguf"
-            if candidate_name not in candidates:
-                candidates.append(candidate_name)
+        # Model-specific candidates first (f16 preferred, bf16 fallback),
+        # then generic F16 last. This ensures a downloaded model-specific
+        # bf16 projector is found before a stale generic F16.
+        for precision in ("f16", "bf16"):
+            for candidate_stem in stem_candidates:
+                candidate_name = f"mmproj-{candidate_stem}-{precision}.gguf"
+                if candidate_name not in candidates:
+                    candidates.append(candidate_name)
         if "mmproj-F16.gguf" not in candidates:
             candidates.append("mmproj-F16.gguf")
         return candidates
@@ -705,7 +709,7 @@ def download_default_projector_for_model(*, runtime: RuntimeConfig, model_id: st
     filename = str(model.get("filename") or "")
     if not model_supports_vision_filename(filename):
         return False, "vision_not_supported", None
-    repo = projector_repo_for_model(filename)
+    repo = projector_repo_for_model(filename, source_url=model.get("source_url"))
     candidates = default_projector_candidates_for_model(filename)
     if not repo or not candidates:
         return False, "projector_repo_unknown", None
@@ -713,30 +717,42 @@ def download_default_projector_for_model(*, runtime: RuntimeConfig, model_id: st
     models_dir = runtime.base_dir / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    # Determine preferred model-specific local name (last candidate before generic).
+    # Determine preferred model-specific local names (last candidate before each generic).
     # E.g. for Qwen3.5-2B-Q4_K_M.gguf → "mmproj-Qwen3.5-2B-f16.gguf"
+    _generics = {"mmproj-F16.gguf", "mmproj-bf16.gguf"}
     preferred_local: str | None = None
     for c in candidates:
         if c == "mmproj-F16.gguf":
             break
         preferred_local = c
+    preferred_local_bf16: str | None = None
+    if preferred_local:
+        preferred_local_bf16 = preferred_local.replace("-f16.gguf", "-bf16.gguf")
 
-    # Check for existing model-specific files first (skip stale generic).
+    # Check for existing model-specific files first (skip stale generics).
     for candidate in candidates:
-        if candidate == "mmproj-F16.gguf" and preferred_local:
+        if candidate in _generics and preferred_local:
             continue
         target_path = models_dir / candidate
         if target_path.exists():
             return True, "downloaded", candidate
 
+    # Download targets include generic bf16 for repos that only ship it
+    # (e.g. ByteShape), even though it's excluded from local discovery.
+    download_targets = list(candidates)
+    if "mmproj-bf16.gguf" not in download_targets:
+        download_targets.append("mmproj-bf16.gguf")
+
     client = httpx.Client(follow_redirects=True, timeout=120.0)
     try:
-        for candidate in candidates:
+        for candidate in download_targets:
             url = f"https://huggingface.co/{repo}/resolve/main/{candidate}"
-            # When downloading the generic file, save with model-specific name
+            # When downloading a generic file, save with model-specific name
             # to prevent stale reuse across model switches (#136).
             if candidate == "mmproj-F16.gguf" and preferred_local:
                 local_name = preferred_local
+            elif candidate == "mmproj-bf16.gguf" and preferred_local_bf16:
+                local_name = preferred_local_bf16
             else:
                 local_name = candidate
             target_path = models_dir / local_name
@@ -751,9 +767,10 @@ def download_default_projector_for_model(*, runtime: RuntimeConfig, model_id: st
                             if chunk:
                                 handle.write(chunk)
                 part_path.replace(target_path)
-                # Clean up stale generic after saving model-specific file.
-                if local_name != "mmproj-F16.gguf":
-                    (models_dir / "mmproj-F16.gguf").unlink(missing_ok=True)
+                # Clean up stale generics after saving model-specific file.
+                if local_name not in _generics:
+                    for g in _generics:
+                        (models_dir / g).unlink(missing_ok=True)
                 return True, "downloaded", local_name
             except Exception:
                 part_path.unlink(missing_ok=True)

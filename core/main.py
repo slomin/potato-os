@@ -900,15 +900,19 @@ def _runtime_env(runtime: RuntimeConfig) -> dict[str, str]:
                 projector_filename = str(vision_settings.get("projector_filename") or "").strip()
                 if projector_mode == "custom" and projector_filename:
                     env["POTATO_MMPROJ_PATH"] = str(runtime.base_dir / "models" / projector_filename)
-    # ik_llama's IQK flash-attention kernels don't yet support q8_0 KV cache
-    # for Gemma 4's attention head configuration — fall back to f16 to avoid
-    # a ggml_abort in FlashQKV::normalize_and_store_1row.
+    # ik_llama Gemma 4 workarounds:
+    # 1. IQK flash-attention kernels lack a D=512 kernel for Gemma 4's global
+    #    attention layers, crashing with quantized KV cache — fall back to f16.
+    # 2. The fork doesn't support the gemma4v vision projector type yet, so
+    #    suppress mmproj to avoid a clip_init failure loop.
     if isinstance(active_model, dict):
         active_fn = str(active_model.get("filename") or "")
         installed_family = _detect_installed_runtime_family(runtime)
         if is_gemma4_filename(active_fn) and installed_family == "ik_llama":
             env["POTATO_CACHE_TYPE_K"] = "f16"
             env["POTATO_CACHE_TYPE_V"] = "f16"
+            env["POTATO_VISION_MODEL_NAME_PATTERN_GEMMA4"] = "0"
+            env.pop("POTATO_MMPROJ_PATH", None)
 
     device_class = classify_runtime_device(
         pi_model_name=_read_pi_device_model_name(),
@@ -1328,6 +1332,17 @@ async def activate_model(
     # Auto-switch runtime before committing the model state so a failed
     # install doesn't leave Potato pointing at an unrunnable model.
     preferred = recommended_runtime_for_model(filename)
+    if preferred:
+        device_class = classify_runtime_device(
+            pi_model_name=_read_pi_device_model_name(),
+        )
+        compat = check_runtime_device_compatibility(device_class, preferred)
+        if not compat.get("compatible", True):
+            logger.info(
+                "Skipping auto-switch to %s for %s: %s",
+                preferred, filename, compat.get("reason", "incompatible"),
+            )
+            preferred = None
     if preferred:
         current = _detect_installed_runtime_family(runtime)
         if current and current != preferred:

@@ -77,10 +77,24 @@ def _gemma4_projector_repo(filename: str | None, source_url: str | None = None) 
     return None
 
 
+def _is_gemma4_26b(filename: str | None) -> bool:
+    """True for the 26B-A4B variant which doesn't fit with f16 KV cache on 16 GB."""
+    model_name = _normalized_model_name(filename)
+    return is_gemma4_filename(model_name) and _token_at_boundary("26b", model_name)
+
+
 def recommended_runtime_for_model(filename: str | None) -> str | None:
-    """Return the preferred runtime family for a model, or None for no preference."""
-    if is_gemma4_filename(filename):
+    """Return the preferred runtime family for a model, or None for no preference.
+
+    Gemma 4 E2B and E4B prefer ik_llama for the IQK speedup.  The 26B-A4B
+    variant stays on llama_cpp because ik_llama's IQK flash-attention kernels
+    lack a D=512 kernel, forcing f16 KV cache which blows the memory budget
+    on 16 GB devices at the default 16 k context.
+    """
+    if is_gemma4_filename(filename) and not _is_gemma4_26b(filename):
         return "ik_llama"
+    if is_gemma4_filename(filename):
+        return "llama_cpp"
     return None
 
 

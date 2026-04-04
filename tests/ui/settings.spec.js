@@ -31,6 +31,11 @@ test("seed mode defaults to random, toggles deterministic, persists, and control
   await expect(seedField).toBeDisabled();
   await saveModelSettings(page);
   await closeSettingsModal(page);
+  // Wait for status poll to reflect saved generation_mode before sending
+  await expect(async () => {
+    const status = await page.evaluate(() => fetch("/status").then((r) => r.json()));
+    expect(status.model.settings.chat.generation_mode).toBe("random");
+  }).toPass({ timeout: 5000 });
   await promptField.fill("Seed random request.");
   const randomRequestPromise = page.waitForRequest("**/v1/chat/completions");
   await promptField.press("Enter");

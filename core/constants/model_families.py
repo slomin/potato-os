@@ -77,9 +77,14 @@ def _gemma4_projector_repo(filename: str | None, source_url: str | None = None) 
     return None
 
 
+def _is_gemma4_26b_a4b(filename: str | None) -> bool:
+    model_name = _normalized_model_name(filename)
+    return is_gemma4_filename(model_name) and "26b" in model_name and "a4b" in model_name
+
+
 def recommended_runtime_for_model(filename: str | None) -> str | None:
     """Return the preferred runtime family for a model, or None for no preference."""
-    if is_gemma4_filename(filename):
+    if _is_gemma4_26b_a4b(filename):
         return "ik_llama"
     return None
 

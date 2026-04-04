@@ -63,7 +63,7 @@ potato_sha256() {
 # Finds the git remote whose URL matches the given GitHub repo slug.
 # Prints the remote name, or empty string if none found.
 find_github_remote() {
-  local repo="${1:-${GITHUB_REPO:-slomin/potato-os}}"
+  local repo="${1:-${GITHUB_REPO:-potato-os/core}}"
   local _remote _remote_url
   for _remote in $(git remote 2>/dev/null); do
     _remote_url="$(git remote get-url "${_remote}" 2>/dev/null || true)"

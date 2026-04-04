@@ -1,7 +1,7 @@
 # Permitato Milestone Plan
 
 Productize Permitato from a working pilot into a durable daily-driver attention guard.
-Epic: #219 | Milestone: [Permitato](https://github.com/slomin/potato-os/milestone/8)
+Epic: #219 | Milestone: [Permitato](https://github.com/potato-os/core/milestone/8)
 
 ## Execution Phases
 

@@ -2,7 +2,7 @@
 # Shared helpers for downloading runtime binaries from GitHub Releases.
 # Sourced by install_dev.sh, prepare_imager_bundle.sh, and image/lib/common.sh.
 
-POTATO_GITHUB_REPO="${POTATO_GITHUB_REPO:-slomin/potato-os}"
+POTATO_GITHUB_REPO="${POTATO_GITHUB_REPO:-potato-os/core}"
 
 resolve_latest_runtime_release_url() {
   local family="$1"

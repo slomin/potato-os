@@ -15,7 +15,7 @@ export COPYFILE_DISABLE=1  # Prevent macOS tar from embedding ._ resource forks
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/build_helpers.sh
 source "${REPO_ROOT}/bin/lib/build_helpers.sh"
-GITHUB_REPO="${POTATO_GITHUB_REPO:-slomin/potato-os}"
+GITHUB_REPO="${POTATO_GITHUB_REPO:-potato-os/core}"
 
 VERSION=""
 DRY_RUN=0

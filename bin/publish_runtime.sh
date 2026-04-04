@@ -11,7 +11,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/build_helpers.sh
 source "${REPO_ROOT}/bin/lib/build_helpers.sh"
-GITHUB_REPO="${POTATO_GITHUB_REPO:-slomin/potato-os}"
+GITHUB_REPO="${POTATO_GITHUB_REPO:-potato-os/core}"
 DEFAULT_SLOT_ROOT="${REPO_ROOT}/references/old_reference_design/llama_cpp_binary/runtimes"
 
 FAMILY=""

@@ -18,7 +18,7 @@ Experimental Raspberry Pi Linux mod with optimised local LLM inference. Runs qua
 
 ## Install (recommended)
 
-1. Download the latest SD card image from [Releases](https://github.com/slomin/potato-os/releases)
+1. Download the latest SD card image from [Releases](https://github.com/potato-os/core/releases)
 2. Flash it to a microSD card with [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
 3. Insert the card, power on the Pi, and wait for first boot to complete
 4. Open `http://potato.local` in a browser
@@ -110,7 +110,7 @@ Or build directly on the Pi:
 ./bin/build_llama_runtime.sh --family both --fetch --clean
 ```
 
-Published runtimes are available at [GitHub Releases](https://github.com/slomin/potato-os/releases). Fresh installs auto-download when no local build is present:
+Published runtimes are available at [GitHub Releases](https://github.com/potato-os/core/releases). Fresh installs auto-download when no local build is present:
 
 ```bash
 POTATO_LLAMA_RELEASE_AUTO=1 ./bin/install_dev.sh
@@ -128,7 +128,7 @@ See [Building Images](docs/building-images.md) for prerequisites, variants, flas
 
 ### Project
 
-- Board: [github.com/users/slomin/projects/8](https://github.com/users/slomin/projects/8)
+- Board: [github.com/orgs/potato-os/projects/1](https://github.com/orgs/potato-os/projects/1)
 - Defaults: hostname `potato`, SSH `pi`/`raspberry`
 
 ## License

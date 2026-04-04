@@ -27,7 +27,7 @@ In the App Options dialog, click **Edit** next to **Content Repository**.
 Select **Use custom URL** and paste the following manifest URL:
 
 ```
-https://github.com/slomin/potato-os/releases/download/stable/potato-lite.rpi-imager-manifest
+https://github.com/potato-os/core/releases/download/stable/potato-lite.rpi-imager-manifest
 ```
 
 Click **Apply & Restart**.
@@ -111,7 +111,7 @@ On first boot, Potato OS automatically starts downloading a starter model — **
 
 If you prefer not to use the content repository flow:
 
-1. Download the latest `.img.xz` from [Releases](https://github.com/slomin/potato-os/releases)
+1. Download the latest `.img.xz` from [Releases](https://github.com/potato-os/core/releases)
 2. Open Raspberry Pi Imager → **Choose OS** → scroll to bottom → **Use custom** → select the downloaded file
 3. Follow steps 5–9 above
 
@@ -139,4 +139,4 @@ xz -dc potato-lite-*.img.xz | sudo dd of=/dev/rdiskN bs=4m
 
 ## Updating
 
-Potato OS is currently reflash-only — there is no OTA or in-place upgrade path. To move to a newer version, reflash the card with the latest image from [Releases](https://github.com/slomin/potato-os/releases).
+Potato OS is currently reflash-only — there is no OTA or in-place upgrade path. To move to a newer version, reflash the card with the latest image from [Releases](https://github.com/potato-os/core/releases).

@@ -33,7 +33,7 @@ The terminal opens in a modal window. You should see a shell prompt (`pi@potato:
 Copy and paste this command into the terminal and press **Enter**:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/slomin/potato-os/main/bin/install_openclaw.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/potato-os/core/main/bin/install_openclaw.sh | sudo bash
 ```
 
 <img src="assets/openclaw_steps/04-install-command.jpg" alt="Terminal with install command typed" width="680">
@@ -84,7 +84,7 @@ If you connect a larger model in the future (or run on a Pi with more headroom),
 | Max output tokens | 4,096 tokens | `POTATO_MAX_TOKENS` |
 
 ```bash
-POTATO_CONTEXT_WINDOW=32768 curl -fsSL https://raw.githubusercontent.com/slomin/potato-os/main/bin/install_openclaw.sh | sudo bash
+POTATO_CONTEXT_WINDOW=32768 curl -fsSL https://raw.githubusercontent.com/potato-os/core/main/bin/install_openclaw.sh | sudo bash
 ```
 
 The configuration lives at `~/.openclaw/openclaw.json`. The gateway token (needed to access the dashboard) is stored there under `gateway.auth.token`.
@@ -94,7 +94,7 @@ The configuration lives at `~/.openclaw/openclaw.json`. The gateway token (neede
 To remove OpenClaw completely:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/slomin/potato-os/main/bin/uninstall_openclaw.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/potato-os/core/main/bin/uninstall_openclaw.sh | sudo bash
 ```
 
 This stops the gateway, removes the package, restores disabled skills, and cleans up configuration. Node.js is kept by default — set `REMOVE_NODEJS=1` to remove it too.

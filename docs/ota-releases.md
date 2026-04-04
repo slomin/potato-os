@@ -51,7 +51,7 @@ Two-space separator between hash and filename, matching BSD/GNU `sha256sum` outp
 
 `check_for_update()` in `core/update_state.py`:
 
-1. Queries `https://api.github.com/repos/slomin/potato-os/releases/latest`
+1. Queries `https://api.github.com/repos/potato-os/core/releases/latest`
 2. Iterates release assets looking for `name` matching `potato-os-*.tar.gz`
 3. Saves the `browser_download_url` as `tarball_url`
 

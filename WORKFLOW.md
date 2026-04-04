@@ -4,7 +4,7 @@ This is the single source of truth for how we plan, execute, and close work.
 
 ## Project Board
 
-- Board: <https://github.com/users/slomin/projects/8>
+- Board: <https://github.com/orgs/potato-os/projects/1>
 - Default status flow:
   - `Todo`
   - `In Progress`
@@ -284,7 +284,7 @@ After building a runtime on Pi, publish it so fresh installs can auto-download:
    ```
    This creates a tag `runtime/ik_llama-<commit>`, packages the slot as a tarball, and uploads it as a GitHub Release. Use `--dry-run` to create the tarball without publishing.
 
-3. **Verify**: Check the release at `https://github.com/slomin/potato-os/releases`.
+3. **Verify**: Check the release at `https://github.com/potato-os/core/releases`.
 
 ### Tag Convention
 
@@ -305,14 +305,14 @@ After building a runtime on Pi, publish it so fresh installs can auto-download:
 
 ```bash
 # Create issue
-gh issue create -R slomin/potato-os --title "<title>" --body-file <file.md> --label "type:feature" --label "area:backend"
+gh issue create -R potato-os/core --title "<title>" --body-file <file.md> --label "type:feature" --label "area:backend"
 
 # Add issue to project
-gh project item-add 8 --owner slomin --url https://github.com/slomin/potato-os/issues/<id>
+gh project item-add 1 --owner potato-os --url https://github.com/potato-os/core/issues/<id>
 
 # Show current status option IDs before editing item status
-gh project field-list 8 --owner slomin --format json | jq -r '.fields[] | select(.name=="Status") | .options[] | "\(.name): \(.id)"'
+gh project field-list 1 --owner potato-os --format json | jq -r '.fields[] | select(.name=="Status") | .options[] | "\(.name): \(.id)"'
 
 # Move item status using the current option ID (Todo/In Progress/QA/In Review/Done)
-gh project item-edit --id <item-id> --project-id PVT_kwHOABrb5c4BP912 --field-id PVTSSF_lAHOABrb5c4BP912zg-OMzk --single-select-option-id <current-option-id>
+gh project item-edit --id <item-id> --project-id PVT_kwDOEC6wV84BTta6 --field-id PVTSSF_lADOEC6wV84BTta6zhA6hxU --single-select-option-id <current-option-id>
 ```

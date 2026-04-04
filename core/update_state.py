@@ -24,7 +24,7 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger("potato")
 
-GITHUB_RELEASES_LATEST_URL = "https://api.github.com/repos/slomin/potato-os/releases/latest"
+GITHUB_RELEASES_LATEST_URL = "https://api.github.com/repos/potato-os/core/releases/latest"
 GITHUB_CHECK_TIMEOUT_SECONDS = 10
 
 

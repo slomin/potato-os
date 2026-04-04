@@ -206,7 +206,7 @@ def test_build_update_status_populated_from_state(runtime):
         "current_version": TEST_OLDER_VERSION,
         "latest_version": TEST_NEWER_VERSION,
         "release_notes": "Bug fixes",
-        "release_url": f"https://github.com/slomin/potato-os/releases/tag/v{TEST_NEWER_VERSION}",
+        "release_url": f"https://github.com/potato-os/core/releases/tag/v{TEST_NEWER_VERSION}",
         "tarball_url": None,
         "checked_at_unix": 1711000000,
         "error": None,
@@ -336,11 +336,11 @@ async def test_check_for_update_writes_state_on_success(runtime):
                 json={
                     "tag_name": f"v{TEST_NEWER_VERSION}",
                     "body": "Release notes here",
-                    "html_url": f"https://github.com/slomin/potato-os/releases/tag/v{TEST_NEWER_VERSION}",
+                    "html_url": f"https://github.com/potato-os/core/releases/tag/v{TEST_NEWER_VERSION}",
                     "assets": [
                         {
                             "name": f"potato-os-{TEST_NEWER_VERSION}.tar.gz",
-                            "browser_download_url": f"https://github.com/slomin/potato-os/releases/download/v{TEST_NEWER_VERSION}/potato-os-{TEST_NEWER_VERSION}.tar.gz",
+                            "browser_download_url": f"https://github.com/potato-os/core/releases/download/v{TEST_NEWER_VERSION}/potato-os-{TEST_NEWER_VERSION}.tar.gz",
                         }
                     ],
                 },
@@ -366,7 +366,7 @@ async def test_check_for_update_not_available_when_same_version(runtime, monkeyp
                 json={
                     "tag_name": f"v{TEST_NEWER_VERSION}",
                     "body": "",
-                    "html_url": f"https://github.com/slomin/potato-os/releases/tag/v{TEST_NEWER_VERSION}",
+                    "html_url": f"https://github.com/potato-os/core/releases/tag/v{TEST_NEWER_VERSION}",
                     "assets": [],
                 },
             )
@@ -445,7 +445,7 @@ async def test_check_for_update_extracts_tarball_url(runtime):
                 json={
                     "tag_name": "v0.5.0",
                     "body": "",
-                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+                    "html_url": "https://github.com/potato-os/core/releases/tag/v0.5.0",
                     "assets": [
                         {
                             "name": "potato-os-0.5.0.tar.gz",
@@ -470,7 +470,7 @@ async def test_check_for_update_ignores_non_ota_tarball(runtime):
                 json={
                     "tag_name": "v0.5.0",
                     "body": "",
-                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+                    "html_url": "https://github.com/potato-os/core/releases/tag/v0.5.0",
                     "assets": [
                         {
                             "name": "ik_llama-abc12345-pi5-opt.tar.gz",
@@ -495,7 +495,7 @@ async def test_check_for_update_picks_ota_over_runtime_tarball(runtime):
                 json={
                     "tag_name": "v0.5.0",
                     "body": "",
-                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.5.0",
+                    "html_url": "https://github.com/potato-os/core/releases/tag/v0.5.0",
                     "assets": [
                         {
                             "name": "ik_llama-abc12345-pi5-opt.tar.gz",
@@ -533,7 +533,7 @@ async def test_check_for_update_preserves_execution_state(runtime):
                 json={
                     "tag_name": "v0.6.0",
                     "body": "new notes",
-                    "html_url": "https://github.com/slomin/potato-os/releases/tag/v0.6.0",
+                    "html_url": "https://github.com/potato-os/core/releases/tag/v0.6.0",
                     "assets": [
                         {
                             "name": "potato-os-0.6.0.tar.gz",

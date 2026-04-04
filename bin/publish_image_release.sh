@@ -17,7 +17,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${REPO_ROOT}/bin/lib/branding.sh"
 # shellcheck source=lib/build_helpers.sh
 source "${REPO_ROOT}/bin/lib/build_helpers.sh"
-GITHUB_REPO="${POTATO_GITHUB_REPO:-slomin/potato-os}"
+GITHUB_REPO="${POTATO_GITHUB_REPO:-potato-os/core}"
 
 VERSION=""
 BUNDLE_DIR=""

@@ -6,32 +6,36 @@ import textwrap
 from pathlib import Path
 
 
-def test_start_llama_contains_required_flags():
+def test_start_llama_is_thin_wrapper():
+    """start_llama.sh must be a thin wrapper that execs $@ — all business
+    logic lives in core.inferno.launch_config (tested in test_launch_config.py)."""
     script = Path("bin/start_llama.sh").read_text(encoding="utf-8")
 
-    assert "--ctx-size" in script
-    assert 'CTX_SIZE_DEFAULT="16384"' in script
-    assert 'CTX_SIZE="${POTATO_CTX_SIZE:-${CTX_SIZE_DEFAULT}}"' in script
-    assert 'CACHE_RAM_MIB="${POTATO_LLAMA_CACHE_RAM_MIB:-1024}"' in script
-    assert "--cache-ram" in script
-    assert "--jinja" in script
-    assert "--no-warmup" in script
-    assert 'DISABLE_WARMUP="${POTATO_LLAMA_NO_WARMUP:-1}"' in script
-    assert "--slot-save-path" in script
+    assert 'exec "$@"' in script
+    assert "LLAMA_RUNTIME_DIR" in script
+    assert "LD_LIBRARY_PATH" in script
 
 
-def test_start_llama_uses_q8_kv_cache_by_default():
-    script = Path("bin/start_llama.sh").read_text(encoding="utf-8")
+def test_start_llama_launch_config_has_required_defaults():
+    """The Python launch config builder must use the same defaults that the
+    old shell script used (q8_0 KV cache, 16384 ctx, etc.)."""
+    from core.inferno.launch_config import build_llama_server_args
 
-    assert 'CACHE_TYPE_K="${POTATO_CACHE_TYPE_K:-q8_0}"' in script
-    assert 'CACHE_TYPE_V="${POTATO_CACHE_TYPE_V:-q8_0}"' in script
-
-
-def test_start_llama_supports_q4_v_cache_override():
-    script = Path("bin/start_llama.sh").read_text(encoding="utf-8")
-
-    assert 'CACHE_TYPE_V="${POTATO_CACHE_TYPE_V:-q8_0}"' in script
-    assert "--cache-type-v" in script
+    args = build_llama_server_args(
+        llama_server_bin="/bin/llama-server",
+        model_path="/model.gguf",
+        slot_save_path="/slots",
+    )
+    assert "--ctx-size" in args
+    assert "16384" in args
+    assert "--cache-ram" in args
+    assert "1024" in args
+    assert "--cache-type-k" in args
+    assert "q8_0" in args
+    assert "--cache-type-v" in args
+    assert "--jinja" in args
+    assert "--no-warmup" in args
+    assert "--slot-save-path" in args
 
 
 def test_start_llama_does_not_override_ctx_size_for_a3b():
@@ -178,15 +182,9 @@ def test_ensure_model_runs_curl_at_idle_io_priority():
     assert "ionice -c3 nice -n 19 curl" in script
 
 
-def test_start_llama_runs_projector_curl_at_idle_io_priority():
-    script = Path("bin/start_llama.sh").read_text(encoding="utf-8")
-
-    assert "ionice -c3 nice -n 19 curl" in script
-
-
-def test_model_download_does_not_inline_projector_download():
-    """The projector download must NOT run inside start_model_download.
-    It must be handled by start_llama.sh to avoid overlapping large
+def test_projector_download_happens_at_launch_not_during_model_download():
+    """Projector download must not run inside start_model_download — it
+    happens during launch args construction to avoid overlapping large
     writes that overwhelm SD card I/O on Pi 5."""
     import inspect
 
@@ -195,7 +193,7 @@ def test_model_download_does_not_inline_projector_download():
     source = inspect.getsource(start_model_download)
     assert "download_default_projector_for_model" not in source, (
         "Projector download must not run inside start_model_download — "
-        "let start_llama.sh handle it sequentially to avoid I/O starvation"
+        "it runs during _build_llama_launch_args to avoid I/O starvation"
     )
 
 

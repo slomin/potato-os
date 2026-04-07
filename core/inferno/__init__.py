@@ -40,6 +40,7 @@ from .backend import (
     FakeLlamaRepository,
     LlamaCppRepository,
 )
+from .launch_config import build_llama_server_args
 from .model_families import (
     is_gemma4_filename,
     is_qwen35_filename,
@@ -54,6 +55,7 @@ __all__ = [
     "ChatRepositoryManager",
     "FakeLlamaRepository",
     "LlamaCppRepository",
+    "build_llama_server_args",
     "is_gemma4_filename",
     "is_qwen35_filename",
     "projector_repo_for_model",

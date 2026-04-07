@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from core.inferno.model_families import is_gemma4_filename, projector_repo_for_model, recommended_runtime_for_model
+from core.inferno.model_families import (
+    build_model_projector_status,
+    default_projector_candidates_for_model,
+    is_gemma4_filename,
+    projector_repo_for_model,
+    recommended_runtime_for_model,
+)
 
 
 def test_projector_repo_for_qwen35_9b():
@@ -59,8 +65,6 @@ def test_projector_repo_dot_delimited_4b():
 def test_default_candidates_include_model_specific_bf16_but_not_generic():
     """default_projector_candidates_for_model must include model-specific bf16
     names but NOT generic mmproj-bf16.gguf (unsafe cross-model reuse)."""
-    from core.model_state import default_projector_candidates_for_model
-
     candidates = default_projector_candidates_for_model("Qwen3.5-9B-Q4_K_S.gguf")
     assert "mmproj-F16.gguf" in candidates
     assert "mmproj-Qwen3.5-9B-f16.gguf" in candidates
@@ -71,8 +75,6 @@ def test_default_candidates_include_model_specific_bf16_but_not_generic():
 
 def test_projector_status_finds_model_specific_bf16_on_disk(runtime):
     """build_model_projector_status must detect a model-specific bf16 projector."""
-    from core.model_state import build_model_projector_status
-
     models_dir = runtime.base_dir / "models"
     (models_dir / "mmproj-Qwen3.5-9B-bf16.gguf").write_bytes(b"bf16-projector")
 
@@ -82,7 +84,7 @@ def test_projector_status_finds_model_specific_bf16_on_disk(runtime):
             "vision": {"enabled": True, "projector_mode": "default", "projector_filename": None},
         },
     }
-    status = build_model_projector_status(runtime, model)
+    status = build_model_projector_status(models_dir, model)
     assert status["present"] is True
     assert "bf16" in status["filename"]
 
@@ -90,8 +92,6 @@ def test_projector_status_finds_model_specific_bf16_on_disk(runtime):
 def test_projector_status_ignores_stale_generic_bf16_for_wrong_model(runtime):
     """A generic mmproj-bf16.gguf left over from a 9B download must NOT be
     reported as present for a 4B model — wrong dimensions would crash. #136."""
-    from core.model_state import build_model_projector_status
-
     models_dir = runtime.base_dir / "models"
     (models_dir / "mmproj-bf16.gguf").write_bytes(b"stale-9b-bf16")
 
@@ -101,7 +101,7 @@ def test_projector_status_ignores_stale_generic_bf16_for_wrong_model(runtime):
             "vision": {"enabled": True, "projector_mode": "default", "projector_filename": None},
         },
     }
-    status = build_model_projector_status(runtime, model)
+    status = build_model_projector_status(models_dir, model)
     assert status["present"] is False, (
         "Generic mmproj-bf16.gguf must not be accepted for a different model size"
     )
@@ -197,8 +197,6 @@ def test_projector_repo_gemma4_does_not_break_qwen35():
 
 def test_default_candidates_gemma4_e2b():
     """Gemma 4 E2B produces model-specific f16/bf16 then generic F16."""
-    from core.model_state import default_projector_candidates_for_model
-
     candidates = default_projector_candidates_for_model("gemma-4-E2B-it-Q4_K_M.gguf")
     assert len(candidates) > 0
     assert "mmproj-gemma-4-E2B-it-f16.gguf" in candidates
@@ -212,8 +210,6 @@ def test_default_candidates_gemma4_e2b():
 
 def test_default_candidates_gemma4_26b_a4b():
     """Gemma 4 26B-A4B stem-trimming strips the UD-IQ2_M quant suffix."""
-    from core.model_state import default_projector_candidates_for_model
-
     candidates = default_projector_candidates_for_model("gemma-4-26B-A4B-it-UD-IQ2_M.gguf")
     assert "mmproj-gemma-4-26B-A4B-it-f16.gguf" in candidates
     assert "mmproj-F16.gguf" in candidates
@@ -221,8 +217,6 @@ def test_default_candidates_gemma4_26b_a4b():
 
 def test_projector_status_gemma4_finds_model_specific_on_disk(runtime):
     """build_model_projector_status detects a Gemma 4 model-specific projector."""
-    from core.model_state import build_model_projector_status
-
     models_dir = runtime.base_dir / "models"
     (models_dir / "mmproj-gemma-4-E2B-it-f16.gguf").write_bytes(b"g4-projector")
 
@@ -232,7 +226,7 @@ def test_projector_status_gemma4_finds_model_specific_on_disk(runtime):
             "vision": {"enabled": True, "projector_mode": "default", "projector_filename": None},
         },
     }
-    status = build_model_projector_status(runtime, model)
+    status = build_model_projector_status(models_dir, model)
     assert status["present"] is True
     assert "gemma-4-E2B-it" in status["filename"]
 

@@ -6,7 +6,7 @@ Core application code lives in `core/`:
 - `core/main.py`: FastAPI entrypoint, API routes, orchestrator loop, lifespan.
 - `core/model_state.py`: Model registry, settings persistence, projector helpers.
 - `core/runtime_state.py`: Runtime config, dual-runtime slot discovery, system metrics, power calibration.
-- `core/inferno/`: Inference layer — backend proxy, model family classification, LiteRT adapter. See `core/inferno/__init__.py` for boundary contract.
+- `core/inferno/`: Inference layer — backend proxy, model family classification, LiteRT adapter, launch config builder. See `core/inferno/__init__.py` for boundary contract.
 - `core/assets/`: Frontend — `index.html`, `shell.css`, `shell.js` (platform shell), vendor libs.
 - `core/rig_envelope.py`: RIG step envelope validation (MS/TS contract checks).
 
@@ -19,7 +19,7 @@ Process-isolated apps live in `apps/`:
 
 Operational scripts are in `bin/`:
 - `run.sh`: Main entrypoint (systemd calls this).
-- `start_llama.sh`: Launches llama-server with correct flags, auto-downloads mmproj.
+- `start_llama.sh`: Thin wrapper — sets LD_LIBRARY_PATH, execs Python-computed llama-server args.
 - `install_dev.sh`: Deploys to Pi (idempotent). Uses `POTATO_LLAMA_RUNTIME_FAMILY` for slot selection.
 - `build_llama_runtime.sh`: Builds ik_llama or upstream llama.cpp on Pi from source.
 - `prepare_imager_bundle.sh`: Packages SD card image payload.

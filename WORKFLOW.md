@@ -57,6 +57,16 @@ Before starting new implementation work, first check whether a relevant issue al
 - Required branch naming: `feat/issue-<id>-<short-slug>`, `fix/issue-<id>-<short-slug>`, `chore/issue-<id>-<short-slug>`, `spike/issue-<id>-<short-slug>`, `hotfix/issue-<id>-<short-slug>`.
 - Start every ticket branch from latest `main`: `git checkout main && git pull --ff-only && git checkout -b <branch-name>`.
 
+## Cross-Repo Dependencies (inferno, etc.)
+
+When a ticket requires changes in a dependency repo (e.g., `potato-os/inferno`):
+
+1. Create a branch in the dependency repo, make changes, push, and open a PR.
+2. **Stop and ask the user before merging.** The dependency PR needs the same review as any core PR.
+3. After the user approves and the dependency PR is merged, note the new SHA.
+4. In the core repo branch, bump the pin in `requirements.txt` and run `uv pip install -r requirements.txt`.
+5. The core PR should reference the dependency PR (e.g., `Depends on potato-os/inferno#1`).
+
 ## GitHub PR Linkage Rules (Required)
 
 - Every implementation PR must link to its primary issue in the PR body.

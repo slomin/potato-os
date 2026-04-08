@@ -140,6 +140,7 @@ PRs must include:
 - Test evidence (pytest + Playwright output).
 - Pi QA results for Pi-impacting changes.
 - No AI attribution lines.
+- Never merge PRs in any repo (core, inferno, or other org repos) without explicit user approval.
 
 ## Branching & Workflow
 

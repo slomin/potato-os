@@ -206,12 +206,6 @@ def test_publish_ota_script_tolerates_existing_remote_tag():
     assert "|| true" in push_line or "2>/dev/null" in push_line
 
 
-def test_publish_ota_script_excludes_permitato():
-    """OTA tarball must not ship the permitato app."""
-    script = (REPO_ROOT / "bin" / "publish_ota_release.sh").read_text(encoding="utf-8")
-    assert "apps/permitato" in script
-
-
 # ---------------------------------------------------------------------------
 # Behavior-first dry-run tests
 # ---------------------------------------------------------------------------

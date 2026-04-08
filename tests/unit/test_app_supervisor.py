@@ -153,18 +153,6 @@ def test_discover_apps_skips_dirs_without_manifest(tmp_path: Path):
     assert manifests == []
 
 
-def test_skeleton_app_manifest_is_valid():
-    from core.app_manifest import AppManifest
-
-    manifest_path = Path(__file__).parent.parent.parent / "apps" / "skeleton" / "app.json"
-    manifest = AppManifest.from_file(manifest_path)
-    errors = manifest.validate()
-
-    assert errors == [], f"Skeleton manifest has validation errors: {errors}"
-    assert manifest.id == "skeleton"
-    assert manifest.critical is True
-
-
 # ── App instance + restart logic ────────────────────────────────────
 
 

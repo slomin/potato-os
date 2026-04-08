@@ -11,6 +11,8 @@ POTATO_ENFORCE_HOSTNAME="${POTATO_ENFORCE_HOSTNAME:-1}"
 LLAMA_RUNTIME_DIR="${POTATO_LLAMA_RUNTIME_DIR:-${TARGET_ROOT}/llama}"
 LLAMA_BUNDLE_ROOT="${POTATO_LLAMA_BUNDLE_ROOT:-${REPO_ROOT}/references/old_reference_design/llama_cpp_binary}"
 LLAMA_BUNDLE_SRC="${POTATO_LLAMA_BUNDLE_SRC:-}"
+# Optional path to a local clone of potato-os/apps for non-core apps.
+APPS_REPO="${POTATO_APPS_REPO:-}"
 # Auto-detect runtime family from hardware if not explicitly set.
 # Pi 4 cannot run ik_llama (requires ARMv8.2-A dot product instructions).
 # When POTATO_LLAMA_BUNDLE_SRC is set, read the family from the bundle's
@@ -184,7 +186,6 @@ if [ -d "${TARGET_ROOT}/apps" ]; then
     _ename="$(basename "${_existing}")"
     _keep=false
     for _a in "${_selected_apps[@]}"; do [ "$_a" = "$_ename" ] && _keep=true; done
-    [ "$_ename" = "skeleton" ] && _keep=true
     if [ "$_keep" = "false" ]; then
       run_sudo rm -rf "${_existing}"
       printf 'Removed previously installed app: %s\n' "${_ename}"
@@ -192,12 +193,25 @@ if [ -d "${TARGET_ROOT}/apps" ]; then
   done
 fi
 for _app_name in "${_selected_apps[@]}"; do
-  _app_src="${REPO_ROOT}/apps/${_app_name}"
-  if [ -d "${_app_src}" ]; then
+  _app_src=""
+  # External apps repo takes precedence for non-core apps
+  if [ -n "${APPS_REPO}" ] && [ -d "${APPS_REPO}/apps/${_app_name}" ]; then
+    _app_src="${APPS_REPO}/apps/${_app_name}"
+  elif [ -d "${REPO_ROOT}/apps/${_app_name}" ]; then
+    _app_src="${REPO_ROOT}/apps/${_app_name}"
+  fi
+  if [ -n "${_app_src}" ]; then
     run_sudo mkdir -p "${TARGET_ROOT}/apps/${_app_name}"
     run_sudo rsync -a "${_app_src}/" "${TARGET_ROOT}/apps/${_app_name}/"
   else
-    printf 'WARNING: app directory not found: %s\n' "${_app_src}" >&2
+    printf 'ERROR: app directory not found: %s\n' "${_app_name}" >&2
+    printf '  Checked: %s/apps/%s\n' "${REPO_ROOT}" "${_app_name}" >&2
+    if [ -n "${APPS_REPO}" ]; then
+      printf '  Checked: %s/apps/%s\n' "${APPS_REPO}" "${_app_name}" >&2
+    else
+      printf '  Hint: set POTATO_APPS_REPO to a local clone of potato-os/apps\n' >&2
+    fi
+    exit 1
   fi
 done
 if [ -d "${REPO_ROOT}/nginx" ]; then

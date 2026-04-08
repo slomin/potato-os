@@ -1,8 +1,25 @@
 const { test, expect } = require("@playwright/test");
 const { waitUntilReady, makeStatusPayload } = require("./helpers");
 
+// Multi-app mock — tests that need the switcher visible use this to simulate
+// two registered apps since only chat ships in core after the apps extraction.
+const MULTI_APP_RESPONSE = {
+  apps: [],
+  ui_apps: [
+    { id: "chat", name: "Potato Chat", has_ui: true, icon: "/app/chat/assets/icon.svg" },
+    { id: "testapp", name: "Test App", has_ui: true, icon: "" },
+  ],
+};
+
+function mockMultiApp(page) {
+  return page.route("**/internal/apps", async (route) => {
+    await route.fulfill({ status: 200, body: JSON.stringify(MULTI_APP_RESPONSE) });
+  });
+}
+
 
 test("icon rail is visible and flush-left", async ({ page }) => {
+  await mockMultiApp(page);
   await waitUntilReady(page);
 
   const rail = page.locator("#appSwitcher");
@@ -16,6 +33,7 @@ test("icon rail is visible and flush-left", async ({ page }) => {
 
 
 test("active app button has active class", async ({ page }) => {
+  await mockMultiApp(page);
   await waitUntilReady(page);
 
   const chatBtn = page.locator('button[data-app="chat"]');
@@ -24,19 +42,18 @@ test("active app button has active class", async ({ page }) => {
 
 
 test("clicking switcher button changes active indicator", async ({ page }) => {
+  await mockMultiApp(page);
   await waitUntilReady(page);
 
-  const permitatoBtn = page.locator('button[data-app="permitato"]');
-  // Permitato button may not exist if only chat is registered — skip gracefully
-  if (await permitatoBtn.count() === 0) return;
-
-  await permitatoBtn.click();
-  await expect(permitatoBtn).toHaveClass(/active/);
+  const testBtn = page.locator('button[data-app="testapp"]');
+  await testBtn.click();
+  await expect(testBtn).toHaveClass(/active/);
   await expect(page.locator('button[data-app="chat"]')).not.toHaveClass(/active/);
 });
 
 
 test("icon rail is to the left of the sidebar", async ({ page }) => {
+  await mockMultiApp(page);
   await waitUntilReady(page);
 
   const railBox = await page.locator("#appSwitcher").boundingBox();
@@ -47,6 +64,7 @@ test("icon rail is to the left of the sidebar", async ({ page }) => {
 
 
 test("switcher buttons have title tooltip with app name", async ({ page }) => {
+  await mockMultiApp(page);
   await waitUntilReady(page);
 
   const chatBtn = page.locator('button[data-app="chat"]');

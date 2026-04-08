@@ -344,9 +344,6 @@ def test_start_llama_wrapper_fails_without_args(tmp_path: Path):
 # Selective app deployment
 # ---------------------------------------------------------------------------
 
-_PERMITATO_INSTALL_SH = REPO_ROOT / "apps" / "permitato" / "install.sh"
-
-
 def test_install_dev_uses_selective_app_deployment():
     """install_dev.sh must deploy apps selectively via POTATO_IMAGE_APPS."""
     script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
@@ -361,47 +358,39 @@ def test_install_dev_runs_app_install_hooks():
     assert "_app_installer" in script or "install.sh" in script
 
 
-def test_permitato_install_script_exists():
-    assert _PERMITATO_INSTALL_SH.exists()
-    assert _PERMITATO_INSTALL_SH.stat().st_mode & 0o111  # executable
+def test_install_dev_supports_external_apps_repo():
+    """install_dev.sh must support POTATO_APPS_REPO for non-core apps."""
+    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
+    assert "POTATO_APPS_REPO" in script
+    assert "APPS_REPO" in script
 
 
-def test_permitato_install_pihole_is_guarded():
-    """Pi-hole install must be guarded so it skips when pihole is already present."""
-    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
-    assert "command -v pihole" in script
+def test_install_dev_external_repo_takes_precedence():
+    """External apps repo must be checked before REPO_ROOT/apps/."""
+    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
+    ext_idx = script.index("APPS_REPO")
+    repo_root_idx = script.index('REPO_ROOT}/apps/${_app_name}')
+    assert ext_idx < repo_root_idx, "APPS_REPO must be checked before REPO_ROOT"
 
 
-def test_permitato_install_config_runs_on_rerun():
-    """Port, password, sudoers must apply even if Pi-hole is already installed."""
-    import re
-
-    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
-    install_guard = re.search(r"if command -v pihole.*?fi", script, re.DOTALL)
-    assert install_guard
-    after_guard = script[install_guard.end():]
-    assert "8081" in after_guard
-    assert "sudoers" in after_guard.lower()
+def test_prepare_imager_supports_external_apps_repo():
+    """prepare_imager_bundle.sh must support POTATO_APPS_REPO for non-core apps."""
+    script = (REPO_ROOT / "bin" / "prepare_imager_bundle.sh").read_text(encoding="utf-8")
+    assert "POTATO_APPS_REPO" in script
+    assert "APPS_REPO" in script
 
 
-def test_permitato_install_uses_scoped_port_config():
-    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
-    assert "pihole-FTL --config webserver.port" in script
-    assert "8081" in script
+def test_install_dev_aborts_on_missing_app():
+    """install_dev.sh must exit 1 when a selected app directory is not found."""
+    script = (REPO_ROOT / "bin" / "install_dev.sh").read_text(encoding="utf-8")
+    assert "exit 1" in script
+    # The error path must print ERROR, not just a warning
+    assert "ERROR: app directory not found" in script
 
 
-def test_permitato_install_detects_interface():
-    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
-    assert "ip route show default" in script
-
-
-def test_permitato_install_downloads_installer_to_file():
-    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
-    assert "bash /dev/stdin" not in script
-    assert "curl -sSL https://install.pi-hole.net -o" in script
-
-
-def test_permitato_install_stores_app_password():
-    script = _PERMITATO_INSTALL_SH.read_text(encoding="utf-8")
-    assert "permitato_pihole_password" in script
+def test_prepare_imager_aborts_on_missing_app():
+    """prepare_imager_bundle.sh must exit 1 when a selected app is missing from payload."""
+    script = (REPO_ROOT / "bin" / "prepare_imager_bundle.sh").read_text(encoding="utf-8")
+    assert "ERROR: selected app missing from payload" in script
+    assert "exit 1" in script
 

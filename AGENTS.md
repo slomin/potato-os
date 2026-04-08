@@ -14,8 +14,8 @@ Process-isolated apps live in `apps/`:
 - `apps/<id>/app.json`: App manifest (identity, process config, lifecycle).
 - `apps/<id>/rig.md`: RIG workflow contract (steps, flow graph, schemas).
 - `apps/<id>/main.py`: App entry point (runs as subprocess).
-- `apps/skeleton/`: Template app — copy this to create a new app.
-- `apps/chat/`: Chat interface — the first built-in Potato app.
+- `apps/chat/`: Chat interface — the built-in Potato app (stays in core).
+- Non-core apps (Permitato, Skeleton template) live in [`potato-os/apps`](https://github.com/potato-os/apps). Deploy via `POTATO_APPS_REPO`.
 
 Operational scripts are in `bin/`:
 - `run.sh`: Main entrypoint (systemd calls this).

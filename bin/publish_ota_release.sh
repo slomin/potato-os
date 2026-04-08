@@ -113,7 +113,6 @@ tar -C "${STAGING}" -czf "${TARBALL_PATH}" \
   --exclude='*.pyc' \
   --exclude='.DS_Store' \
   --exclude='._*' \
-  --exclude='apps/permitato' \
   "${ARCHIVE_NAME}"
 
 TARBALL_SIZE="$(wc -c < "${TARBALL_PATH}" | tr -d ' ')"

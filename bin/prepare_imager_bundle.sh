@@ -7,6 +7,8 @@ OUTPUT_DIR="${OUTPUT_DIR:-}"
 PAYLOAD_NAME="${POTATO_BUNDLE_NAME:-potato_bundle.tar.gz}"
 LLAMA_BUNDLE_ROOT="${POTATO_LLAMA_BUNDLE_ROOT:-${REPO_ROOT}/references/old_reference_design/llama_cpp_binary}"
 LLAMA_BUNDLE_SRC="${POTATO_LLAMA_BUNDLE_SRC:-}"
+# Optional path to a local clone of potato-os/apps for non-core apps.
+APPS_REPO="${POTATO_APPS_REPO:-}"
 
 # Source shared release download helpers
 if [ -f "${REPO_ROOT}/bin/lib/runtime_release.sh" ]; then
@@ -249,6 +251,16 @@ rsync -a --delete \
 # Chat is always kept — /v1/chat/completions is a platform endpoint.
 POTATO_IMAGE_APPS="${POTATO_IMAGE_APPS:-chat}"
 IFS=',' read -ra _selected_apps <<< "${POTATO_IMAGE_APPS}"
+# Pull selected apps from the external apps repo if configured
+if [ -n "${APPS_REPO}" ]; then
+  for _a in "${_selected_apps[@]}"; do
+    _ext_src="${APPS_REPO}/apps/${_a}"
+    if [ -d "${_ext_src}" ]; then
+      mkdir -p "${payload_repo}/apps/${_a}"
+      rsync -a "${_ext_src}/" "${payload_repo}/apps/${_a}/"
+    fi
+  done
+fi
 if [ -d "${payload_repo}/apps" ]; then
   for _app_dir in "${payload_repo}/apps"/*/; do
     [ -d "${_app_dir}" ] || continue
@@ -258,12 +270,23 @@ if [ -d "${payload_repo}/apps" ]; then
       [ "${_a}" = "${_app_name}" ] && _keep=true
     done
     [ "${_app_name}" = "chat" ] && _keep=true
-    [ "${_app_name}" = "skeleton" ] && _keep=true
     if [ "${_keep}" = "false" ]; then
       rm -rf "${_app_dir}"
     fi
   done
 fi
+# Verify all selected apps are present in the payload
+for _a in "${_selected_apps[@]}"; do
+  if [ ! -d "${payload_repo}/apps/${_a}" ]; then
+    printf 'ERROR: selected app missing from payload: %s\n' "${_a}" >&2
+    if [ -n "${APPS_REPO}" ]; then
+      printf '  Checked: %s/apps/%s\n' "${APPS_REPO}" "${_a}" >&2
+    else
+      printf '  Hint: set POTATO_APPS_REPO to a local clone of potato-os/apps\n' >&2
+    fi
+    exit 1
+  fi
+done
 
 rsync -a --delete "${bundle_src}/" "${payload_llama}/"
 

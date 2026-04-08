@@ -1,50 +1,6 @@
-"""Contract tests for the RIG architecture pattern — rig.md template and step envelope."""
-
-from pathlib import Path
+"""Contract tests for the RIG step envelope validation."""
 
 import pytest
-
-_SKELETON_RIG = Path(__file__).parent.parent.parent / "apps" / "skeleton" / "rig.md"
-
-
-# ---------------------------------------------------------------------------
-# Template structural tests
-# ---------------------------------------------------------------------------
-
-
-def test_skeleton_rig_template_exists():
-    assert _SKELETON_RIG.exists(), "apps/skeleton/rig.md must exist"
-
-
-def test_skeleton_rig_has_required_sections():
-    content = _SKELETON_RIG.read_text()
-    required = [
-        "## Workflow Overview",
-        "## Step Catalog",
-        "## Flow Graph",
-        "## Step Envelope Contract",
-        "## Schema References",
-    ]
-    for heading in required:
-        assert heading in content, f"Missing section: {heading}"
-
-
-def test_skeleton_rig_documents_app_json_relationship():
-    content = _SKELETON_RIG.read_text()
-    assert "app.json" in content, "rig.md must document the relationship to app.json"
-
-
-def test_skeleton_rig_step_catalog_has_ts_rows():
-    """Skeleton has inferno: false — catalog shows TS steps only."""
-    content = _SKELETON_RIG.read_text().lower()
-    assert "| ts " in content or "| ts|" in content, "Step catalog must include a ts-type row"
-
-
-def test_skeleton_rig_documents_both_step_types():
-    """Template documents both MS and TS types even though skeleton only uses TS."""
-    content = _SKELETON_RIG.read_text()
-    assert '"ms"' in content or "= Model Step" in content, "Template must document the ms type"
-    assert '"ts"' in content or "= Tool Step" in content, "Template must document the ts type"
 
 
 # ---------------------------------------------------------------------------

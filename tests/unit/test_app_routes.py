@@ -62,17 +62,6 @@ def test_manifest_from_file_without_routes_field(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_skeleton_manifest_still_valid():
-    """Existing skeleton app must still parse and validate with the new field."""
-    from core.app_manifest import AppManifest
-
-    manifest_path = REPO_ROOT / "apps" / "skeleton" / "app.json"
-    manifest = AppManifest.from_file(manifest_path)
-    errors = manifest.validate()
-    assert errors == []
-    assert manifest.routes == ""
-
-
 def test_chat_manifest_still_valid():
     """Existing chat app must still parse and validate with the new field."""
     from core.app_manifest import AppManifest
